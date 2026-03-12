@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ежедневный ABA Чек-лист</title>
+  <style>
+    /* Базовые стили */
+    body { font-family: sans-serif; margin: 0; padding: 16px; max-width: 960px; margin: auto; background: #f8f9fa; }
+    h2, h3 { text-align: center; }
+    .mb-16 { margin-bottom: 16px; }
+
+    /* Управление режимом */
+    .controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    body.editing .btn-set button { pointer-events: none; opacity: 0.5; }
+
+    /* Протоколы */
+    .protocol-container { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 24px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+    .block { margin-bottom: 16px; }
+    .goal-label { display: block; padding: 8px; background: #e9ecef; border-radius: 4px; margin-bottom: 8px; }
+
+    /* Кнопки */
+    .btn-set { display: flex; justify-content: space-around; gap: 12px; margin-bottom: 8px; }
+    .btn-set button { flex: 1; padding: 18px; font-size: 26px; border: none; border-radius: 12px; }
+    .btn-success { background: #d4edda; }
+    .btn-prompt  { background: #fff3cd; }
+    .btn-error   { background: #f8d7da; }
+    .count { text-align: center; font-weight: bold; font-size: 16px; margin-top: 6px; }
+
+    /* Текущий процент */
+    .percent { text-align: right; font-weight: bold; }
+
+    /* Предыдущие проценты */
+    .prev-percent { font-size: 12px; color: #555; margin-top: 4px; }
+    .prev-percent::before { content: 'Пред. сессии: '; font-weight: bold; }
+
+    /* Кнопка очистки */
+    #clearBtn { padding: 8px 16px; font-size: 14px; border: none; border-radius: 8px; background: #dc3545; color: #fff; cursor: pointer; transition: background 0.2s; }
+    #clearBtn:hover { background: #c82333; }
+
+    /* Модалка */
+    #goal-selector-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+    #goal-selector-modal .modal-content { background: #fff; padding: 20px; border-radius: 8px; max-width: 400px; max-height: 80%; overflow: auto; }
+
+    /* Undo */
+    #undo-banner { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #e0e0e0; padding: 8px 16px; border-radius: 20px; font-size: 14px; display: none; box-shadow: 0 2px 6px rgba(0,0,0,0.1); cursor: pointer; }
+
+    /* История */
+    .history-session h3 { margin: 12px 0 4px; }
+    .history-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 14px; }
+    .history-table th, .history-table td { border: 1px solid #ccc; padding: 4px 6px; }
+    .history-table th { background: #f0f0f0; }
+
+    .nav-left-floating { position: fixed; bottom: 20px; left: 20px; }
+    .nav-left-floating a { background: #007bff; color: white; padding: 14px 18px; border-radius: 30px; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <h2>Ежедневный ABA Чек-лист</h2>
+  <div class="controls mb-16">
+    <div>
+      <label for="modeSlider">Режим:</label>
+      <input id="modeSlider" type="range" min="0" max="1" step="1" value="1" />
+      <span id="modeText">Запись ответов</span>
+    </div>
+    <button id="clearBtn">Сбросить данные</button>
+  </div>
+
+  <div id="goal-selector-modal">
+    <div class="modal-content">
+      <h3>Выберите цели</h3>
+      <div id="goal-options"></div>
+      <button onclick="saveSelectedGoals()">Сохранить</button>
+      <button onclick="closeGoalSelector()">Отмена</button>
+    </div>
+  </div>
+
+  <div id="dailyContainer"></div>
+  <div id="undo-banner">Отменить действие</div>
+  <div id="historyContainer"><h2>История сессий</h2></div>
+
+  <div class="nav-left-floating">
+    <a href="summary_fixed_igram.html">⬅ Сводный чек-лист</a>
+  </div>
+
+  <script>
+    const modeSlider = document.getElementById('modeSlider');
+    const modeText = document.getElementById('modeText');
+    const dailyContainer = document.getElementById('dailyContainer');
+    const historyContainer = document.getElementById('historyContainer');
+    const undoBanner = document.getElementById('undo-banner');
+    let undoStack = [];
+
+    function toggleMode() {
+      const edit = modeSlider.value === '0';
+      document.body.classList.toggle('editing', edit);
+      modeText.textContent = edit ? 'Заблокировано' : 'Запись ответов';
+    }
+
+    function getProtocolsCount() {
+      return Object.keys(localStorage)
+        .map(k => (k.match(/^protocol(\d+)_title$/) || [])[1])
+        .filter(n => n).map(Number)
+        .reduce((max, n) => Math.max(max, n), 0);
+    }
+
+    function openGoalSelector(idx) {
+      window.currentProtocol = idx;
+      const opts = document.getElementById('goal-options');
+      opts.innerHTML = '';
+      const saved = JSON.parse(localStorage.getItem(`protocol${idx}_selectedGoals`) || '[]');
+      for (let j = 1; j <= 10; j++) {
+        const text = localStorage.getItem(`protocol${idx}_goal${j}`) || `Цель ${j}`;
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = `g${j}`; cb.value = j;
+        if (saved.includes(j)) cb.checked = true;
+        cb.onchange = () => { if (opts.querySelectorAll('input:checked').length > 10) cb.checked = false; };
+        const lb = document.createElement('label'); lb.htmlFor = cb.id; lb.textContent = text;
+        const dv = document.createElement('div'); dv.append(cb, lb);
+        opts.append(dv);
+      }
+      document.getElementById('goal-selector-modal').style.display = 'flex';
+    }
+    function closeGoalSelector() {
+      document.getElementById('goal-selector-modal').style.display = 'none';
+    }
+
+    function saveSelectedGoals() {
+      const idx = window.currentProtocol;
+      const sel = [...document.querySelectorAll('#goal-options input:checked')].map(cb => +cb.value);
+      localStorage.setItem(`protocol${idx}_selectedGoals`, JSON.stringify(sel));
+      closeGoalSelector(); renderDaily(); renderHistory();
+    }
+
+    function clearData() {
+      const date = localStorage.getItem('session_date') || new Date().toISOString().split('T')[0];
+      const session = { date, data: [] };
+      document.querySelectorAll('.protocol-container').forEach(pc => {
+        const arr = [...pc.querySelectorAll('.percent')].map(e => {
+          const t = e.textContent.trim();
+          return t === '—' ? null : parseInt(t);
+        });
+        session.data.push(arr);
+      });
+      const hist = JSON.parse(localStorage.getItem('aba_history') || '[]'); hist.push(session);
+      if (hist.length > 10) hist.shift();
+      localStorage.setItem('aba_history', JSON.stringify(hist));
+      document.querySelectorAll('.count').forEach(e => e.textContent = '0');
+      updatePercentages(); saveProgress(); renderHistory();
+    }
+
+    function renderDaily() {
+      const hist = JSON.parse(localStorage.getItem('aba_history') || '[]');
+      const last3 = hist.slice(-3);
+      dailyContainer.innerHTML = '';
+      const cnt = getProtocolsCount();
+      for (let i = 1; i <= cnt; i++) {
+        const wrapper = document.createElement('div'); wrapper.className = 'protocol-container'; wrapper.dataset.index = i;
+        const title = localStorage.getItem(`protocol${i}_title`) || `Протокол ${i}`;
+        const sel = JSON.parse(localStorage.getItem(`protocol${i}_selectedGoals`) || '[]');
+        const toShow = sel.length ? sel : [1,2,3];
+        wrapper.innerHTML = `<h3>${title}</h3><button onclick="openGoalSelector(${i})">Выбрать цели</button>`;
+        toShow.forEach((j,rowPos) => {
+          const txt = localStorage.getItem(`protocol${i}_goal${j}`) || `Цель ${j}`;
+          const prevArr = last3.map(sess => {
+            const v = sess.data[i-1]?.[rowPos];
+            return (v == null ? '—' : v + '%');
+          });
+          const prev = prevArr.join(' | ');
+          const block = document.createElement('div'); block.className = 'block';
+          block.innerHTML = `
+            <div class="goal-label">${txt}</div>
+            <div class="btn-set">
+              <div><button class="btn-success" onclick="increment(this)">✅</button><div class="count">0</div></div>
+              <div><button class="btn-prompt" onclick="increment(this)">🤝</button><div class="count">0</div></div>
+              <div><button class="btn-error" onclick="increment(this)">➖</button><div class="count">0</div></div>
+            </div>
+            <div class="percent">—</div>
+            <div class="prev-percent">${prev}</div>
+          `;
+          wrapper.append(block);
+        });
+        dailyContainer.append(wrapper);
+      }
+    }
+
+function renderHistory() {
+  const hist = JSON.parse(localStorage.getItem('aba_history') || '[]');
+  const cnt  = getProtocolsCount();
+  historyContainer.innerHTML = '<h2>История сессий</h2>';
+  if (!hist.length) {
+    historyContainer.innerHTML += '<p>Нет сохранённых сессий.</p>';
+    return;
+  }
+  // Для каждого протокола своя таблица
+  for (let i = 1; i <= cnt; i++) {
+    const title = localStorage.getItem(`protocol${i}_title`) || `Протокол ${i}`;
+    const sel   = JSON.parse(localStorage.getItem(`protocol${i}_selectedGoals`) || '[]') || [1,2,3];
+
+    const sec = document.createElement('div');
+    sec.className = 'history-session';
+    const hdr = document.createElement('h3');
+    hdr.textContent = title;
+    sec.appendChild(hdr);
+
+    const tbl = document.createElement('table');
+    tbl.className = 'history-table';
+
+    // Шапка с датами
+    const thead = tbl.createTHead();
+    const hr    = thead.insertRow();
+    const th0   = document.createElement('th');
+    th0.textContent = 'Цель';
+    hr.appendChild(th0);
+    hist.forEach(sess => {
+      const th = document.createElement('th');
+      th.textContent = sess.date;
+      hr.appendChild(th);
+    });
+
+    // Тело: каждая выбранная цель в строке
+    const tbody = tbl.createTBody();
+    sel.forEach((gIdx, k) => {
+      const tr = tbody.insertRow();
+      // Текст цели
+      const cell0 = tr.insertCell();
+      cell0.textContent = localStorage.getItem(`protocol${i}_goal${gIdx}`) || `Цель ${gIdx}`;
+      // Проценты за каждую сессию (или “—”)
+      hist.forEach(sess => {
+        const cell = tr.insertCell();
+        const arr  = sess.data[i-1] || [];
+        const v    = arr[k];
+        cell.textContent = v == null ? '—' : v + '%';
+      });
+    });
+
+    sec.appendChild(tbl);
+    historyContainer.appendChild(sec);
+  }
+}
+
+    function increment(btn) {
+      if (btn.disabled) return;
+      const cntEl = btn.nextElementSibling; cntEl.textContent = +cntEl.textContent + 1;
+      const block = btn.closest('.block');
+      const proto = btn.closest('.protocol-container').querySelector('h3').textContent;
+      const goal = block.querySelector('.goal-label').textContent;
+      const resp = btn.classList.contains('btn-success') ? '✅' : btn.classList.contains('btn-prompt') ? '🤝' : '➖';
+      sendClickToGoogle(proto, goal, resp);
+      updatePercentages(); saveProgress(); undoStack.push(btn); showUndo();
+    }
+
+    function sendClickToGoogle(protocol, goal, responseType) {
+      fetch('https://script.google.com/macros/s/AKfycbzu1szsSlgORc4uFgbhy5LvFdCF99UiVuEbzCe_K7UqLvZlmVanUbp6r4pukXbvXZs/exec', {
+        method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ protocol, goal, response: responseType })
+      }).catch(console.error);
+    }
+
+    function showUndo() {
+      undoBanner.style.display = 'block';
+      clearTimeout(window.undoTimeout);
+      window.undoTimeout = setTimeout(() => { if (!undoStack.length) undoBanner.style.display = 'none'; }, 5000);
+    }
+
+    undoBanner.onclick = () => {
+      if (undoStack.length) {
+        const b = undoStack.pop(), c = b.nextElementSibling;
+        c.textContent = Math.max(+c.textContent - 1, 0);
+        updatePercentages(); saveProgress();
+      }
+      if (!undoStack.length) undoBanner.style.display = 'none';
+    };
+
+    function updatePercentages() {
+      document.querySelectorAll('.block').forEach(block => {
+        const counts = [...block.querySelectorAll('.count')].map(d => +d.textContent);
+        const total = counts.reduce((s, v) => s + v, 0);
+        const el = block.querySelector('.percent');
+        if (total === 0) {
+          el.textContent = '—';
+          el.className = 'percent';
+        } else {
+          const ok = counts[0];
+          const pct = Math.round(ok / total * 100);
+          el.textContent = pct + '%';
+          el.className = 'percent ' + (pct >= 80 ? 'green' : pct >= 50 ? 'orange' : 'red');
+        }
+      });
+    }
+
+    function saveProgress() {
+      const arr = [...document.querySelectorAll('.count')].map(d => d.textContent);
+      localStorage.setItem('aba_counts', JSON.stringify(arr));
+    }
+
+    function loadProgress() {
+      const arr = JSON.parse(localStorage.getItem('aba_counts') || '[]');
+      document.querySelectorAll('.count').forEach((d, i) => { if (arr[i] != null) d.textContent = arr[i]; });
+      updatePercentages();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      modeSlider.oninput = toggleMode;
+      document.getElementById('clearBtn').onclick = clearData;
+      renderDaily(); loadProgress(); renderHistory(); toggleMode();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Сводный чек-лист</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 900px; margin: auto; background: #f8f9fa; }
+    h2, h3 { margin-bottom: 12px; text-align: center; }
+    .session-info { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+    .session-info > div { flex: 1; min-width: 120px; }
+    .session-info label { display: block; font-size: 14px; margin-bottom: 4px; }
+    .session-info input { width: auto; max-width: 200px; padding: 4px 8px; font-size: 14px; border: 1px solid #1a3ea9; border-radius: 4px; }    .protocol-container { margin-bottom: 24px; border: 1px solid #ddd; border-radius: 8px; padding: 16px; background: #fff; }
+    .protocol-title { width: 100%; padding: 8px; font-size: 16px; border: 1px solid #1a3ea9; border-radius: 4px; margin-bottom: 12px; }
+    .goal-group { border: 1px solid #ccc; border-radius: 6px; padding: 12px; margin-bottom: 16px; background: #f9f9f9; }
+    .goal-input, .intro-date, .mastery-date, .gen-input { padding: 8px; font-size: 16px; border: 1px solid #93a7e4; border-radius: 4px; }
+    .goal-input { flex: 2; }
+    .intro-date, .mastery-date { flex: 1; border-color: #6877a5; }
+    .gen-input { border-color: #ccc; width: calc((100% - 16px)/3); margin-right: 8px; }
+    .row { display: flex; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+    .nav-left-floating { position: fixed; bottom: 20px; left: 20px; z-index: 9999; }
+    .nav-left-floating a { background: #007bff; color: white; padding: 14px 18px; border-radius: 30px; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <h2>Сводный чек-лист</h2>
+
+  <div class="session-info">
+    <div>
+      <label for="childName">Имя ребенка</label>
+      <input type="text" id="childName" placeholder="Введите имя" />
+    </div>
+    <div>
+      <label for="sessionDate">Дата сессии</label>
+      <input type="date" id="sessionDate" />
+    </div>
+  </div>
+
+  <div id="protocolsContainer"></div>
+
+  <div class="nav-left-floating">
+    <a href="final_fixed_igram.html">➡ Ежедневный чек-лист</a>
+  </div>
+
+  <script>
+    (function() {
+      const summaryCount = 15;
+      const sessionKey = 'session_date';
+      const nameKey = 'child_name';
+      const container = document.getElementById('protocolsContainer');
+      const dateInput = document.getElementById('sessionDate');
+      const nameInput = document.getElementById('childName');
+
+      function initSessionFields() {
+        // Дата
+        const savedDate = localStorage.getItem(sessionKey);
+        if (savedDate) dateInput.value = savedDate;
+        dateInput.addEventListener('change', () => {
+          localStorage.setItem(sessionKey, dateInput.value);
+        });
+        // Имя ребенка
+        const savedName = localStorage.getItem(nameKey);
+        if (savedName) nameInput.value = savedName;
+        nameInput.addEventListener('input', () => {
+          localStorage.setItem(nameKey, nameInput.value);
+        });
+      }
+
+      function renderSummary() {
+        const frag = document.createDocumentFragment();
+        for (let i = 1; i <= summaryCount; i++) {
+          const div = document.createElement('div');
+          div.className = 'protocol-container';
+          div.dataset.index = i;
+
+          const h3 = document.createElement('h3');
+          h3.textContent = `Протокол ${i}`;
+          div.appendChild(h3);
+
+          const title = document.createElement('input');
+          title.type = 'text';
+          title.className = 'protocol-title';
+          title.dataset.index = i;
+          title.placeholder = `Название протокола ${i}`;
+          title.value = localStorage.getItem(`protocol${i}_title`) || '';
+          div.appendChild(title);
+
+          for (let j = 1; j <= 10; j++) {
+            const group = document.createElement('div');
+            group.className = 'goal-group';
+
+            // Первая строка: цель + даты
+            const rowMain = document.createElement('div');
+            rowMain.className = 'row';
+
+            const goal = document.createElement('input');
+            goal.type = 'text';
+            goal.className = 'goal-input';
+            goal.dataset.protocolIndex = i;
+            goal.dataset.goalIndex = j;
+            goal.placeholder = `Цель ${j}`;
+            goal.value = localStorage.getItem(`protocol${i}_goal${j}`) || '';
+            rowMain.appendChild(goal);
+
+            const intro = document.createElement('input');
+            intro.type = 'date';
+            intro.className = 'intro-date';
+            intro.dataset.protocolIndex = i;
+            intro.dataset.goalIndex = j;
+            intro.value = localStorage.getItem(`protocol${i}_goal${j}_introDate`) || '';
+            rowMain.appendChild(intro);
+
+            const mastery = document.createElement('input');
+            mastery.type = 'date';
+            mastery.className = 'mastery-date';
+            mastery.dataset.protocolIndex = i;
+            mastery.dataset.goalIndex = j;
+            mastery.value = localStorage.getItem(`protocol${i}_goal${j}_masteryDate`) || '';
+            rowMain.appendChild(mastery);
+
+            group.appendChild(rowMain);
+
+            // Генерализация
+            const rowGen = document.createElement('div');
+            rowGen.className = 'row';
+            ['Stim', 'Place', 'People'].forEach(type => {
+              const inp = document.createElement('input');
+              inp.type = 'text';
+              inp.className = 'gen-input';
+              inp.dataset.protocolIndex = i;
+              inp.dataset.goalIndex = j;
+              inp.dataset.genType = type.toLowerCase();
+              inp.placeholder = `Генерализация: ${type.toLowerCase()}`;
+              inp.value = localStorage.getItem(`protocol${i}_goal${j}_gen${type}`) || '';
+              rowGen.appendChild(inp);
+            });
+            group.appendChild(rowGen);
+
+            div.appendChild(group);
+          }
+          frag.appendChild(div);
+        }
+        container.innerHTML = '';
+        container.appendChild(frag);
+      }
+
+      function bindEvents() {
+        container.addEventListener('input', e => {
+          const el = e.target;
+          const pi = el.dataset.protocolIndex || el.dataset.index;
+          const gi = el.dataset.goalIndex;
+          if (el.classList.contains('protocol-title')) {
+            localStorage.setItem(`protocol${pi}_title`, el.value);
+          } else if (el.classList.contains('goal-input')) {
+            localStorage.setItem(`protocol${pi}_goal${gi}`, el.value);
+          } else if (el.classList.contains('intro-date')) {
+            localStorage.setItem(`protocol${pi}_goal${gi}_introDate`, el.value);
+          } else if (el.classList.contains('mastery-date')) {
+            localStorage.setItem(`protocol${pi}_goal${gi}_masteryDate`, el.value);
+          } else if (el.classList.contains('gen-input')) {
+            const type = el.dataset.genType;
+            localStorage.setItem(`protocol${pi}_goal${gi}_gen${type.charAt(0).toUpperCase()+type.slice(1)}`, el.value);
+          }
+        });
+      }
+
+      function init() {
+        initSessionFields();
+        renderSummary();
+        bindEvents();
+      }
+
+      document.addEventListener('DOMContentLoaded', init);
+    })();
+  </script>
+</body>
+</html>
