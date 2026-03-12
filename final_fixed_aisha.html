@@ -80,7 +80,7 @@
   <div id="historyContainer"><h2>История сессий</h2></div>
 
   <div class="nav-left-floating">
-    <a href="summary_fixed_igram.html">⬅ Сводный чек-лист</a>
+    <a href="summary_fixed_aisha.html">⬅ Сводный чек-лист</a>
   </div>
 
   <script>
@@ -250,7 +250,7 @@ function renderHistory() {
     }
 
     function sendClickToGoogle(protocol, goal, responseType) {
-      fetch('https://script.google.com/macros/s/AKfycbzu1szsSlgORc4uFgbhy5LvFdCF99UiVuEbzCe_K7UqLvZlmVanUbp6r4pukXbvXZs/exec', {
+      fetch('https://script.google.com/macros/s/AKfycbx1ZyMrh8XoRud0rOeqP_2yBZd6C8AJ8e_v2IATRgztmZV-Q9659GmKmnbhNrAmXbU/exec', {
         method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ protocol, goal, response: responseType })
       }).catch(console.error);
