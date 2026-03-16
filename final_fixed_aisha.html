@@ -5,255 +5,579 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ежедневный ABA Чек-лист</title>
   <style>
-    body { font-family: sans-serif; margin: 0; padding: 16px; max-width: 960px; margin: auto; background: #f8f9fa; }
-    h2, h3 { text-align: center; }
-    .controls { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
-    body.editing .btn-set button { pointer-events:none; opacity:0.5; }
+    :root {
+      --bg: #f8f9fa;
+      --card: #ffffff;
+      --line: #d9dee3;
+      --text: #1f2933;
+      --muted: #667085;
+      --ok: #d4edda;
+      --prompt: #fff3cd;
+      --err: #f8d7da;
+      --accent: #0d6efd;
+      --danger: #dc3545;
+    }
 
-    .protocol-container { background:#fff; border-radius:12px; padding:16px; margin-bottom:24px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
-    .block { margin-bottom:16px; padding: 8px; border-radius: 8px; }
-    .block.mastered { border: 2px solid green; background: #e6ffe6; }
+    * {
+      box-sizing: border-box;
+    }
 
-    .goal-label { display:block; padding:8px; background:#e9ecef; border-radius:4px; margin-bottom:8px; }
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
 
-    .btn-set { display:flex; justify-content:space-around; gap:12px; margin-bottom:8px; }
-    .btn-set button { flex:1; padding:18px; font-size:26px; border:none; border-radius:12px; cursor:pointer; }
-    .btn-success{ background:#d4edda; } .btn-prompt{ background:#fff3cd; } .btn-error{ background:#f8d7da; }
-    .count { text-align:center; font-weight:bold; font-size:16px; margin-top:6px; }
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+    }
 
-    .percent { text-align:right; font-weight:bold; }
-    .percent.mastered { color: green; font-weight: bold; }
+    h2, h3 {
+      text-align: center;
+    }
 
-    .prev-percent { font-size:12px; color:#555; margin-top:4px; }
-    .prev-percent::before { content:'Пред. сессии: '; font-weight:bold; }
+    .mb-16 {
+      margin-bottom: 16px;
+    }
 
-    #clearBtn { padding:8px 16px; font-size:14px; border:none; border-radius:8px; background:#dc3545; color:#fff; cursor:pointer; transition:background 0.2s; }
-    #clearBtn:hover { background:#c82333; }
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      padding: 12px 16px;
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    }
 
-    #goal-selector-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; }
-    #goal-selector-modal .modal-content { background:#fff; padding:20px; border-radius:8px; max-width:400px; max-height:80%; overflow:auto; }
+    .controls-right {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
 
-    #undo-banner { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#e0e0e0; padding:8px 16px; border-radius:20px; font-size:14px; display:none; box-shadow:0 2px 6px rgba(0,0,0,0.1); cursor:pointer; }
+    body.editing .btn-set button {
+      pointer-events: none;
+      opacity: 0.5;
+    }
 
-    .history-table { width:100%; border-collapse:collapse; margin-bottom:16px; font-size:14px; }
-    .history-table th, .history-table td { border:1px solid #ccc; padding:4px 6px; }
-    .history-table th { background:#f0f0f0; }
+    .protocol-container {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    }
 
-    .nav-left-floating { position:fixed; bottom:20px; left:20px; }
-    .nav-left-floating a { background:#007bff; color:white; padding:14px 18px; border-radius:30px; text-decoration:none; }
+    .protocol-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
 
-    /* Modal for prompt selection */
-    #prompt-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; }
-    #prompt-modal .modal-content { background:#fff; padding:20px; border-radius:8px; max-width:320px; }
-    #prompt-modal button { display:block; width:100%; margin:6px 0; padding:10px; font-size:16px; border:none; border-radius:6px; background:#f1f1f1; cursor:pointer; }
-    #prompt-modal button:hover { background:#ddd; }
+    .block {
+      margin-bottom: 16px;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+    }
+
+    .block.mastered {
+      border-color: #55a630;
+      background: #eefae9;
+    }
+
+    .goal-label {
+      display: block;
+      padding: 8px;
+      background: #e9ecef;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+
+    .btn-set {
+      display: flex;
+      justify-content: space-around;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .btn-set > div {
+      flex: 1;
+    }
+
+    .btn-set button {
+      width: 100%;
+      padding: 18px;
+      font-size: 26px;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+
+    .btn-success {
+      background: var(--ok);
+    }
+
+    .btn-prompt {
+      background: var(--prompt);
+    }
+
+    .btn-error {
+      background: var(--err);
+    }
+
+    .count {
+      text-align: center;
+      font-weight: bold;
+      font-size: 16px;
+      margin-top: 6px;
+    }
+
+    .percent {
+      text-align: right;
+      font-weight: bold;
+    }
+
+    .percent.green {
+      color: #2b8a3e;
+    }
+
+    .percent.orange {
+      color: #d97706;
+    }
+
+    .percent.red {
+      color: #c92a2a;
+    }
+
+    .prev-percent,
+    .prompt-details {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .prev-percent::before {
+      content: "Пред. сессии: ";
+      font-weight: bold;
+    }
+
+    .prompt-details:empty {
+      display: none;
+    }
+
+    .prompt-details::before {
+      content: "Подсказки: ";
+      font-weight: bold;
+    }
+
+    .btn {
+      padding: 8px 14px;
+      font-size: 14px;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+    }
+
+    .history-session h3 {
+      margin: 12px 0 4px;
+    }
+
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+      font-size: 14px;
+      background: var(--card);
+    }
+
+    .history-table th,
+    .history-table td {
+      border: 1px solid #ccc;
+      padding: 4px 6px;
+      text-align: center;
+    }
+
+    .history-table th {
+      background: #f0f0f0;
+    }
+
+    .empty-state {
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    }
+
+    #goal-selector-modal,
+    #prompt-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 420px;
+      width: 100%;
+      max-height: 80vh;
+      overflow: auto;
+    }
+
+    .modal-content button {
+      margin-top: 8px;
+      margin-right: 8px;
+    }
+
+    .goal-option {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    #undo-banner {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #e0e0e0;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      display: none;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      cursor: pointer;
+      z-index: 1001;
+    }
+
+    .nav-left-floating {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+    }
+
+    .nav-left-floating a {
+      display: inline-block;
+      background: var(--accent);
+      color: white;
+      padding: 14px 18px;
+      border-radius: 30px;
+      text-decoration: none;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 12px;
+      }
+
+      .btn-set {
+        gap: 8px;
+      }
+
+      .btn-set button {
+        padding: 14px;
+        font-size: 22px;
+      }
+
+      .nav-left-floating {
+        position: static;
+        margin: 24px 0 12px;
+        text-align: center;
+      }
+    }
   </style>
 </head>
 <body>
-  <h2>Ежедневный ABA Чек-лист</h2>
-  <div class="controls">
-    <div>
-      <label for="modeSlider">Режим:</label>
-      <input id="modeSlider" type="range" min="0" max="1" value="1"/>
-      <span id="modeText">Запись ответов</span>
+  <div class="page">
+    <h2>Ежедневный ABA Чек-лист</h2>
+
+    <div class="controls mb-16">
+      <div>
+        <label for="modeSlider">Режим:</label>
+        <input id="modeSlider" type="range" min="0" max="1" step="1" value="1" />
+        <span id="modeText">Запись ответов</span>
+      </div>
+      <div class="controls-right">
+        <button id="resetBtn" class="btn btn-secondary">Сбросить счётчики</button>
+        <button id="sendBtn" class="btn btn-danger">Отправить данные</button>
+      </div>
     </div>
-    <button id="clearBtn">Отправить данные</button>
-  </div>
 
-  <div id="goal-selector-modal">
-    <div class="modal-content">
-      <h3>Выберите цели</h3>
-      <div id="goal-options"></div>
-      <button onclick="saveSelectedGoals()">Сохранить</button>
-      <button onclick="closeGoalSelector()">Отмена</button>
+    <div id="goal-selector-modal">
+      <div class="modal-content">
+        <h3>Выберите цели</h3>
+        <div id="goal-options"></div>
+        <button class="btn btn-primary" type="button" onclick="saveSelectedGoals()">Сохранить</button>
+        <button class="btn btn-secondary" type="button" onclick="closeGoalSelector()">Отмена</button>
+      </div>
     </div>
-  </div>
 
-  <div id="dailyContainer"></div>
-  <div id="undo-banner">Отменить действие</div>
-  <div id="historyContainer"><h2>История сессий</h2></div>
+    <div id="prompt-modal">
+      <div class="modal-content">
+        <h3>Выберите тип подсказки</h3>
+        <button class="btn btn-secondary" type="button" onclick="selectPrompt('G')">Жестовая</button>
+        <button class="btn btn-secondary" type="button" onclick="selectPrompt('V')">Вербальная</button>
+        <button class="btn btn-secondary" type="button" onclick="selectPrompt('E')">Эхо</button>
+        <button class="btn btn-secondary" type="button" onclick="selectPrompt('PF')">Частичная физическая</button>
+        <button class="btn btn-secondary" type="button" onclick="selectPrompt('FF')">Полная физическая</button>
+        <button class="btn btn-primary" type="button" onclick="closePromptModal()">Отмена</button>
+      </div>
+    </div>
 
-  <div class="nav-left-floating">
-    <a href="summary_fixed_aisha.html">⬅ Сводный чек-лист</a>
-  </div>
+    <div id="dailyContainer"></div>
+    <div id="undo-banner">Отменить действие</div>
+    <div id="historyContainer"><h2>История сессий</h2></div>
 
-  <!-- Modal for selecting prompt type -->
-  <div id="prompt-modal">
-    <div class="modal-content">
-      <h3>Выберите тип подсказки</h3>
-      <button onclick="selectPrompt('G')">Жестовая</button>
-      <button onclick="selectPrompt('V')">Вербальная</button>
-      <button onclick="selectPrompt('E')">Эхо</button>
-      <button onclick="selectPrompt('PF')">Частичная физическая</button>
-      <button onclick="selectPrompt('FF')">Полная физическая</button>
-      <button onclick="closePromptModal()">Отмена</button>
+    <div class="nav-left-floating">
+      <a href="summary_fixed_aisha.html">⬅ Сводный чек-лист</a>
     </div>
   </div>
 
   <script>
-    const modeSlider       = document.getElementById('modeSlider');
-    const modeText         = document.getElementById('modeText');
-    const dailyContainer   = document.getElementById('dailyContainer');
-    const historyContainer = document.getElementById('historyContainer');
-    const undoBanner       = document.getElementById('undo-banner');
+    const CLICK_ENDPOINT = "https://script.google.com/macros/s/AKfycbzu1szsSlgORc4uFgbhy5LvFdCF99UiVuEbzCe_K7UqLvZlmVanUbp6r4pukXbvXZs/exec";
+    const SESSION_ENDPOINT = "https://script.google.com/macros/s/AKfycbx1ZyMrh8XoRud0rOeqP_2yBZd6C8AJ8e_v2IATRgztmZV-Q9659GmKmnbhNrAmXbU/exec";
+    const PROMPT_CODES = ["G", "V", "E", "PF", "FF"];
+
+    const modeSlider = document.getElementById("modeSlider");
+    const modeText = document.getElementById("modeText");
+    const dailyContainer = document.getElementById("dailyContainer");
+    const historyContainer = document.getElementById("historyContainer");
+    const undoBanner = document.getElementById("undo-banner");
+    const promptModal = document.getElementById("prompt-modal");
 
     let undoStack = [];
-
-    // long-press helpers for 🤝
     let longPressTimer = null;
     let suppressNextClick = false;
     let currentPromptTarget = null;
 
-    // persist prompt details across reloads
-    // это массив по всем блокам (в порядке DOM): {G,V,E,PF,FF}
-    function getSavedPromptDetails() {
-      return JSON.parse(localStorage.getItem('aba_prompt_details') || '[]');
-    }
-    function setSavedPromptDetails(arr) {
-      localStorage.setItem('aba_prompt_details', JSON.stringify(arr));
+    function getSessionDateForHistory() {
+      const savedDate = localStorage.getItem("session_date");
+      if (!savedDate) {
+        return new Date().toLocaleDateString("ru-RU");
+      }
+
+      const [year, month, day] = savedDate.split("-");
+      if (!year || !month || !day) {
+        return savedDate;
+      }
+
+      return `${day}.${month}.${year}`;
     }
 
-    /* ================== MODE ================== */
+    function getSessionDateForServer() {
+      return localStorage.getItem("session_date") || new Date().toISOString().split("T")[0];
+    }
+
     function toggleMode() {
-      const edit = modeSlider.value === '0';
-      document.body.classList.toggle('editing', edit);
-      modeText.textContent = edit ? 'Заблокировано' : 'Запись ответов';
+      const editingLocked = modeSlider.value === "0";
+      document.body.classList.toggle("editing", editingLocked);
+      modeText.textContent = editingLocked ? "Заблокировано" : "Запись ответов";
     }
 
-    /* ================ STORAGE HELPERS ================= */
     function getProtocolsCount() {
       return Object.keys(localStorage)
-        .map(k => (k.match(/^protocol(\d+)_title$/) || [])[1])
-        .filter(Boolean).map(Number)
+        .map((key) => (key.match(/^protocol(\d+)_title$/) || [])[1])
+        .filter(Boolean)
+        .map(Number)
         .reduce((max, n) => Math.max(max, n), 0);
     }
 
-    /* ============== GOAL SELECTOR MODAL ============== */
+    function getSavedPromptDetails() {
+      return JSON.parse(localStorage.getItem("aba_prompt_details") || "[]");
+    }
+
+    function setSavedPromptDetails(data) {
+      localStorage.setItem("aba_prompt_details", JSON.stringify(data));
+    }
+
+    function compactPrompt(details) {
+      if (!details) return "";
+      return PROMPT_CODES
+        .map((code) => {
+          const count = details[code] || 0;
+          return count > 0 ? code + count : "";
+        })
+        .filter(Boolean)
+        .join(" ");
+    }
+
+    function normalizePromptDetailsLength() {
+      const blocks = document.querySelectorAll(".block").length;
+      const current = getSavedPromptDetails();
+      const next = [];
+      for (let i = 0; i < blocks; i += 1) {
+        next.push(current[i] || { G: 0, V: 0, E: 0, PF: 0, FF: 0 });
+      }
+      setSavedPromptDetails(next);
+    }
+
     function openGoalSelector(idx) {
       window.currentProtocol = idx;
-      const opts = document.getElementById('goal-options');
-      opts.innerHTML = '';
-      const saved = JSON.parse(localStorage.getItem(`protocol${idx}_selectedGoals`) || '[]');
-      for (let j = 1; j <= 10; j++) {
+      const options = document.getElementById("goal-options");
+      const saved = JSON.parse(localStorage.getItem(`protocol${idx}_selectedGoals`) || "[]");
+      options.innerHTML = "";
+
+      for (let j = 1; j <= 10; j += 1) {
         const text = localStorage.getItem(`protocol${idx}_goal${j}`) || `Цель ${j}`;
-        const cb = document.createElement('input');
-        cb.type = 'checkbox'; cb.id = `g${j}`; cb.value = j;
-        if (saved.includes(j)) cb.checked = true;
-        cb.onchange = () => {
-          if (opts.querySelectorAll('input:checked').length > 10) cb.checked = false;
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.id = `protocol${idx}_goal_option_${j}`;
+        checkbox.value = String(j);
+        checkbox.checked = saved.includes(j);
+        checkbox.onchange = () => {
+          if (options.querySelectorAll("input:checked").length > 10) {
+            checkbox.checked = false;
+          }
         };
-        const lb = document.createElement('label'); lb.htmlFor = cb.id; lb.textContent = text;
-        const row = document.createElement('div'); row.append(cb, lb);
-        opts.append(row);
+
+        const label = document.createElement("label");
+        label.htmlFor = checkbox.id;
+        label.textContent = text;
+
+        const row = document.createElement("div");
+        row.className = "goal-option";
+        row.append(checkbox, label);
+        options.append(row);
       }
-      document.getElementById('goal-selector-modal').style.display = 'flex';
+
+      document.getElementById("goal-selector-modal").style.display = "flex";
     }
+
     function closeGoalSelector() {
-      document.getElementById('goal-selector-modal').style.display = 'none';
+      document.getElementById("goal-selector-modal").style.display = "none";
     }
 
     function saveSelectedGoals() {
       const idx = window.currentProtocol;
+      if (!idx) return;
 
-      const oldNames = JSON.parse(localStorage.getItem(`protocol${idx}_goalNames`) || '[]');
-      const newSel   = [...document.querySelectorAll('#goal-options input:checked')].map(cb => +cb.value);
-      const newNames = newSel.map(j => localStorage.getItem(`protocol${idx}_goal${j}`) || '');
-
-      localStorage.setItem(`protocol${idx}_selectedGoals`, JSON.stringify(newSel));
-      localStorage.setItem(`protocol${idx}_goalNames`, JSON.stringify(newNames));
-
-      // перенос истории только по совпадающим именам
-      let history = JSON.parse(localStorage.getItem('aba_history') || '[]');
-      history = history.map(sess => {
-        const oldData = sess.data[idx - 1] || [];
-        const newData = newNames.map(name => {
-          const oldIndex = oldNames.indexOf(name);
-          return oldIndex !== -1 ? oldData[oldIndex] : null;
-        });
-        sess.data[idx - 1] = newData;
-        return sess;
+      const protocolKey = `protocol${idx}_selectedGoals`;
+      const previousGoalIds = JSON.parse(localStorage.getItem(protocolKey) || "[]");
+      const previousGoalNames = previousGoalIds.map((goalId) => {
+        return localStorage.getItem(`protocol${idx}_goal${goalId}`) || `Цель ${goalId}`;
       });
-      localStorage.setItem('aba_history', JSON.stringify(history));
 
-      // перенос текущих счётчиков (по 3 на цель)
-      const oldCounts = JSON.parse(localStorage.getItem('aba_counts') || '[]');
-      const newCounts = [];
-      newNames.forEach(name => {
-        const oldIndex = oldNames.indexOf(name);
-        if (oldIndex !== -1) {
-          newCounts.push(oldCounts[oldIndex * 3] || '0',
-                         oldCounts[oldIndex * 3 + 1] || '0',
-                         oldCounts[oldIndex * 3 + 2] || '0');
-        } else {
-          newCounts.push('0','0','0');
-        }
+      const selected = Array.from(document.querySelectorAll("#goal-options input:checked")).map((cb) => Number(cb.value));
+      localStorage.setItem(protocolKey, JSON.stringify(selected));
+
+      const nextGoalNames = selected.map((goalId) => {
+        return localStorage.getItem(`protocol${idx}_goal${goalId}`) || `Цель ${goalId}`;
       });
-      localStorage.setItem('aba_counts', JSON.stringify(newCounts));
 
-      // перенос детальных подсказок: на каждую выбранную цель свой объект {G,V,E,PF,FF}
-      const oldPD = getSavedPromptDetails();
-      const newPD = [];
-      newNames.forEach(name => {
-        const oldIndex = oldNames.indexOf(name);
-        if (oldIndex !== -1 && oldPD[oldIndex]) {
-          newPD.push(oldPD[oldIndex]);
-        } else {
-          newPD.push({G:0,V:0,E:0,PF:0,FF:0});
-        }
-      });
-      setSavedPromptDetails(newPD);
-
+      migrateSessionDataForProtocol(idx, previousGoalNames, nextGoalNames);
       closeGoalSelector();
       renderDaily();
       loadProgress();
       renderHistory();
     }
 
-    /* =============== MASTERY CHECK =============== */
-    function checkMastery(goalHistory) {
-      const last3 = goalHistory.slice(-3).filter(v => v != null);
-      return last3.length === 3 && last3.every(v => v >= 80);
+    function migrateSessionDataForProtocol(protocolIndex, previousGoalNames, nextGoalNames) {
+      const history = JSON.parse(localStorage.getItem("aba_history") || "[]").map((session) => {
+        const previousData = session.data[protocolIndex - 1] || [];
+        const previousPromptDetails = session.promptDetails?.[protocolIndex - 1] || [];
+        const nextData = nextGoalNames.map((goalName) => {
+          const prevIndex = previousGoalNames.indexOf(goalName);
+          return prevIndex === -1 ? null : previousData[prevIndex];
+        });
+        const nextPromptData = nextGoalNames.map((goalName) => {
+          const prevIndex = previousGoalNames.indexOf(goalName);
+          return prevIndex === -1 ? "" : previousPromptDetails[prevIndex] || "";
+        });
+
+        session.data[protocolIndex - 1] = nextData;
+        session.promptDetails = session.promptDetails || [];
+        session.promptDetails[protocolIndex - 1] = nextPromptData;
+        return session;
+      });
+
+      localStorage.setItem("aba_history", JSON.stringify(history));
     }
 
-    /* ================= RENDER DAILY ================= */
+    function checkMastery(goalHistory) {
+      const lastThree = goalHistory.slice(-3).filter((value) => value != null);
+      return lastThree.length === 3 && lastThree.every((value) => value >= 80);
+    }
+
+    function getSelectedGoalIds(protocolIndex) {
+      const selected = JSON.parse(localStorage.getItem(`protocol${protocolIndex}_selectedGoals`) || "[]");
+      return selected.length ? selected : [1, 2, 3];
+    }
+
     function renderDaily() {
-      const hist  = JSON.parse(localStorage.getItem('aba_history') || '[]');
-      const last3 = hist.slice(-3);
+      const count = getProtocolsCount();
+      const history = JSON.parse(localStorage.getItem("aba_history") || "[]");
+      const lastThreeSessions = history.slice(-3);
+      dailyContainer.innerHTML = "";
 
-      dailyContainer.innerHTML = '';
-      const cnt = getProtocolsCount();
+      if (!count) {
+        dailyContainer.innerHTML = '<div class="empty-state">Нет настроенных протоколов в localStorage.</div>';
+        return;
+      }
 
-      for (let i = 1; i <= cnt; i++) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'protocol-container';
-        wrapper.dataset.index = i;
+      for (let i = 1; i <= count; i += 1) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "protocol-container";
+        wrapper.dataset.index = String(i);
 
         const title = localStorage.getItem(`protocol${i}_title`) || `Протокол ${i}`;
-        const sel   = JSON.parse(localStorage.getItem(`protocol${i}_selectedGoals`) || '[]');
-        const toShow = sel.length ? sel : [1,2,3];
+        const selectedGoals = getSelectedGoalIds(i);
 
-        wrapper.innerHTML = `<h3>${title}</h3><button onclick="openGoalSelector(${i})">Выбрать цели</button>`;
+        const header = document.createElement("div");
+        header.className = "protocol-header";
+        header.innerHTML = `<h3>${title}</h3><button class="btn btn-primary" type="button" onclick="openGoalSelector(${i})">Выбрать цели</button>`;
+        wrapper.append(header);
 
-        toShow.forEach((j, rowPos) => {
-          const txt = localStorage.getItem(`protocol${i}_goal${j}`) || `Цель ${j}`;
-          const prevArr = last3.map(sess => sess.data[i-1]?.[rowPos] ?? null);
-          const prevPct = prevArr.map(v => v==null ? '—' : v + '%').join(' | ');
-          const mastered = checkMastery(prevArr);
+        selectedGoals.forEach((goalId, rowPos) => {
+          const goalName = localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`;
+          const goalHistory = lastThreeSessions.map((session) => session.data[i - 1]?.[rowPos] ?? null);
+          const previousPercents = goalHistory.map((value) => (value == null ? "—" : `${value}%`)).join(" | ");
+          const mastered = checkMastery(goalHistory);
 
-          const block = document.createElement('div');
-          block.className = 'block' + (mastered ? ' mastered' : '');
-          // в data-index сохраним порядковый номер блока для синхронизации с aba_prompt_details
-          block.dataset.blockIndex = document.querySelectorAll('.block').length;
-
+          const block = document.createElement("div");
+          block.className = `block${mastered ? " mastered" : ""}`;
           block.innerHTML = `
-            <div class="goal-label">${txt}</div>
+            <div class="goal-label">${goalName}</div>
             <div class="btn-set">
-              <div><button class="btn-success" onclick="increment(this, '+')">✅</button><div class="count">0</div></div>
+              <div><button class="btn-success" type="button" onclick="increment(this, '+')">✅</button><div class="count">0</div></div>
               <div><button class="btn-prompt" type="button">🤝</button><div class="count">0</div></div>
-              <div><button class="btn-error"   onclick="increment(this, '-')">➖</button><div class="count">0</div></div>
+              <div><button class="btn-error" type="button" onclick="increment(this, '-')">➖</button><div class="count">0</div></div>
             </div>
-            <div class="percent">${mastered ? 'Мастерство ✓' : '—'}</div>
-            <div class="prev-percent">${prevPct}</div>
+            <div class="percent">—</div>
+            <div class="prev-percent">${previousPercents}</div>
+            <div class="prompt-details"></div>
           `;
           wrapper.append(block);
         });
@@ -261,304 +585,319 @@
         dailyContainer.append(wrapper);
       }
 
-      // Инициализируем / восстанавливаем массив детальных подсказок под текущее число блоков
-      const blocks = Array.from(document.querySelectorAll('.block'));
-      let pd = getSavedPromptDetails();
-      if (pd.length !== blocks.length) {
-        // расширим/обрежем
-        const fresh = [];
-        for (let k = 0; k < blocks.length; k++) {
-          fresh[k] = pd[k] || {G:0,V:0,E:0,PF:0,FF:0};
-        }
-        pd = fresh;
-        setSavedPromptDetails(pd);
-      }
-
-      // навешиваем обработчики на 🤝 после рендера
+      normalizePromptDetailsLength();
       wirePromptButtons();
+      updatePromptDetailsUI();
     }
 
-    /* ====== WIRE PROMPT (🤝) WITH LONG-PRESS ====== */
-    function wirePromptButtons() {
-      const modal = document.getElementById('prompt-modal');
-
-      function startPress(btn) {
-        suppressNextClick = false;
-        longPressTimer = setTimeout(() => {
-          suppressNextClick = true;
-          currentPromptTarget = btn;
-          modal.style.display = 'flex';
-        }, 450);
-      }
-      function endPress() {
-        if (longPressTimer) {
-          clearTimeout(longPressTimer);
-          longPressTimer = null;
-        }
-      }
-
-      document.querySelectorAll('.btn-prompt').forEach(btn => {
-        // мышь
-        btn.addEventListener('mousedown', () => startPress(btn));
-        btn.addEventListener('mouseup', endPress);
-        btn.addEventListener('mouseleave', endPress);
-
-        // тач
-        btn.addEventListener('touchstart', (e) => { e.preventDefault(); startPress(btn); }, {passive:false});
-        btn.addEventListener('touchend', endPress);
-        btn.addEventListener('touchcancel', endPress);
-
-        // короткий клик = P
-        btn.addEventListener('click', () => {
-          if (suppressNextClick) { suppressNextClick = false; return; }
-          increment(btn, 'P');
-        });
-      });
-    }
-
-    /* ================= RENDER HISTORY ================= */
     function renderHistory() {
-      const hist = JSON.parse(localStorage.getItem('aba_history') || '[]');
-      const cnt  = getProtocolsCount();
-      historyContainer.innerHTML = '<h2>История сессий</h2>';
+      const history = JSON.parse(localStorage.getItem("aba_history") || "[]");
+      const protocolsCount = getProtocolsCount();
+      historyContainer.innerHTML = "<h2>История сессий</h2>";
 
-      if (!hist.length) {
-        historyContainer.innerHTML += '<p>Нет сохранённых сессий.</p>';
+      if (!history.length) {
+        historyContainer.innerHTML += "<p>Нет сохранённых сессий.</p>";
         return;
       }
 
-      for (let i = 1; i <= cnt; i++) {
+      for (let i = 1; i <= protocolsCount; i += 1) {
         const title = localStorage.getItem(`protocol${i}_title`) || `Протокол ${i}`;
-        const sel   = JSON.parse(localStorage.getItem(`protocol${i}_selectedGoals`) || '[]') || [1,2,3];
+        const selectedGoals = getSelectedGoalIds(i);
+        const section = document.createElement("div");
+        section.className = "history-session";
 
-        const sec = document.createElement('div');
-        sec.className = 'history-session';
-        const hdr = document.createElement('h3'); hdr.textContent = title; sec.appendChild(hdr);
+        const header = document.createElement("h3");
+        header.textContent = title;
+        section.append(header);
 
-        const tbl = document.createElement('table'); tbl.className = 'history-table';
-        const thead = tbl.createTHead(); const hr = thead.insertRow();
-        const th0 = document.createElement('th'); th0.textContent = 'Цель'; hr.appendChild(th0);
+        const table = document.createElement("table");
+        table.className = "history-table";
 
-        hist.forEach(sess => {
-          const th = document.createElement('th'); th.textContent = sess.date; hr.appendChild(th);
+        const thead = table.createTHead();
+        const headerRow = thead.insertRow();
+        const firstHeader = document.createElement("th");
+        firstHeader.textContent = "Цель";
+        headerRow.append(firstHeader);
+
+        history.forEach((session) => {
+          const th = document.createElement("th");
+          th.textContent = session.date;
+          headerRow.append(th);
         });
 
-        const tbody = tbl.createTBody();
-        sel.forEach((gIdx, k) => {
-          const tr = tbody.insertRow();
-          const cell0 = tr.insertCell();
-          cell0.textContent = localStorage.getItem(`protocol${i}_goal${gIdx}`) || `Цель ${gIdx}`;
+        const tbody = table.createTBody();
+        selectedGoals.forEach((goalId, rowIndex) => {
+          const row = tbody.insertRow();
+          const titleCell = row.insertCell();
+          titleCell.textContent = localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`;
 
-          hist.forEach(sess => {
-            const cell = tr.insertCell();
-            const arr  = sess.data[i-1] || [];
-            const v    = arr[k];
-            let text = v == null ? '—' : v + '%';
-
-            // если есть детализация подсказок на ту сессию — добавим кратко
-            const pdProt = (sess.promptDetails && sess.promptDetails[i-1]) || null;
-            const pdStr  = pdProt ? pdProt[k] : null;
-            if (pdStr && /\d/.test(pdStr)) {
-              text += ' [' + pdStr + ']';
+          history.forEach((session) => {
+            const cell = row.insertCell();
+            const percent = session.data[i - 1]?.[rowIndex];
+            const promptDetail = session.promptDetails?.[i - 1]?.[rowIndex];
+            let text = percent == null ? "—" : `${percent}%`;
+            if (promptDetail) {
+              text += ` [${promptDetail}]`;
             }
-
-            const mastered = checkMastery(arr);
-            if (mastered && v != null) text += ' ✓';
             cell.textContent = text;
           });
         });
 
-        sec.appendChild(tbl);
-        historyContainer.appendChild(sec);
+        section.append(table);
+        historyContainer.append(section);
       }
     }
 
-    /* ================== COUNTERS ================== */
-    function increment(btn, type) {
-      // type: '+', 'P', '-'
-      const cntEl = btn.nextElementSibling;
-      cntEl.textContent = (+cntEl.textContent || 0) + 1;
-
-      // если это подсказка — увеличим детальный счётчик «P (generic)» и конкретный тип, если он пришёл из selectPrompt()
-      if (type === 'P' && btn.classList.contains('btn-prompt')) {
-        const block = btn.closest('.block');
-        const blockIndex = Array.from(document.querySelectorAll('.block')).indexOf(block);
-        const pd = getSavedPromptDetails();
-        pd[blockIndex] = pd[blockIndex] || {G:0,V:0,E:0,PF:0,FF:0};
-        // generic P уже учли в счётчике; конкретный тип добавляется в selectPrompt()
-        setSavedPromptDetails(pd);
-      }
-
-      updatePercentages();
-      saveProgress();
-      undoStack.push(btn);
-      showUndo();
-    }
-
-    function updatePercentages() {
-      document.querySelectorAll('.block').forEach(block => {
-        const counts = [...block.querySelectorAll('.count')].map(d => +d.textContent || 0);
-        const total  = counts.reduce((s, v) => s + v, 0);
-        const el     = block.querySelector('.percent');
-        if (total === 0) {
-          el.textContent = '—';
-          el.className = 'percent';
-        } else {
-          const ok = counts[0];
-          const pct = Math.round(ok / total * 100);
-          el.textContent = pct + '%';
-          el.className = 'percent ' + (pct >= 80 ? 'green' : pct >= 50 ? 'orange' : 'red');
-        }
-      });
-    }
-
-    function saveProgress() {
-      const arr = [...document.querySelectorAll('.count')].map(d => d.textContent);
-      localStorage.setItem('aba_counts', JSON.stringify(arr));
-    }
-
-    function loadProgress() {
-      const arr = JSON.parse(localStorage.getItem('aba_counts') || '[]');
-      document.querySelectorAll('.count').forEach((d, i) => {
-        if (arr[i] != null) d.textContent = arr[i];
-      });
-      updatePercentages();
-    }
-
-    /* ================= UNDO ================= */
-    function showUndo() {
-      undoBanner.style.display = 'block';
-      clearTimeout(window.undoTimeout);
-      window.undoTimeout = setTimeout(() => {
-        if (!undoStack.length) undoBanner.style.display = 'none';
-      }, 5000);
-    }
-
-    undoBanner.onclick = () => {
-      if (undoStack.length) {
-        const btn = undoStack.pop();
-        const cnt = btn.nextElementSibling;
-        cnt.textContent = Math.max(+cnt.textContent - 1, 0);
-
-        // если откатываем подсказку — детальная статистика не уменьшится (можно добавить при желании)
-        updatePercentages();
-        saveProgress();
-      }
-      if (!undoStack.length) undoBanner.style.display = 'none';
-    };
-
-    /* ================== SEND SESSION ================== */
-    function compactPrompt(pdObj) {
-      // превращаем {G:2,V:1,E:0,PF:1,FF:0} -> "G2 V1 E0 PF1 FF0" (только >0 показываем)
-      const parts = [];
-      if (!pdObj) return '';
-      for (const key of ['G','V','E','PF','FF']) {
-        const n = pdObj[key] || 0;
-        if (n > 0) parts.push(key + n);
-      }
-      return parts.join(' ');
-    }
-
-    function clearData() {
-      const date  = new Date().toLocaleDateString('ru-RU');
-      const child = localStorage.getItem('child_name') || '';
-      const session = { date, data: [], promptDetails: [] };
-
-      const allBlocks = Array.from(document.querySelectorAll('.block'));
-      const pdAll = getSavedPromptDetails();
-
-      document.querySelectorAll('.protocol-container').forEach((pc, protIdx) => {
-        const protocol = pc.querySelector('h3').textContent;
-        const goalsHistory = [];
-        const goalsServer  = [];
-        const pdForProtocol = [];
-
-        const blocks = Array.from(pc.querySelectorAll('.block'));
-        blocks.forEach(block => {
-          const name   = block.querySelector('.goal-label').textContent.trim();
-          const counts = [...block.querySelectorAll('.count')].map(d => +d.textContent || 0);
-          const total  = counts.reduce((s,v) => s + v, 0);
-          const pct    = total ? Math.round(counts[0] / total * 100) : null;
-
-          // собрать детальные подсказки по глобальному индексу блока
-          const blockIndex = allBlocks.indexOf(block);
-          const pdObj = pdAll[blockIndex] || {G:0,V:0,E:0,PF:0,FF:0};
-          const pdStr = compactPrompt(pdObj);
-
-          goalsHistory.push(pct);
-          pdForProtocol.push(pdStr || '');
-
-          // responses: как прежде (+ P -), а детали отдельным полем
-          const responses = [];
-          for (let i = 0; i < counts[0]; i++) responses.push('+');
-          for (let i = 0; i < counts[1]; i++) responses.push('P');
-          for (let i = 0; i < counts[2]; i++) responses.push('-');
-
-          goalsServer.push({
-            name,
-            responses: responses.join(' '),
-            percent: pct != null ? pct + '%' : '',
-            promptDetails: pdStr           // <--- НОВОЕ ПОЛЕ
-          });
-        });
-
-        session.data.push(goalsHistory);
-        session.promptDetails.push(pdForProtocol);
-
-        // отправляем по протоколу
-        sendSessionResults({ protocol, date, child, goals: goalsServer });
-      });
-
-      // сохраняем локально всю сессию (с деталями подсказок)
-      const hist = JSON.parse(localStorage.getItem('aba_history') || '[]');
-      hist.push(session);
-      if (hist.length > 10) hist.shift();
-      localStorage.setItem('aba_history', JSON.stringify(hist));
-
-      // сбрасываем счётчики и детальные подсказки
-      document.querySelectorAll('.count').forEach(e => e.textContent = '0');
-      setSavedPromptDetails(Array.from(document.querySelectorAll('.block')).map(() => ({G:0,V:0,E:0,PF:0,FF:0})));
-
-      updatePercentages();
-      saveProgress();
-      renderHistory();
+    function sendClickToGoogle(protocol, goal, responseType) {
+      fetch(CLICK_ENDPOINT, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ protocol, goal, response: responseType })
+      }).catch(console.error);
     }
 
     function sendSessionResults(sessionData) {
-      // Замените URL на свой актуальный
-      fetch('https://script.google.com/macros/s/AKfycbx1ZyMrh8XoRud0rOeqP_2yBZd6C8AJ8e_v2IATRgztmZV-Q9659GmKmnbhNrAmXbU/exec', {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
+      fetch(SESSION_ENDPOINT, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sessionData)
       }).catch(console.error);
     }
 
-    /* ============ PROMPT MODAL ============ */
-    function closePromptModal() {
-      document.getElementById('prompt-modal').style.display = 'none';
-    }
-    function selectPrompt(code) {
-      // code: 'G' | 'V' | 'E' | 'PF' | 'FF'
-      document.getElementById('prompt-modal').style.display = 'none';
-      if (currentPromptTarget) {
-        // 1) общий инкремент «P»
-        increment(currentPromptTarget, 'P');
-        // 2) детальная пометка
-        const block = currentPromptTarget.closest('.block');
-        const blockIndex = Array.from(document.querySelectorAll('.block')).indexOf(block);
-        const pd = getSavedPromptDetails();
-        pd[blockIndex] = pd[blockIndex] || {G:0,V:0,E:0,PF:0,FF:0};
-        pd[blockIndex][code] = (pd[blockIndex][code] || 0) + 1;
-        setSavedPromptDetails(pd);
-        currentPromptTarget = null;
-      }
+    function showUndo() {
+      undoBanner.style.display = "block";
+      clearTimeout(window.undoTimeout);
+      window.undoTimeout = setTimeout(() => {
+        if (!undoStack.length) {
+          undoBanner.style.display = "none";
+        }
+      }, 5000);
     }
 
-    /* =============== INIT =============== */
-    document.addEventListener('DOMContentLoaded', () => {
+    function updatePromptDetailsUI() {
+      const details = getSavedPromptDetails();
+      document.querySelectorAll(".block").forEach((block, index) => {
+        const el = block.querySelector(".prompt-details");
+        el.textContent = compactPrompt(details[index]);
+      });
+    }
+
+    function increment(btn, type) {
+      if (document.body.classList.contains("editing") || btn.disabled) {
+        return;
+      }
+
+      const countEl = btn.nextElementSibling;
+      countEl.textContent = String((Number(countEl.textContent) || 0) + 1);
+
+      const block = btn.closest(".block");
+      const protocol = btn.closest(".protocol-container").querySelector("h3").textContent.trim();
+      const goal = block.querySelector(".goal-label").textContent.trim();
+      const response = type === "+" ? "✅" : type === "-" ? "➖" : "🤝";
+
+      sendClickToGoogle(protocol, goal, response);
+      updatePercentages();
+      saveProgress();
+      undoStack.push({ button: btn, type });
+      showUndo();
+    }
+
+    function updatePercentages() {
+      document.querySelectorAll(".block").forEach((block) => {
+        const counts = Array.from(block.querySelectorAll(".count")).map((item) => Number(item.textContent) || 0);
+        const total = counts.reduce((sum, value) => sum + value, 0);
+        const percentEl = block.querySelector(".percent");
+
+        if (!total) {
+          percentEl.textContent = "—";
+          percentEl.className = "percent";
+          return;
+        }
+
+        const success = counts[0];
+        const percent = Math.round((success / total) * 100);
+        percentEl.textContent = `${percent}%`;
+        percentEl.className = `percent ${percent >= 80 ? "green" : percent >= 50 ? "orange" : "red"}`;
+      });
+    }
+
+    function saveProgress() {
+      const counts = Array.from(document.querySelectorAll(".count")).map((item) => item.textContent);
+      localStorage.setItem("aba_counts", JSON.stringify(counts));
+    }
+
+    function loadProgress() {
+      const counts = JSON.parse(localStorage.getItem("aba_counts") || "[]");
+      document.querySelectorAll(".count").forEach((item, index) => {
+        if (counts[index] != null) {
+          item.textContent = counts[index];
+        }
+      });
+      updatePercentages();
+      updatePromptDetailsUI();
+    }
+
+    function resetCurrentCounts() {
+      document.querySelectorAll(".count").forEach((item) => {
+        item.textContent = "0";
+      });
+      setSavedPromptDetails(Array.from(document.querySelectorAll(".block")).map(() => ({ G: 0, V: 0, E: 0, PF: 0, FF: 0 })));
+      undoStack = [];
+      undoBanner.style.display = "none";
+      updatePercentages();
+      updatePromptDetailsUI();
+      saveProgress();
+    }
+
+    function finalizeSession() {
+      const historyDate = getSessionDateForHistory();
+      const serverDate = getSessionDateForServer();
+      const child = localStorage.getItem("child_name") || "";
+      const session = { date: historyDate, data: [], promptDetails: [] };
+      const allBlocks = Array.from(document.querySelectorAll(".block"));
+      const promptDetails = getSavedPromptDetails();
+
+      document.querySelectorAll(".protocol-container").forEach((protocolContainer) => {
+        const protocol = protocolContainer.querySelector("h3").textContent.trim();
+        const goalsForServer = [];
+        const protocolData = [];
+        const protocolPromptDetails = [];
+
+        Array.from(protocolContainer.querySelectorAll(".block")).forEach((block) => {
+          const name = block.querySelector(".goal-label").textContent.trim();
+          const counts = Array.from(block.querySelectorAll(".count")).map((item) => Number(item.textContent) || 0);
+          const total = counts.reduce((sum, value) => sum + value, 0);
+          const percent = total ? Math.round((counts[0] / total) * 100) : null;
+          const globalIndex = allBlocks.indexOf(block);
+          const promptText = compactPrompt(promptDetails[globalIndex]);
+
+          protocolData.push(percent);
+          protocolPromptDetails.push(promptText);
+
+          const responses = [];
+          for (let i = 0; i < counts[0]; i += 1) responses.push("+");
+          for (let i = 0; i < counts[1]; i += 1) responses.push("P");
+          for (let i = 0; i < counts[2]; i += 1) responses.push("-");
+
+          goalsForServer.push({
+            name,
+            responses: responses.join(" "),
+            percent: percent == null ? "" : `${percent}%`,
+            promptDetails: promptText
+          });
+        });
+
+        session.data.push(protocolData);
+        session.promptDetails.push(protocolPromptDetails);
+        sendSessionResults({ protocol, date: serverDate, child, goals: goalsForServer });
+      });
+
+      const history = JSON.parse(localStorage.getItem("aba_history") || "[]");
+      history.push(session);
+      if (history.length > 10) {
+        history.shift();
+      }
+      localStorage.setItem("aba_history", JSON.stringify(history));
+
+      resetCurrentCounts();
+      renderHistory();
+      renderDaily();
+      loadProgress();
+    }
+
+    function wirePromptButtons() {
+      document.querySelectorAll(".btn-prompt").forEach((btn) => {
+        const startPress = () => {
+          suppressNextClick = false;
+          longPressTimer = setTimeout(() => {
+            suppressNextClick = true;
+            currentPromptTarget = btn;
+            promptModal.style.display = "flex";
+          }, 450);
+        };
+
+        const endPress = () => {
+          if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+          }
+        };
+
+        btn.addEventListener("mousedown", startPress);
+        btn.addEventListener("mouseup", endPress);
+        btn.addEventListener("mouseleave", endPress);
+        btn.addEventListener("touchstart", (event) => {
+          event.preventDefault();
+          startPress();
+        }, { passive: false });
+        btn.addEventListener("touchend", endPress);
+        btn.addEventListener("touchcancel", endPress);
+        btn.addEventListener("click", () => {
+          if (suppressNextClick) {
+            suppressNextClick = false;
+            return;
+          }
+          increment(btn, "P");
+        });
+      });
+    }
+
+    function closePromptModal() {
+      promptModal.style.display = "none";
+      currentPromptTarget = null;
+    }
+
+    function selectPrompt(code) {
+      promptModal.style.display = "none";
+      if (!currentPromptTarget) return;
+
+      increment(currentPromptTarget, "P");
+      const block = currentPromptTarget.closest(".block");
+      const blockIndex = Array.from(document.querySelectorAll(".block")).indexOf(block);
+      const details = getSavedPromptDetails();
+      details[blockIndex] = details[blockIndex] || { G: 0, V: 0, E: 0, PF: 0, FF: 0 };
+      details[blockIndex][code] = (details[blockIndex][code] || 0) + 1;
+      setSavedPromptDetails(details);
+      if (undoStack.length) {
+        undoStack[undoStack.length - 1].detailCode = code;
+      }
+      updatePromptDetailsUI();
+      currentPromptTarget = null;
+    }
+
+    undoBanner.onclick = () => {
+      const last = undoStack.pop();
+      if (!last) {
+        undoBanner.style.display = "none";
+        return;
+      }
+
+      const countEl = last.button.nextElementSibling;
+      countEl.textContent = String(Math.max((Number(countEl.textContent) || 0) - 1, 0));
+
+      if (last.detailCode) {
+        const block = last.button.closest(".block");
+        const blockIndex = Array.from(document.querySelectorAll(".block")).indexOf(block);
+        const details = getSavedPromptDetails();
+        details[blockIndex] = details[blockIndex] || { G: 0, V: 0, E: 0, PF: 0, FF: 0 };
+        details[blockIndex][last.detailCode] = Math.max((details[blockIndex][last.detailCode] || 0) - 1, 0);
+        setSavedPromptDetails(details);
+        updatePromptDetailsUI();
+      }
+
+      updatePercentages();
+      saveProgress();
+      if (!undoStack.length) {
+        undoBanner.style.display = "none";
+      }
+    };
+
+    document.addEventListener("DOMContentLoaded", () => {
       modeSlider.oninput = toggleMode;
-      document.getElementById('clearBtn').onclick = clearData;
+      document.getElementById("resetBtn").onclick = resetCurrentCounts;
+      document.getElementById("sendBtn").onclick = finalizeSession;
       renderDaily();
       loadProgress();
       renderHistory();
