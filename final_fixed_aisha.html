@@ -423,6 +423,14 @@
       localStorage.setItem("aba_prompt_details", JSON.stringify(data));
     }
 
+    function getSavedResponseLog() {
+      return JSON.parse(localStorage.getItem("aba_response_log") || "[]");
+    }
+
+    function setSavedResponseLog(data) {
+      localStorage.setItem("aba_response_log", JSON.stringify(data));
+    }
+
     function compactPrompt(details) {
       if (!details) return "";
       return PROMPT_CODES
@@ -442,6 +450,16 @@
         next.push(current[i] || { G: 0, V: 0, E: 0, PF: 0, FF: 0 });
       }
       setSavedPromptDetails(next);
+    }
+
+    function normalizeResponseLogLength() {
+      const blocks = document.querySelectorAll(".block").length;
+      const current = getSavedResponseLog();
+      const next = [];
+      for (let i = 0; i < blocks; i += 1) {
+        next.push(Array.isArray(current[i]) ? current[i] : []);
+      }
+      setSavedResponseLog(next);
     }
 
     function openGoalSelector(idx) {
@@ -586,6 +604,7 @@
       }
 
       normalizePromptDetailsLength();
+      normalizeResponseLogLength();
       wirePromptButtons();
       updatePromptDetailsUI();
     }
@@ -699,14 +718,19 @@
       countEl.textContent = String((Number(countEl.textContent) || 0) + 1);
 
       const block = btn.closest(".block");
+      const blockIndex = Array.from(document.querySelectorAll(".block")).indexOf(block);
       const protocol = btn.closest(".protocol-container").querySelector("h3").textContent.trim();
       const goal = block.querySelector(".goal-label").textContent.trim();
       const responseCode = getResponseCode(type);
+      const responseLog = getSavedResponseLog();
+      responseLog[blockIndex] = responseLog[blockIndex] || [];
+      responseLog[blockIndex].push(responseCode);
+      setSavedResponseLog(responseLog);
 
       sendClickToGoogle(protocol, goal, responseCode);
       updatePercentages();
       saveProgress();
-      undoStack.push({ button: btn, type: responseCode });
+      undoStack.push({ button: btn, type: responseCode, blockIndex });
       showUndo();
     }
 
@@ -755,6 +779,12 @@
       const countEl = last.button.nextElementSibling;
       countEl.textContent = String(Math.max((Number(countEl.textContent) || 0) - 1, 0));
 
+      const responseLog = getSavedResponseLog();
+      if (Array.isArray(responseLog[last.blockIndex]) && responseLog[last.blockIndex].length) {
+        responseLog[last.blockIndex].pop();
+        setSavedResponseLog(responseLog);
+      }
+
       if (PROMPT_CODES.includes(last.type)) {
         const block = last.button.closest(".block");
         const blockIndex = Array.from(document.querySelectorAll(".block")).indexOf(block);
@@ -779,6 +809,7 @@
       const session = { date: historyDate, data: [], promptDetails: [] };
       const allBlocks = Array.from(document.querySelectorAll(".block"));
       const promptDetails = getSavedPromptDetails();
+      const responseLog = getSavedResponseLog();
 
       document.querySelectorAll(".protocol-container").forEach((protocolContainer) => {
         const protocol = protocolContainer.querySelector("h3").textContent.trim();
@@ -793,23 +824,10 @@
           const percent = total ? Math.round((counts[0] / total) * 100) : null;
           const globalIndex = allBlocks.indexOf(block);
           const promptText = compactPrompt(promptDetails[globalIndex]);
+          const responses = Array.isArray(responseLog[globalIndex]) ? responseLog[globalIndex] : [];
 
           protocolData.push(percent);
           protocolPromptDetails.push(promptText);
-
-          const responses = [];
-          const detailCounts = promptDetails[globalIndex] || { G: 0, V: 0, E: 0, PF: 0, FF: 0 };
-          const typedPromptTotal = PROMPT_CODES.reduce((sum, code) => sum + (detailCounts[code] || 0), 0);
-          const genericPromptCount = Math.max(counts[1] - typedPromptTotal, 0);
-
-          for (let i = 0; i < counts[0]; i += 1) responses.push("+");
-          PROMPT_CODES.forEach((code) => {
-            for (let i = 0; i < (detailCounts[code] || 0); i += 1) {
-              responses.push(code);
-            }
-          });
-          for (let i = 0; i < genericPromptCount; i += 1) responses.push("P");
-          for (let i = 0; i < counts[2]; i += 1) responses.push("-");
 
           goalsForServer.push({
             name,
@@ -835,6 +853,7 @@
         item.textContent = "0";
       });
       setSavedPromptDetails(Array.from(document.querySelectorAll(".block")).map(() => ({ G: 0, V: 0, E: 0, PF: 0, FF: 0 })));
+      setSavedResponseLog(Array.from(document.querySelectorAll(".block")).map(() => []));
       undoStack = [];
       undoBanner.style.display = "none";
       updatePercentages();
