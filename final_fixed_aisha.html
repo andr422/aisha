@@ -331,7 +331,7 @@
         <span id="modeText">Запись ответов</span>
       </div>
       <div class="controls-right">
-        <button id="resetBtn" class="btn btn-secondary">Сбросить счётчики</button>
+        <button id="undoBtn" class="btn btn-secondary">Отменить действие</button>
         <button id="sendBtn" class="btn btn-danger">Отправить данные</button>
       </div>
     </div>
@@ -684,6 +684,12 @@
       });
     }
 
+    function getResponseCode(type) {
+      if (type === "+" || type === "-") return type;
+      if (PROMPT_CODES.includes(type)) return type;
+      return "P";
+    }
+
     function increment(btn, type) {
       if (document.body.classList.contains("editing") || btn.disabled) {
         return;
@@ -695,12 +701,12 @@
       const block = btn.closest(".block");
       const protocol = btn.closest(".protocol-container").querySelector("h3").textContent.trim();
       const goal = block.querySelector(".goal-label").textContent.trim();
-      const response = type === "+" ? "✅" : type === "-" ? "➖" : "🤝";
+      const responseCode = getResponseCode(type);
 
-      sendClickToGoogle(protocol, goal, response);
+      sendClickToGoogle(protocol, goal, responseCode);
       updatePercentages();
       saveProgress();
-      undoStack.push({ button: btn, type });
+      undoStack.push({ button: btn, type: responseCode });
       showUndo();
     }
 
@@ -739,16 +745,31 @@
       updatePromptDetailsUI();
     }
 
-    function resetCurrentCounts() {
-      document.querySelectorAll(".count").forEach((item) => {
-        item.textContent = "0";
-      });
-      setSavedPromptDetails(Array.from(document.querySelectorAll(".block")).map(() => ({ G: 0, V: 0, E: 0, PF: 0, FF: 0 })));
-      undoStack = [];
-      undoBanner.style.display = "none";
+    function undoLastAction() {
+      const last = undoStack.pop();
+      if (!last) {
+        undoBanner.style.display = "none";
+        return;
+      }
+
+      const countEl = last.button.nextElementSibling;
+      countEl.textContent = String(Math.max((Number(countEl.textContent) || 0) - 1, 0));
+
+      if (PROMPT_CODES.includes(last.type)) {
+        const block = last.button.closest(".block");
+        const blockIndex = Array.from(document.querySelectorAll(".block")).indexOf(block);
+        const details = getSavedPromptDetails();
+        details[blockIndex] = details[blockIndex] || { G: 0, V: 0, E: 0, PF: 0, FF: 0 };
+        details[blockIndex][last.type] = Math.max((details[blockIndex][last.type] || 0) - 1, 0);
+        setSavedPromptDetails(details);
+        updatePromptDetailsUI();
+      }
+
       updatePercentages();
-      updatePromptDetailsUI();
       saveProgress();
+      if (!undoStack.length) {
+        undoBanner.style.display = "none";
+      }
     }
 
     function finalizeSession() {
@@ -777,8 +798,17 @@
           protocolPromptDetails.push(promptText);
 
           const responses = [];
+          const detailCounts = promptDetails[globalIndex] || { G: 0, V: 0, E: 0, PF: 0, FF: 0 };
+          const typedPromptTotal = PROMPT_CODES.reduce((sum, code) => sum + (detailCounts[code] || 0), 0);
+          const genericPromptCount = Math.max(counts[1] - typedPromptTotal, 0);
+
           for (let i = 0; i < counts[0]; i += 1) responses.push("+");
-          for (let i = 0; i < counts[1]; i += 1) responses.push("P");
+          PROMPT_CODES.forEach((code) => {
+            for (let i = 0; i < (detailCounts[code] || 0); i += 1) {
+              responses.push(code);
+            }
+          });
+          for (let i = 0; i < genericPromptCount; i += 1) responses.push("P");
           for (let i = 0; i < counts[2]; i += 1) responses.push("-");
 
           goalsForServer.push({
@@ -801,7 +831,15 @@
       }
       localStorage.setItem("aba_history", JSON.stringify(history));
 
-      resetCurrentCounts();
+      document.querySelectorAll(".count").forEach((item) => {
+        item.textContent = "0";
+      });
+      setSavedPromptDetails(Array.from(document.querySelectorAll(".block")).map(() => ({ G: 0, V: 0, E: 0, PF: 0, FF: 0 })));
+      undoStack = [];
+      undoBanner.style.display = "none";
+      updatePercentages();
+      updatePromptDetailsUI();
+      saveProgress();
       renderHistory();
       renderDaily();
       loadProgress();
@@ -825,15 +863,10 @@
           }
         };
 
-        btn.addEventListener("mousedown", startPress);
-        btn.addEventListener("mouseup", endPress);
-        btn.addEventListener("mouseleave", endPress);
-        btn.addEventListener("touchstart", (event) => {
-          event.preventDefault();
-          startPress();
-        }, { passive: false });
-        btn.addEventListener("touchend", endPress);
-        btn.addEventListener("touchcancel", endPress);
+        btn.addEventListener("pointerdown", startPress);
+        btn.addEventListener("pointerup", endPress);
+        btn.addEventListener("pointerleave", endPress);
+        btn.addEventListener("pointercancel", endPress);
         btn.addEventListener("click", () => {
           if (suppressNextClick) {
             suppressNextClick = false;
@@ -853,50 +886,24 @@
       promptModal.style.display = "none";
       if (!currentPromptTarget) return;
 
-      increment(currentPromptTarget, "P");
+      increment(currentPromptTarget, code);
       const block = currentPromptTarget.closest(".block");
       const blockIndex = Array.from(document.querySelectorAll(".block")).indexOf(block);
       const details = getSavedPromptDetails();
       details[blockIndex] = details[blockIndex] || { G: 0, V: 0, E: 0, PF: 0, FF: 0 };
       details[blockIndex][code] = (details[blockIndex][code] || 0) + 1;
       setSavedPromptDetails(details);
-      if (undoStack.length) {
-        undoStack[undoStack.length - 1].detailCode = code;
-      }
       updatePromptDetailsUI();
       currentPromptTarget = null;
     }
 
     undoBanner.onclick = () => {
-      const last = undoStack.pop();
-      if (!last) {
-        undoBanner.style.display = "none";
-        return;
-      }
-
-      const countEl = last.button.nextElementSibling;
-      countEl.textContent = String(Math.max((Number(countEl.textContent) || 0) - 1, 0));
-
-      if (last.detailCode) {
-        const block = last.button.closest(".block");
-        const blockIndex = Array.from(document.querySelectorAll(".block")).indexOf(block);
-        const details = getSavedPromptDetails();
-        details[blockIndex] = details[blockIndex] || { G: 0, V: 0, E: 0, PF: 0, FF: 0 };
-        details[blockIndex][last.detailCode] = Math.max((details[blockIndex][last.detailCode] || 0) - 1, 0);
-        setSavedPromptDetails(details);
-        updatePromptDetailsUI();
-      }
-
-      updatePercentages();
-      saveProgress();
-      if (!undoStack.length) {
-        undoBanner.style.display = "none";
-      }
+      undoLastAction();
     };
 
     document.addEventListener("DOMContentLoaded", () => {
       modeSlider.oninput = toggleMode;
-      document.getElementById("resetBtn").onclick = resetCurrentCounts;
+      document.getElementById("undoBtn").onclick = undoLastAction;
       document.getElementById("sendBtn").onclick = finalizeSession;
       renderDaily();
       loadProgress();
