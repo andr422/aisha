@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Сводный чек-лист</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0d6efd" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <style>
     body {
       font-family: sans-serif;
@@ -17,6 +20,31 @@
     h3 {
       margin-bottom: 12px;
       text-align: center;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .toolbar button {
+      padding: 8px 14px;
+      font-size: 14px;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .btn-export {
+      background: #198754;
+    }
+
+    .btn-import {
+      background: #0d6efd;
     }
 
     .session-info {
@@ -46,12 +74,59 @@
       border-radius: 4px;
     }
 
+    .field-hint {
+      font-size: 12px;
+      color: #c92a2a;
+      margin-top: 4px;
+    }
+
+    .warn-banner {
+      background: #fff3cd;
+      border: 1px solid #e0c068;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #5c4813;
+      margin-bottom: 16px;
+    }
+
+    .active-notice {
+      font-size: 13px;
+      color: #667085;
+      margin-bottom: 16px;
+      padding: 8px 12px;
+      background: #eef2ff;
+      border-radius: 6px;
+    }
+
+    .active-notice.gap {
+      background: #fdecea;
+      color: #a3261b;
+    }
+
     .protocol-container {
       margin-bottom: 24px;
       border: 1px solid #ddd;
       border-radius: 8px;
       padding: 16px;
       background: #fff;
+    }
+
+    .protocol-toggle {
+      display: inline-block;
+      margin-bottom: 8px;
+      padding: 6px 12px;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      background: #6c757d;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .goals-wrap.collapsed {
+      display: none;
     }
 
     .protocol-title {
@@ -104,6 +179,23 @@
       flex-wrap: wrap;
     }
 
+    #toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1f2933;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      z-index: 1100;
+      max-width: 90%;
+      text-align: center;
+    }
+
     .nav-left-floating {
       position: fixed;
       bottom: 20px;
@@ -123,10 +215,24 @@
 <body>
   <h2>Сводный чек-лист</h2>
 
+  <div class="warn-banner">
+    ⚠️ <b>Внимание:</b> данные разных детей на этом устройстве пока <u>не разделяются</u>.
+    Имя/ID — это только метка для таблицы. Перед тем как переключиться на другого
+    ребёнка, отправьте данные текущего на ежедневной странице, иначе замеры
+    смешаются. Раздельные профили детей — в планах.
+  </div>
+
+  <div class="toolbar">
+    <button type="button" class="btn-export" id="exportBtn">⬇ Экспорт настроек</button>
+    <button type="button" class="btn-import" id="importBtn">⬆ Импорт настроек</button>
+    <input type="file" id="importFile" accept="application/json,.json" style="display:none" />
+  </div>
+
   <div class="session-info">
     <div>
-      <label for="childName">Имя ребенка</label>
-      <input type="text" id="childName" placeholder="Введите имя" />
+      <label for="childName">Инициалы или ID ребёнка</label>
+      <input type="text" id="childName" placeholder="Напр. И.П. или 042" />
+      <div class="field-hint">Не вводите полное имя — только инициалы или код.</div>
     </div>
     <div>
       <label for="sessionDate">Дата сессии</label>
@@ -134,7 +240,10 @@
     </div>
   </div>
 
+  <div id="activeNotice" class="active-notice"></div>
+
   <div id="protocolsContainer"></div>
+  <div id="toast"></div>
 
   <div class="nav-left-floating">
     <a href="final_fixed_aisha.html">➡ Ежедневный чек-лист</a>
@@ -148,23 +257,209 @@
       const container = document.getElementById("protocolsContainer");
       const dateInput = document.getElementById("sessionDate");
       const nameInput = document.getElementById("childName");
+      const toast = document.getElementById("toast");
+
+      // Какие ключи localStorage относятся к настройкам (для экспорта/импорта).
+      // Конфигурация протоколов/целей + выбранные цели + сессия и ребёнок.
+      // Намеренно НЕ экспортируем накопленные данные сессий (aba_history и т.п.) —
+      // это настройки, а не клинические данные. При желании можно расширить.
+      function isSettingKey(key) {
+        return (
+          /^protocol\d+_/.test(key) ||
+          key === sessionKey ||
+          key === nameKey
+        );
+      }
+
+      function showToast(message, ms = 3000) {
+        toast.textContent = message;
+        toast.style.display = "block";
+        clearTimeout(window.toastTimeout);
+        window.toastTimeout = setTimeout(() => {
+          toast.style.display = "none";
+        }, ms);
+      }
+
+      function exportSettings() {
+        const data = {};
+        Object.keys(localStorage).forEach((key) => {
+          if (isSettingKey(key)) {
+            data[key] = localStorage.getItem(key);
+          }
+        });
+
+        const payload = {
+          _type: "aba_settings",
+          _version: 1,
+          _exportedAt: new Date().toISOString(),
+          data
+        };
+
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const stamp = new Date().toISOString().split("T")[0];
+        a.href = url;
+        a.download = `aba_settings_${stamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast("Настройки выгружены в файл.");
+      }
+
+      function importSettings(file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          let payload;
+          try {
+            payload = JSON.parse(reader.result);
+          } catch (err) {
+            showToast("Не удалось прочитать файл: неверный формат.", 5000);
+            return;
+          }
+
+          if (!payload || payload._type !== "aba_settings" || typeof payload.data !== "object") {
+            showToast("Это не файл настроек ABA.", 5000);
+            return;
+          }
+
+          // Пустые значения не импортируем — иначе вернутся «пустые» ключи
+          // вроде protocol{i}_title="" (см. save в bindEvents).
+          const keys = Object.keys(payload.data).filter(
+            (key) => isSettingKey(key) && String(payload.data[key] || "").trim()
+          );
+          if (!keys.length) {
+            showToast("В файле нет настроек для импорта.", 5000);
+            return;
+          }
+
+          const ok = window.confirm(
+            `Импортировать ${keys.length} настроек? Текущие настройки протоколов и целей будут заменены.`
+          );
+          if (!ok) return;
+
+          // Удаляем старые настройки, затем записываем новые.
+          Object.keys(localStorage)
+            .filter(isSettingKey)
+            .forEach((key) => localStorage.removeItem(key));
+
+          keys.forEach((key) => {
+            localStorage.setItem(key, payload.data[key]);
+          });
+
+          // Перерисовываем страницу с новыми значениями.
+          initSessionFields();
+          renderSummary();
+          updateActiveNotice();
+          showToast(`Импортировано настроек: ${keys.length}.`);
+        };
+        reader.onerror = () => showToast("Ошибка чтения файла.", 5000);
+        reader.readAsText(file);
+      }
 
       function initSessionFields() {
         const savedDate = localStorage.getItem(sessionKey);
-        if (savedDate) {
-          dateInput.value = savedDate;
-        }
-        dateInput.addEventListener("change", () => {
+        dateInput.value = savedDate || "";
+        dateInput.onchange = () => {
           localStorage.setItem(sessionKey, dateInput.value);
-        });
+        };
 
         const savedName = localStorage.getItem(nameKey);
-        if (savedName) {
-          nameInput.value = savedName;
-        }
-        nameInput.addEventListener("input", () => {
+        nameInput.value = savedName || "";
+        nameInput.oninput = () => {
           localStorage.setItem(nameKey, nameInput.value);
+        };
+
+        // #7: при попытке сменить ребёнка, когда уже есть настройки/данные,
+        // напоминаем, что локально данные не разделяются. Показываем один раз
+        // за фокус, не на каждое нажатие, чтобы не мешать.
+        let reminded = false;
+        nameInput.addEventListener("focus", () => {
+          if (reminded) return;
+          const anyData = (() => {
+            for (let i = 1; i <= summaryCount; i += 1) {
+              if (protocolHasData(i)) return true;
+            }
+            return false;
+          })();
+          if (anyData && nameInput.value.trim()) {
+            showToast(
+              "Помните: протоколы и история не разделяются по детям. " +
+                "Отправьте данные текущего ребёнка перед переключением.",
+              6000
+            );
+            reminded = true;
+          }
         });
+      }
+
+      // Есть ли у протокола хоть какие-то заполненные данные?
+      function protocolHasData(i) {
+        if ((localStorage.getItem(`protocol${i}_title`) || "").trim()) return true;
+        for (let j = 1; j <= 10; j += 1) {
+          if ((localStorage.getItem(`protocol${i}_goal${j}`) || "").trim()) return true;
+        }
+        return false;
+      }
+
+      // Построить 10 групп целей для протокола i (вызывается лениво — при
+      // первом раскрытии, чтобы не рисовать 150 групп сразу, #5).
+      function buildGoals(i) {
+        const wrap = document.createElement("div");
+        wrap.className = "goals-wrap";
+        for (let j = 1; j <= 10; j += 1) {
+          const group = document.createElement("div");
+          group.className = "goal-group";
+
+          const rowMain = document.createElement("div");
+          rowMain.className = "row";
+
+          const goal = document.createElement("input");
+          goal.type = "text";
+          goal.className = "goal-input";
+          goal.dataset.protocolIndex = i;
+          goal.dataset.goalIndex = j;
+          goal.placeholder = `Цель ${j}`;
+          goal.value = localStorage.getItem(`protocol${i}_goal${j}`) || "";
+          rowMain.appendChild(goal);
+
+          const intro = document.createElement("input");
+          intro.type = "date";
+          intro.className = "intro-date";
+          intro.dataset.protocolIndex = i;
+          intro.dataset.goalIndex = j;
+          intro.value = localStorage.getItem(`protocol${i}_goal${j}_introDate`) || "";
+          rowMain.appendChild(intro);
+
+          const mastery = document.createElement("input");
+          mastery.type = "date";
+          mastery.className = "mastery-date";
+          mastery.dataset.protocolIndex = i;
+          mastery.dataset.goalIndex = j;
+          mastery.value = localStorage.getItem(`protocol${i}_goal${j}_masteryDate`) || "";
+          rowMain.appendChild(mastery);
+
+          group.appendChild(rowMain);
+
+          const rowGen = document.createElement("div");
+          rowGen.className = "row";
+          ["Stim", "Place", "People"].forEach((type) => {
+            const input = document.createElement("input");
+            input.type = "text";
+            input.className = "gen-input";
+            input.dataset.protocolIndex = i;
+            input.dataset.goalIndex = j;
+            input.dataset.genType = type.toLowerCase();
+            input.placeholder = `Генерализация: ${type.toLowerCase()}`;
+            input.value = localStorage.getItem(`protocol${i}_goal${j}_gen${type}`) || "";
+            rowGen.appendChild(input);
+          });
+
+          group.appendChild(rowGen);
+          wrap.appendChild(group);
+        }
+        return wrap;
       }
 
       function renderSummary() {
@@ -186,57 +481,35 @@
           titleInput.value = localStorage.getItem(`protocol${i}_title`) || "";
           protocol.appendChild(titleInput);
 
-          for (let j = 1; j <= 10; j += 1) {
-            const group = document.createElement("div");
-            group.className = "goal-group";
+          // Кнопка раскрытия целей. Протоколы с данными раскрыты сразу,
+          // пустые — свёрнуты (и их 10 целей не строятся, пока не нужны).
+          const hasData = protocolHasData(i);
+          const toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "protocol-toggle";
 
-            const rowMain = document.createElement("div");
-            rowMain.className = "row";
+          let goalsBuilt = false;
+          let goalsEl = null;
 
-            const goal = document.createElement("input");
-            goal.type = "text";
-            goal.className = "goal-input";
-            goal.dataset.protocolIndex = i;
-            goal.dataset.goalIndex = j;
-            goal.placeholder = `Цель ${j}`;
-            goal.value = localStorage.getItem(`protocol${i}_goal${j}`) || "";
-            rowMain.appendChild(goal);
+          const setExpanded = (expanded) => {
+            if (expanded && !goalsBuilt) {
+              goalsEl = buildGoals(i);
+              protocol.appendChild(goalsEl);
+              goalsBuilt = true;
+            }
+            if (goalsEl) {
+              goalsEl.classList.toggle("collapsed", !expanded);
+            }
+            toggle.textContent = expanded ? "▲ Свернуть цели" : "▼ Показать/изменить цели";
+          };
 
-            const intro = document.createElement("input");
-            intro.type = "date";
-            intro.className = "intro-date";
-            intro.dataset.protocolIndex = i;
-            intro.dataset.goalIndex = j;
-            intro.value = localStorage.getItem(`protocol${i}_goal${j}_introDate`) || "";
-            rowMain.appendChild(intro);
+          toggle.onclick = () => {
+            const currentlyExpanded = goalsBuilt && goalsEl && !goalsEl.classList.contains("collapsed");
+            setExpanded(!currentlyExpanded);
+          };
 
-            const mastery = document.createElement("input");
-            mastery.type = "date";
-            mastery.className = "mastery-date";
-            mastery.dataset.protocolIndex = i;
-            mastery.dataset.goalIndex = j;
-            mastery.value = localStorage.getItem(`protocol${i}_goal${j}_masteryDate`) || "";
-            rowMain.appendChild(mastery);
-
-            group.appendChild(rowMain);
-
-            const rowGen = document.createElement("div");
-            rowGen.className = "row";
-            ["Stim", "Place", "People"].forEach((type) => {
-              const input = document.createElement("input");
-              input.type = "text";
-              input.className = "gen-input";
-              input.dataset.protocolIndex = i;
-              input.dataset.goalIndex = j;
-              input.dataset.genType = type.toLowerCase();
-              input.placeholder = `Генерализация: ${type.toLowerCase()}`;
-              input.value = localStorage.getItem(`protocol${i}_goal${j}_gen${type}`) || "";
-              rowGen.appendChild(input);
-            });
-
-            group.appendChild(rowGen);
-            protocol.appendChild(group);
-          }
+          protocol.appendChild(toggle);
+          setExpanded(hasData);
 
           fragment.appendChild(protocol);
         }
@@ -246,47 +519,126 @@
       }
 
       function bindEvents() {
-        container.addEventListener("input", (event) => {
+        // input — для текстовых полей; change — на случай выбора даты через календарь.
+        const handler = (event) => {
           const el = event.target;
           const protocolIndex = el.dataset.protocolIndex || el.dataset.index;
           const goalIndex = el.dataset.goalIndex;
 
+          // Пустое значение удаляет ключ целиком. Иначе стёртое название
+          // оставляет ключ protocol{i}_title="" — и ежедневная страница
+          // продолжает рисовать «протокол-призрак».
+          const save = (key) => {
+            if (el.value.trim()) {
+              localStorage.setItem(key, el.value);
+            } else {
+              localStorage.removeItem(key);
+            }
+          };
+
           if (el.classList.contains("protocol-title")) {
-            localStorage.setItem(`protocol${protocolIndex}_title`, el.value);
+            save(`protocol${protocolIndex}_title`);
+            updateActiveNotice();
             return;
           }
 
           if (el.classList.contains("goal-input")) {
-            localStorage.setItem(`protocol${protocolIndex}_goal${goalIndex}`, el.value);
+            save(`protocol${protocolIndex}_goal${goalIndex}`);
             return;
           }
 
           if (el.classList.contains("intro-date")) {
-            localStorage.setItem(`protocol${protocolIndex}_goal${goalIndex}_introDate`, el.value);
+            save(`protocol${protocolIndex}_goal${goalIndex}_introDate`);
             return;
           }
 
           if (el.classList.contains("mastery-date")) {
-            localStorage.setItem(`protocol${protocolIndex}_goal${goalIndex}_masteryDate`, el.value);
+            save(`protocol${protocolIndex}_goal${goalIndex}_masteryDate`);
             return;
           }
 
           if (el.classList.contains("gen-input")) {
             const type = el.dataset.genType;
             const normalizedType = type.charAt(0).toUpperCase() + type.slice(1);
-            localStorage.setItem(`protocol${protocolIndex}_goal${goalIndex}_gen${normalizedType}`, el.value);
+            save(`protocol${protocolIndex}_goal${goalIndex}_gen${normalizedType}`);
           }
-        });
+        };
+
+        container.addEventListener("input", handler);
+        container.addEventListener("change", handler);
+      }
+
+      function bindToolbar() {
+        document.getElementById("exportBtn").onclick = exportSettings;
+        const importFile = document.getElementById("importFile");
+        document.getElementById("importBtn").onclick = () => importFile.click();
+        importFile.onchange = () => {
+          if (importFile.files && importFile.files[0]) {
+            importSettings(importFile.files[0]);
+            importFile.value = ""; // позволяет повторно выбрать тот же файл
+          }
+        };
+      }
+
+      // #3: ежедневная страница рисует протоколы 1..max(номер с названием).
+      // Если названия идут с «дырой» (напр. заполнен 5-й, а 1–4 пустые),
+      // на ежедневной появятся протоколы-пустышки. Предупреждаем об этом.
+      function updateActiveNotice() {
+        const notice = document.getElementById("activeNotice");
+        if (!notice) return;
+
+        const titled = [];
+        let maxTitled = 0;
+        for (let i = 1; i <= summaryCount; i += 1) {
+          if ((localStorage.getItem(`protocol${i}_title`) || "").trim()) {
+            titled.push(i);
+            maxTitled = i;
+          }
+        }
+
+        if (!titled.length) {
+          notice.className = "active-notice";
+          notice.textContent = "Пока не задан ни один протокол. Введите название хотя бы у одного.";
+          return;
+        }
+
+        // «Дыры» — пустые номера до максимального заполненного.
+        const gaps = [];
+        for (let i = 1; i < maxTitled; i += 1) {
+          if (!(localStorage.getItem(`protocol${i}_title`) || "").trim()) {
+            gaps.push(i);
+          }
+        }
+
+        if (gaps.length) {
+          notice.className = "active-notice gap";
+          notice.textContent =
+            `Активные протоколы: ${titled.join(", ")}. Внимание: пропущены номера ` +
+            `${gaps.join(", ")} — на ежедневной странице они появятся пустыми. ` +
+            `Лучше заполнять протоколы подряд, без пропусков.`;
+        } else {
+          notice.className = "active-notice";
+          notice.textContent = `Активные протоколы: ${titled.join(", ")} (всего ${titled.length}).`;
+        }
       }
 
       function init() {
         initSessionFields();
         renderSummary();
         bindEvents();
+        bindToolbar();
+        updateActiveNotice();
       }
 
       document.addEventListener("DOMContentLoaded", init);
     })();
+
+    // Регистрация service worker для офлайн-работы (PWA).
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(console.error);
+      });
+    }
   </script>
 </body>
 </html>

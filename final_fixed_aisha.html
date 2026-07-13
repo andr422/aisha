@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ежедневный ABA Чек-лист</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0d6efd" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <style>
     :root {
       --bg: #f8f9fa;
@@ -67,6 +70,131 @@
       opacity: 0.5;
     }
 
+    /* === Режим «По одной цели» (C) === */
+    body.single-mode .protocol-container {
+      display: none;
+    }
+
+    body.single-mode .protocol-container.proto-active {
+      display: block;
+    }
+
+    body.single-mode .block {
+      display: none;
+    }
+
+    body.single-mode .block.goal-active {
+      display: block;
+    }
+
+    body.single-mode .block .btn-set {
+      display: none;
+    }
+
+    body.single-mode .protocol-header .btn {
+      display: none;
+    }
+
+    .gesture-zone {
+      position: relative;
+      background: #eef1f4;
+      border-radius: 12px;
+      padding: 44px 12px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 15px;
+      margin-bottom: 10px;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .gesture-zone .gz-left,
+    .gesture-zone .gz-right,
+    .gesture-zone .gz-down {
+      position: absolute;
+      font-size: 14px;
+      font-weight: bold;
+      pointer-events: none;
+    }
+
+    .gesture-zone .gz-left {
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #c92a2a;
+    }
+
+    .gesture-zone .gz-right {
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #2b8a3e;
+    }
+
+    .gesture-zone .gz-down {
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #d97706;
+    }
+
+    .gesture-flash {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 44px;
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 12px;
+      opacity: 1;
+      transition: opacity 0.45s ease;
+      pointer-events: none;
+    }
+
+    .today-counts {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .single-nav {
+      display: none;
+      max-width: 960px;
+      margin: 0 auto 24px;
+      gap: 8px;
+    }
+
+    body.single-mode .single-nav {
+      display: flex;
+    }
+
+    .single-nav button {
+      flex: 1;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: bold;
+      border: 1px solid #b9c2cc;
+      background: var(--card);
+      border-radius: 10px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .single-nav button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .goal-position {
+      font-size: 12px;
+      font-weight: bold;
+      background: #e9ecef;
+      border-radius: 12px;
+      padding: 3px 10px;
+    }
+
     .protocol-container {
       background: var(--card);
       border-radius: 12px;
@@ -122,6 +250,10 @@
       border: none;
       border-radius: 12px;
       cursor: pointer;
+      /* Быстрые повторные тапы не должны вызывать double-tap-зум,
+         а долгое нажатие 🤝 — системное меню на iOS. */
+      touch-action: manipulation;
+      -webkit-touch-callout: none;
     }
 
     .btn-success {
@@ -188,6 +320,12 @@
       border-radius: 8px;
       color: #fff;
       cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .btn-primary {
@@ -235,7 +373,8 @@
     }
 
     #goal-selector-modal,
-    #prompt-modal {
+    #prompt-modal,
+    #confirm-modal {
       display: none;
       position: fixed;
       inset: 0;
@@ -266,6 +405,23 @@
       gap: 8px;
       align-items: center;
       margin-bottom: 8px;
+    }
+
+    #toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1f2933;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      z-index: 1100;
+      max-width: 90%;
+      text-align: center;
     }
 
     #undo-banner {
@@ -331,6 +487,8 @@
         <span id="modeText">Запись ответов</span>
       </div>
       <div class="controls-right">
+        <span id="queueStatus" style="display:none;align-self:center;font-size:13px;color:#d97706;font-weight:bold;"></span>
+        <button id="viewModeBtn" class="btn btn-secondary">Вид: список</button>
         <button id="undoBtn" class="btn btn-secondary">Отменить действие</button>
         <button id="sendBtn" class="btn btn-danger">Отправить данные</button>
       </div>
@@ -357,7 +515,22 @@
       </div>
     </div>
 
+    <div id="confirm-modal">
+      <div class="modal-content">
+        <h3>Отправить и завершить сессию?</h3>
+        <p id="confirm-summary" style="font-size:14px;color:#667085;"></p>
+        <p style="font-size:13px;color:#c92a2a;">После отправки счётчики обнулятся. Убедитесь, что есть интернет.</p>
+        <button class="btn btn-danger" type="button" onclick="confirmFinalize()">Отправить</button>
+        <button class="btn btn-secondary" type="button" onclick="closeConfirmModal()">Отмена</button>
+      </div>
+    </div>
+
     <div id="dailyContainer"></div>
+    <div class="single-nav">
+      <button id="prevGoalBtn" type="button">‹ Предыдущая</button>
+      <button id="nextGoalBtn" type="button">Следующая ›</button>
+    </div>
+    <div id="toast"></div>
     <div id="undo-banner">Отменить действие</div>
     <div id="historyContainer"><h2>История сессий</h2></div>
 
@@ -370,6 +543,8 @@
     const CLICK_ENDPOINT = "https://script.google.com/macros/s/AKfycbzu1szsSlgORc4uFgbhy5LvFdCF99UiVuEbzCe_K7UqLvZlmVanUbp6r4pukXbvXZs/exec";
     const SESSION_ENDPOINT = "https://script.google.com/macros/s/AKfycbx1ZyMrh8XoRud0rOeqP_2yBZd6C8AJ8e_v2IATRgztmZV-Q9659GmKmnbhNrAmXbU/exec";
     const PROMPT_CODES = ["G", "V", "E", "PF", "FF"];
+    // Обобщённая подсказка (короткое нажатие 🤝 без выбора типа).
+    const GENERIC_PROMPT = "P";
 
     const modeSlider = document.getElementById("modeSlider");
     const modeText = document.getElementById("modeText");
@@ -377,11 +552,239 @@
     const historyContainer = document.getElementById("historyContainer");
     const undoBanner = document.getElementById("undo-banner");
     const promptModal = document.getElementById("prompt-modal");
+    const confirmModal = document.getElementById("confirm-modal");
+    const sendBtn = document.getElementById("sendBtn");
+    const toast = document.getElementById("toast");
 
     let undoStack = [];
     let longPressTimer = null;
     let suppressNextClick = false;
     let currentPromptTarget = null;
+
+    // === Хранилище истории сессий: IndexedDB ===
+    // Раньше история (aba_history) лежала в localStorage и терялась при сбросе.
+    // Теперь — в IndexedDB (надёжнее, переживает обновление приложения).
+    // В памяти держим кэш historyCache, чтобы функции рендера оставались
+    // синхронными; на диск пишем асинхронно.
+    const IDB_NAME = "aba_db";
+    const IDB_STORE = "history";
+    const IDB_QUEUE = "send_queue";
+    const IDB_KEY = "aba_history";
+    let historyCache = [];
+    let dbPromise = null;
+    let flushing = false;
+
+    function openDB() {
+      if (dbPromise) return dbPromise;
+      dbPromise = new Promise((resolve, reject) => {
+        if (!("indexedDB" in window)) {
+          reject(new Error("IndexedDB не поддерживается"));
+          return;
+        }
+        const req = indexedDB.open(IDB_NAME, 2);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(IDB_STORE)) {
+            db.createObjectStore(IDB_STORE);
+          }
+          // Очередь отправки: автоинкрементный ключ, порядок сохраняется (FIFO).
+          if (!db.objectStoreNames.contains(IDB_QUEUE)) {
+            db.createObjectStore(IDB_QUEUE, { keyPath: "id", autoIncrement: true });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      return dbPromise;
+    }
+
+    function idbGet(key) {
+      return openDB().then(
+        (db) =>
+          new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_STORE, "readonly");
+            const req = tx.objectStore(IDB_STORE).get(key);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          })
+      );
+    }
+
+    function idbSet(key, value) {
+      return openDB().then(
+        (db) =>
+          new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_STORE, "readwrite");
+            tx.objectStore(IDB_STORE).put(value, key);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          })
+      );
+    }
+
+    // Загрузка истории в кэш при старте. Если в IndexedDB пусто, но в
+    // localStorage есть старая история — переносим её один раз (миграция).
+    async function loadHistoryCache() {
+      try {
+        let history = await idbGet(IDB_KEY);
+        if (!Array.isArray(history)) {
+          const legacy = localStorage.getItem("aba_history");
+          if (legacy) {
+            history = JSON.parse(legacy);
+            await idbSet(IDB_KEY, history);
+            // Старую копию НЕ удаляем сразу — оставляем как страховку.
+            // Можно убрать позже: localStorage.removeItem("aba_history").
+          } else {
+            history = [];
+          }
+        }
+        historyCache = Array.isArray(history) ? history : [];
+      } catch (err) {
+        console.error("IndexedDB недоступен, откат на localStorage:", err);
+        // Деградация: если IndexedDB не работает (например, приватный режим),
+        // продолжаем читать/писать в localStorage, чтобы приложение не падало.
+        historyCache = JSON.parse(localStorage.getItem("aba_history") || "[]");
+        window.__abaIdbFailed = true;
+      }
+    }
+
+    // Синхронное чтение из кэша (для функций рендера).
+    function getHistory() {
+      return historyCache;
+    }
+
+    // Запись: обновляем кэш и сохраняем на диск (IndexedDB или fallback).
+    async function setHistory(history) {
+      historyCache = Array.isArray(history) ? history : [];
+      if (window.__abaIdbFailed) {
+        localStorage.setItem("aba_history", JSON.stringify(historyCache));
+        return;
+      }
+      try {
+        await idbSet(IDB_KEY, historyCache);
+      } catch (err) {
+        console.error("Сбой записи в IndexedDB, пишу в localStorage:", err);
+        localStorage.setItem("aba_history", JSON.stringify(historyCache));
+        window.__abaIdbFailed = true;
+      }
+    }
+
+    // === Очередь отправки (IndexedDB) ===
+    // Каждый запрос к Google сначала кладём сюда, затем пытаемся разослать.
+    // Что ушло — удаляем; что не ушло (офлайн) — досылаем позже автоматически.
+
+    function queueAdd(item) {
+      // Если IndexedDB недоступна — очередь невозможна. Шлём напрямую
+      // (как в исходной версии), чтобы не потерять попытку отправки.
+      if (window.__abaIdbFailed) {
+        return fetch(item.endpoint, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(item.payload)
+        }).catch((err) => {
+          console.error("Прямая отправка не удалась:", err);
+        });
+      }
+      return openDB().then(
+        (db) =>
+          new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_QUEUE, "readwrite");
+            // item: { endpoint, payload, createdAt }
+            tx.objectStore(IDB_QUEUE).add({ ...item, createdAt: Date.now() });
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          })
+      );
+    }
+
+    function queueGetAll() {
+      return openDB().then(
+        (db) =>
+          new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_QUEUE, "readonly");
+            const req = tx.objectStore(IDB_QUEUE).getAll();
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => reject(req.error);
+          })
+      );
+    }
+
+    function queueDelete(id) {
+      return openDB().then(
+        (db) =>
+          new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_QUEUE, "readwrite");
+            tx.objectStore(IDB_QUEUE).delete(id);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          })
+      );
+    }
+
+    async function queueCount() {
+      try {
+        const all = await queueGetAll();
+        return all.length;
+      } catch {
+        return 0;
+      }
+    }
+
+    // Разослать очередь. Один запрос за раз, по порядку. Успех (при no-cors) =
+    // fetch завершился без сетевой ошибки; тогда удаляем элемент. При первой
+    // сетевой ошибке останавливаемся — значит сети нет, нет смысла продолжать.
+    async function flushQueue() {
+      if (flushing) return;
+      // Без IndexedDB очереди нет — queueAdd в этом режиме шлёт напрямую.
+      if (window.__abaIdbFailed) return;
+      flushing = true;
+      try {
+        const items = await queueGetAll();
+        for (const item of items) {
+          try {
+            await fetch(item.endpoint, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(item.payload)
+            });
+            await queueDelete(item.id);
+          } catch (err) {
+            // Сетевая ошибка — прекращаем, оставшееся досылаем в другой раз.
+            console.warn("Отправка не удалась, элемент остаётся в очереди:", err);
+            break;
+          }
+        }
+      } catch (err) {
+        // Очередь не прочиталась (сбой IndexedDB) — попробуем в другой раз.
+        console.warn("Очередь отправки недоступна:", err);
+      } finally {
+        flushing = false;
+        updateQueueIndicator();
+      }
+    }
+
+    async function updateQueueIndicator() {
+      const n = await queueCount();
+      const el = document.getElementById("queueStatus");
+      if (!el) return;
+      if (n > 0) {
+        el.style.display = "inline";
+        el.textContent = `⏳ Ожидают отправки: ${n}`;
+      } else {
+        el.style.display = "none";
+      }
+    }
+
+    function showToast(message, ms = 3000) {
+      toast.textContent = message;
+      toast.style.display = "block";
+      clearTimeout(window.toastTimeout);
+      window.toastTimeout = setTimeout(() => {
+        toast.style.display = "none";
+      }, ms);
+    }
 
     function getSessionDateForHistory() {
       const savedDate = localStorage.getItem("session_date");
@@ -408,9 +811,11 @@
     }
 
     function getProtocolsCount() {
+      // Считаем только протоколы с непустым названием: ключ с пустой строкой
+      // (стёрли название на сводной) — это не протокол.
       return Object.keys(localStorage)
         .map((key) => (key.match(/^protocol(\d+)_title$/) || [])[1])
-        .filter(Boolean)
+        .filter((n) => n && (localStorage.getItem(`protocol${n}_title`) || "").trim())
         .map(Number)
         .reduce((max, n) => Math.max(max, n), 0);
     }
@@ -431,9 +836,14 @@
       localStorage.setItem("aba_response_log", JSON.stringify(data));
     }
 
+    // Пустой объект подсказок со всеми кодами (включая обобщённую P).
+    function emptyPromptDetail() {
+      return { G: 0, V: 0, E: 0, PF: 0, FF: 0, P: 0 };
+    }
+
     function compactPrompt(details) {
       if (!details) return "";
-      return PROMPT_CODES
+      return [...PROMPT_CODES, GENERIC_PROMPT]
         .map((code) => {
           const count = details[code] || 0;
           return count > 0 ? code + count : "";
@@ -447,7 +857,7 @@
       const current = getSavedPromptDetails();
       const next = [];
       for (let i = 0; i < blocks; i += 1) {
-        next.push(current[i] || { G: 0, V: 0, E: 0, PF: 0, FF: 0 });
+        next.push(current[i] || emptyPromptDetail());
       }
       setSavedPromptDetails(next);
     }
@@ -502,6 +912,10 @@
       const idx = window.currentProtocol;
       if (!idx) return;
 
+      // Снимок текущих (ещё не отправленных) счётчиков по именам целей —
+      // чтобы после перестройки списка они не съехали на чужие цели.
+      const inProgress = snapshotInProgressData();
+
       const protocolKey = `protocol${idx}_selectedGoals`;
       const previousGoalIds = JSON.parse(localStorage.getItem(protocolKey) || "[]");
       const previousGoalNames = previousGoalIds.map((goalId) => {
@@ -515,15 +929,61 @@
         return localStorage.getItem(`protocol${idx}_goal${goalId}`) || `Цель ${goalId}`;
       });
 
-      migrateSessionDataForProtocol(idx, previousGoalNames, nextGoalNames);
-      closeGoalSelector();
-      renderDaily();
-      loadProgress();
-      renderHistory();
+      migrateSessionDataForProtocol(idx, previousGoalNames, nextGoalNames).then(() => {
+        closeGoalSelector();
+        renderDaily();
+        restoreInProgressData(inProgress);
+        // Undo-стек ссылается на кнопки старой разметки — после перестройки
+        // он невалиден, очищаем.
+        undoStack = [];
+        undoBanner.style.display = "none";
+        loadProgress();
+        renderHistory();
+      });
     }
 
-    function migrateSessionDataForProtocol(protocolIndex, previousGoalNames, nextGoalNames) {
-      const history = JSON.parse(localStorage.getItem("aba_history") || "[]").map((session) => {
+    // === Миграция текущих (несданных) данных при смене списка целей ===
+    // aba_counts / aba_prompt_details / aba_response_log хранятся по позиции
+    // блока на странице. При смене выбранных целей позиции сдвигаются, поэтому
+    // перед перерисовкой запоминаем данные по ключу «протокол + имя цели»,
+    // а после — раскладываем по новым позициям.
+
+    function snapshotInProgressData() {
+      const counts = JSON.parse(localStorage.getItem("aba_counts") || "[]");
+      const details = getSavedPromptDetails();
+      const log = getSavedResponseLog();
+      const map = new Map();
+      Array.from(document.querySelectorAll(".block")).forEach((block, k) => {
+        const proto = block.closest(".protocol-container").dataset.index;
+        const name = block.querySelector(".goal-label").textContent.trim();
+        map.set(`${proto}||${name}`, {
+          counts: counts.slice(k * 3, k * 3 + 3),
+          detail: details[k],
+          log: log[k]
+        });
+      });
+      return map;
+    }
+
+    function restoreInProgressData(map) {
+      const counts = [];
+      const details = [];
+      const log = [];
+      Array.from(document.querySelectorAll(".block")).forEach((block) => {
+        const proto = block.closest(".protocol-container").dataset.index;
+        const name = block.querySelector(".goal-label").textContent.trim();
+        const saved = map.get(`${proto}||${name}`);
+        counts.push(...(saved && saved.counts.length === 3 ? saved.counts : ["0", "0", "0"]));
+        details.push(saved && saved.detail ? saved.detail : emptyPromptDetail());
+        log.push(saved && Array.isArray(saved.log) ? saved.log : []);
+      });
+      localStorage.setItem("aba_counts", JSON.stringify(counts));
+      setSavedPromptDetails(details);
+      setSavedResponseLog(log);
+    }
+
+    async function migrateSessionDataForProtocol(protocolIndex, previousGoalNames, nextGoalNames) {
+      const history = getHistory().map((session) => {
         const previousData = session.data[protocolIndex - 1] || [];
         const previousPromptDetails = session.promptDetails?.[protocolIndex - 1] || [];
         const nextData = nextGoalNames.map((goalName) => {
@@ -541,7 +1001,7 @@
         return session;
       });
 
-      localStorage.setItem("aba_history", JSON.stringify(history));
+      await setHistory(history);
     }
 
     function checkMastery(goalHistory) {
@@ -556,7 +1016,7 @@
 
     function renderDaily() {
       const count = getProtocolsCount();
-      const history = JSON.parse(localStorage.getItem("aba_history") || "[]");
+      const history = getHistory();
       const lastThreeSessions = history.slice(-3);
       dailyContainer.innerHTML = "";
 
@@ -575,7 +1035,15 @@
 
         const header = document.createElement("div");
         header.className = "protocol-header";
-        header.innerHTML = `<h3>${title}</h3><button class="btn btn-primary" type="button" onclick="openGoalSelector(${i})">Выбрать цели</button>`;
+        // textContent вместо innerHTML — спецсимволы в названии не ломают разметку.
+        const titleEl = document.createElement("h3");
+        titleEl.textContent = title;
+        const selectBtn = document.createElement("button");
+        selectBtn.className = "btn btn-primary";
+        selectBtn.type = "button";
+        selectBtn.textContent = "Выбрать цели";
+        selectBtn.onclick = () => openGoalSelector(i);
+        header.append(titleEl, selectBtn);
         wrapper.append(header);
 
         selectedGoals.forEach((goalId, rowPos) => {
@@ -586,17 +1054,31 @@
 
           const block = document.createElement("div");
           block.className = `block${mastered ? " mastered" : ""}`;
-          block.innerHTML = `
-            <div class="goal-label">${goalName}</div>
-            <div class="btn-set">
-              <div><button class="btn-success" type="button" onclick="increment(this, '+')">✅</button><div class="count">0</div></div>
-              <div><button class="btn-prompt" type="button">🤝</button><div class="count">0</div></div>
-              <div><button class="btn-error" type="button" onclick="increment(this, '-')">➖</button><div class="count">0</div></div>
-            </div>
-            <div class="percent">—</div>
-            <div class="prev-percent">${previousPercents}</div>
-            <div class="prompt-details"></div>
+
+          const goalLabel = document.createElement("div");
+          goalLabel.className = "goal-label";
+          goalLabel.textContent = goalName;
+
+          const btnSet = document.createElement("div");
+          btnSet.className = "btn-set";
+          btnSet.innerHTML = `
+            <div><button class="btn-success" type="button" onclick="increment(this, '+')">✅</button><div class="count">0</div></div>
+            <div><button class="btn-prompt" type="button">🤝</button><div class="count">0</div></div>
+            <div><button class="btn-error" type="button" onclick="increment(this, '-')">➖</button><div class="count">0</div></div>
           `;
+
+          const percent = document.createElement("div");
+          percent.className = "percent";
+          percent.textContent = "—";
+
+          const prevPercent = document.createElement("div");
+          prevPercent.className = "prev-percent";
+          prevPercent.textContent = previousPercents;
+
+          const promptDetails = document.createElement("div");
+          promptDetails.className = "prompt-details";
+
+          block.append(goalLabel, btnSet, percent, prevPercent, promptDetails);
           wrapper.append(block);
         });
 
@@ -607,16 +1089,27 @@
       normalizeResponseLogLength();
       wirePromptButtons();
       updatePromptDetailsUI();
+      applyViewMode();
     }
 
     function renderHistory() {
-      const history = JSON.parse(localStorage.getItem("aba_history") || "[]");
+      const history = getHistory();
+      // В таблице показываем последние 10 сессий, иначе при лимите хранения
+      // в 200 сессий таблица разрастается вширь до нечитаемости.
+      const visibleHistory = history.slice(-10);
       const protocolsCount = getProtocolsCount();
       historyContainer.innerHTML = "<h2>История сессий</h2>";
 
       if (!history.length) {
         historyContainer.innerHTML += "<p>Нет сохранённых сессий.</p>";
         return;
+      }
+
+      if (history.length > visibleHistory.length) {
+        const note = document.createElement("p");
+        note.style.cssText = "text-align:center;color:#667085;font-size:13px;";
+        note.textContent = `Показаны последние ${visibleHistory.length} из ${history.length} сессий.`;
+        historyContainer.append(note);
       }
 
       for (let i = 1; i <= protocolsCount; i += 1) {
@@ -638,7 +1131,7 @@
         firstHeader.textContent = "Цель";
         headerRow.append(firstHeader);
 
-        history.forEach((session) => {
+        visibleHistory.forEach((session) => {
           const th = document.createElement("th");
           th.textContent = session.date;
           headerRow.append(th);
@@ -650,7 +1143,7 @@
           const titleCell = row.insertCell();
           titleCell.textContent = localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`;
 
-          history.forEach((session) => {
+          visibleHistory.forEach((session) => {
             const cell = row.insertCell();
             const percent = session.data[i - 1]?.[rowIndex];
             const promptDetail = session.promptDetails?.[i - 1]?.[rowIndex];
@@ -667,22 +1160,25 @@
       }
     }
 
+    // Клики кладём в очередь и сразу пытаемся разослать. Если офлайн —
+    // останутся в очереди и уйдут позже. Не блокируем нажатие тераписта.
     function sendClickToGoogle(protocol, goal, responseType) {
-      fetch(CLICK_ENDPOINT, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ protocol, goal, response: responseType })
-      }).catch(console.error);
+      queueAdd({
+        endpoint: CLICK_ENDPOINT,
+        payload: { protocol, goal, response: responseType }
+      })
+        .then(() => {
+          updateQueueIndicator();
+          flushQueue();
+        })
+        .catch(console.error);
     }
 
-    function sendSessionResults(sessionData) {
-      fetch(SESSION_ENDPOINT, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(sessionData)
-      }).catch(console.error);
+    // Итоги сессии тоже через очередь. Возвращаем промис записи в очередь —
+    // он успешен, как только данные надёжно сохранены локально (в IndexedDB),
+    // даже если сети нет. Отправка в сеть идёт следом, асинхронно.
+    async function sendSessionResults(sessionData) {
+      await queueAdd({ endpoint: SESSION_ENDPOINT, payload: sessionData });
     }
 
     function showUndo() {
@@ -706,7 +1202,7 @@
     function getResponseCode(type) {
       if (type === "+" || type === "-") return type;
       if (PROMPT_CODES.includes(type)) return type;
-      return "P";
+      return GENERIC_PROMPT;
     }
 
     function increment(btn, type) {
@@ -746,6 +1242,7 @@
           return;
         }
 
+        // Процент самостоятельных реакций: ✅ / (✅ + 🤝 + ➖).
         const success = counts[0];
         const percent = Math.round((success / total) * 100);
         percentEl.textContent = `${percent}%`;
@@ -767,6 +1264,7 @@
       });
       updatePercentages();
       updatePromptDetailsUI();
+      refreshSingleCounts();
     }
 
     function undoLastAction() {
@@ -785,11 +1283,12 @@
         setSavedResponseLog(responseLog);
       }
 
-      if (PROMPT_CODES.includes(last.type)) {
+      // Откатываем разбивку подсказок и для конкретных типов, и для обобщённой P.
+      if (PROMPT_CODES.includes(last.type) || last.type === GENERIC_PROMPT) {
         const block = last.button.closest(".block");
         const blockIndex = Array.from(document.querySelectorAll(".block")).indexOf(block);
         const details = getSavedPromptDetails();
-        details[blockIndex] = details[blockIndex] || { G: 0, V: 0, E: 0, PF: 0, FF: 0 };
+        details[blockIndex] = details[blockIndex] || emptyPromptDetail();
         details[blockIndex][last.type] = Math.max((details[blockIndex][last.type] || 0) - 1, 0);
         setSavedPromptDetails(details);
         updatePromptDetailsUI();
@@ -797,12 +1296,62 @@
 
       updatePercentages();
       saveProgress();
+      refreshSingleCounts();
       if (!undoStack.length) {
         undoBanner.style.display = "none";
       }
     }
 
-    function finalizeSession() {
+    // --- Отправка с подтверждением ---
+
+    function openConfirmModal() {
+      if (document.body.classList.contains("editing")) {
+        showToast("Снимите блокировку, чтобы отправить данные.");
+        return;
+      }
+      const blocks = document.querySelectorAll(".block").length;
+      let withData = 0;
+      document.querySelectorAll(".block").forEach((block) => {
+        const total = Array.from(block.querySelectorAll(".count"))
+          .reduce((sum, item) => sum + (Number(item.textContent) || 0), 0);
+        if (total > 0) withData += 1;
+      });
+      // Показываем ребёнка и дату, чтобы поймать «вчерашнюю» дату или чужого
+      // ребёнка ДО отправки (session_date сам не сбрасывается).
+      const child = (localStorage.getItem("child_name") || "").trim() || "не указан";
+      const summary = document.getElementById("confirm-summary");
+      summary.textContent =
+        `Ребёнок: ${child}. Дата сессии: ${getSessionDateForHistory()}. ` +
+        `Целей с данными: ${withData} из ${blocks}.`;
+      confirmModal.style.display = "flex";
+    }
+
+    function closeConfirmModal() {
+      confirmModal.style.display = "none";
+    }
+
+    async function confirmFinalize() {
+      closeConfirmModal();
+      sendBtn.disabled = true;
+      showToast("Сохранение…", 60000);
+      try {
+        await finalizeSession();
+        // Данные уже надёжно в очереди/истории. Сообщаем по факту доставки.
+        const remaining = await queueCount();
+        if (remaining > 0) {
+          showToast(`Сохранено. Ожидают отправки: ${remaining}. Уйдут при появлении сети.`, 6000);
+        } else {
+          showToast("Готово. Сессия сохранена и отправлена.");
+        }
+      } catch (err) {
+        console.error(err);
+        showToast("Ошибка сохранения. Попробуйте снова.", 6000);
+      } finally {
+        sendBtn.disabled = false;
+      }
+    }
+
+    async function finalizeSession() {
       const historyDate = getSessionDateForHistory();
       const serverDate = getSessionDateForServer();
       const child = localStorage.getItem("child_name") || "";
@@ -810,6 +1359,7 @@
       const allBlocks = Array.from(document.querySelectorAll(".block"));
       const promptDetails = getSavedPromptDetails();
       const responseLog = getSavedResponseLog();
+      const sendPromises = [];
 
       document.querySelectorAll(".protocol-container").forEach((protocolContainer) => {
         const protocol = protocolContainer.querySelector("h3").textContent.trim();
@@ -839,20 +1389,29 @@
 
         session.data.push(protocolData);
         session.promptDetails.push(protocolPromptDetails);
-        sendSessionResults({ protocol, date: serverDate, child, goals: goalsForServer });
+        sendPromises.push(sendSessionResults({ protocol, date: serverDate, child, goals: goalsForServer }));
       });
 
-      const history = JSON.parse(localStorage.getItem("aba_history") || "[]");
+      // Дожидаемся, пока все итоги НАДЁЖНО записаны в очередь (IndexedDB).
+      // Это успешно даже офлайн — данные не потеряются. Сетевую рассылку
+      // запускаем следом; что не уйдёт сейчас — досылается автоматически.
+      await Promise.all(sendPromises);
+
+      const history = getHistory().slice();
       history.push(session);
-      if (history.length > 10) {
+      // IndexedDB вмещает гораздо больше localStorage — храним до 200 сессий.
+      if (history.length > 200) {
         history.shift();
       }
-      localStorage.setItem("aba_history", JSON.stringify(history));
+      await setHistory(history);
+
+      // Пытаемся разослать очередь (не блокируем сброс — это фоновая попытка).
+      flushQueue();
 
       document.querySelectorAll(".count").forEach((item) => {
         item.textContent = "0";
       });
-      setSavedPromptDetails(Array.from(document.querySelectorAll(".block")).map(() => ({ G: 0, V: 0, E: 0, PF: 0, FF: 0 })));
+      setSavedPromptDetails(Array.from(document.querySelectorAll(".block")).map(() => emptyPromptDetail()));
       setSavedResponseLog(Array.from(document.querySelectorAll(".block")).map(() => []));
       undoStack = [];
       undoBanner.style.display = "none";
@@ -891,9 +1450,25 @@
             suppressNextClick = false;
             return;
           }
-          increment(btn, "P");
+          // Короткое нажатие 🤝: обобщённая подсказка. Теперь пишем её и в разбивку.
+          registerGenericPrompt(btn);
         });
       });
+    }
+
+    // Обобщённая подсказка: и счётчик/процент (через increment), и запись в aba_prompt_details.
+    function registerGenericPrompt(btn) {
+      if (document.body.classList.contains("editing") || btn.disabled) {
+        return;
+      }
+      increment(btn, GENERIC_PROMPT);
+      const block = btn.closest(".block");
+      const blockIndex = Array.from(document.querySelectorAll(".block")).indexOf(block);
+      const details = getSavedPromptDetails();
+      details[blockIndex] = details[blockIndex] || emptyPromptDetail();
+      details[blockIndex][GENERIC_PROMPT] = (details[blockIndex][GENERIC_PROMPT] || 0) + 1;
+      setSavedPromptDetails(details);
+      updatePromptDetailsUI();
     }
 
     function closePromptModal() {
@@ -909,26 +1484,246 @@
       const block = currentPromptTarget.closest(".block");
       const blockIndex = Array.from(document.querySelectorAll(".block")).indexOf(block);
       const details = getSavedPromptDetails();
-      details[blockIndex] = details[blockIndex] || { G: 0, V: 0, E: 0, PF: 0, FF: 0 };
+      details[blockIndex] = details[blockIndex] || emptyPromptDetail();
       details[blockIndex][code] = (details[blockIndex][code] || 0) + 1;
       setSavedPromptDetails(details);
       updatePromptDetailsUI();
+      refreshSingleCounts();
+      const activeBlock = document.querySelector(".block.goal-active");
+      if (activeBlock && activeBlock === block) {
+        flashFeedback(block, "🤝");
+      }
       currentPromptTarget = null;
+    }
+
+    // === Режим просмотра: список (A) или по одной цели (C) ===
+    // В режиме C структура данных не меняется: рендерятся те же блоки,
+    // просто все скрыты кроме активного. Счётчики, undo, отправка — общие.
+    let activeGoalIndex = 0;
+
+    function getViewMode() {
+      return localStorage.getItem("aba_view_mode") === "single" ? "single" : "list";
+    }
+
+    function setViewMode(mode) {
+      localStorage.setItem("aba_view_mode", mode);
+    }
+
+    function toggleViewMode() {
+      setViewMode(getViewMode() === "single" ? "list" : "single");
+      applyViewMode();
+    }
+
+    function applyViewMode() {
+      const single = getViewMode() === "single";
+      document.body.classList.toggle("single-mode", single);
+      const btn = document.getElementById("viewModeBtn");
+      btn.textContent = single ? "Вид: по одной" : "Вид: список";
+      if (single) {
+        renderSingleUI();
+      } else {
+        // Убираем жестовые зоны и служебные элементы режима C.
+        document.querySelectorAll(".gesture-zone, .today-counts, .goal-position").forEach((el) => el.remove());
+        document.querySelectorAll(".goal-active, .proto-active").forEach((el) => {
+          el.classList.remove("goal-active", "proto-active");
+        });
+      }
+    }
+
+    function renderSingleUI() {
+      const blocks = Array.from(document.querySelectorAll(".block"));
+      if (!blocks.length) return;
+
+      activeGoalIndex = Math.max(0, Math.min(activeGoalIndex, blocks.length - 1));
+
+      blocks.forEach((b) => b.classList.remove("goal-active"));
+      document.querySelectorAll(".protocol-container").forEach((p) => p.classList.remove("proto-active"));
+      document.querySelectorAll(".gesture-zone, .today-counts, .goal-position").forEach((el) => el.remove());
+
+      const block = blocks[activeGoalIndex];
+      block.classList.add("goal-active");
+      const proto = block.closest(".protocol-container");
+      proto.classList.add("proto-active");
+
+      // Позиция «цель i из n» внутри протокола.
+      const blocksInProto = Array.from(proto.querySelectorAll(".block"));
+      const posInProto = blocksInProto.indexOf(block) + 1;
+      const posBadge = document.createElement("span");
+      posBadge.className = "goal-position";
+      posBadge.textContent = `цель ${posInProto} из ${blocksInProto.length}`;
+      proto.querySelector(".protocol-header").appendChild(posBadge);
+
+      // Жестовая зона после названия цели.
+      const zone = document.createElement("div");
+      zone.className = "gesture-zone";
+      zone.innerHTML =
+        '<span class="gz-left">← ➖</span>' +
+        '<span>зона жеста</span>' +
+        '<span class="gz-right">✅ →</span>' +
+        '<span class="gz-down">↓ 🤝</span>';
+      block.querySelector(".goal-label").after(zone);
+
+      // Строка «Сегодня: x / y / z» из скрытых счётчиков.
+      const counts = Array.from(block.querySelectorAll(".count")).map((c) => c.textContent);
+      const today = document.createElement("div");
+      today.className = "today-counts";
+      today.textContent = `Сегодня: ${counts.join(" / ")}`;
+      zone.after(today);
+
+      attachGesture(zone, block);
+      updateSingleNav(blocks.length);
+    }
+
+    function updateSingleNav(total) {
+      const prev = document.getElementById("prevGoalBtn");
+      const next = document.getElementById("nextGoalBtn");
+      prev.disabled = activeGoalIndex <= 0;
+      next.disabled = activeGoalIndex >= total - 1;
+    }
+
+    function moveGoal(delta) {
+      const total = document.querySelectorAll(".block").length;
+      const next = activeGoalIndex + delta;
+      if (next < 0 || next >= total) return;
+      activeGoalIndex = next;
+      renderSingleUI();
+    }
+
+    function refreshSingleCounts() {
+      if (getViewMode() !== "single") return;
+      const block = document.querySelector(".block.goal-active");
+      if (!block) return;
+      const todayEl = block.querySelector(".today-counts");
+      if (!todayEl) return;
+      const counts = Array.from(block.querySelectorAll(".count")).map((c) => c.textContent);
+      todayEl.textContent = `Сегодня: ${counts.join(" / ")}`;
+    }
+
+    function flashFeedback(block, symbol) {
+      const zone = block.querySelector(".gesture-zone");
+      if (!zone) return;
+      const flash = document.createElement("div");
+      flash.className = "gesture-flash";
+      flash.textContent = symbol;
+      zone.appendChild(flash);
+      if (navigator.vibrate) navigator.vibrate(30);
+      requestAnimationFrame(() => {
+        flash.style.opacity = "0";
+      });
+      setTimeout(() => flash.remove(), 500);
+    }
+
+    // Жесты: вправо ✅, влево ➖, вниз 🤝 (обычная), удержание — меню типа.
+    // Порог 70px и доминирование оси 1.5x — чтобы смазанные касания
+    // не записывались как ответы.
+    function attachGesture(zone, block) {
+      let startX = 0;
+      let startY = 0;
+      let holdTimer = null;
+      let moved = false;
+      let holdFired = false;
+
+      const successBtn = block.querySelector(".btn-success");
+      const promptBtn = block.querySelector(".btn-prompt");
+      const errorBtn = block.querySelector(".btn-error");
+
+      zone.addEventListener("pointerdown", (e) => {
+        if (document.body.classList.contains("editing")) return;
+        startX = e.clientX;
+        startY = e.clientY;
+        moved = false;
+        holdFired = false;
+        zone.setPointerCapture(e.pointerId);
+        holdTimer = setTimeout(() => {
+          if (!moved) {
+            holdFired = true;
+            currentPromptTarget = promptBtn;
+            promptModal.style.display = "flex";
+            if (navigator.vibrate) navigator.vibrate(15);
+          }
+        }, 550);
+      });
+
+      zone.addEventListener("pointermove", (e) => {
+        if (Math.abs(e.clientX - startX) > 10 || Math.abs(e.clientY - startY) > 10) {
+          moved = true;
+          clearTimeout(holdTimer);
+        }
+      });
+
+      const cancel = () => {
+        clearTimeout(holdTimer);
+      };
+      zone.addEventListener("pointercancel", cancel);
+      zone.addEventListener("pointerleave", cancel);
+
+      zone.addEventListener("pointerup", (e) => {
+        clearTimeout(holdTimer);
+        if (holdFired || document.body.classList.contains("editing")) return;
+
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        const T = 70;
+
+        if (Math.abs(dx) >= T && Math.abs(dx) > Math.abs(dy) * 1.5) {
+          if (dx > 0) {
+            increment(successBtn, "+");
+            flashFeedback(block, "✅");
+          } else {
+            increment(errorBtn, "-");
+            flashFeedback(block, "➖");
+          }
+          refreshSingleCounts();
+        } else if (dy >= T && Math.abs(dy) > Math.abs(dx) * 1.5) {
+          registerGenericPrompt(promptBtn);
+          flashFeedback(block, "🤝");
+          refreshSingleCounts();
+        }
+        // Короткие/диагональные движения игнорируются намеренно.
+      });
     }
 
     undoBanner.onclick = () => {
       undoLastAction();
     };
 
-    document.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener("DOMContentLoaded", async () => {
       modeSlider.oninput = toggleMode;
       document.getElementById("undoBtn").onclick = undoLastAction;
-      document.getElementById("sendBtn").onclick = finalizeSession;
+      document.getElementById("viewModeBtn").onclick = toggleViewMode;
+      document.getElementById("prevGoalBtn").onclick = () => moveGoal(-1);
+      document.getElementById("nextGoalBtn").onclick = () => moveGoal(1);
+      sendBtn.onclick = openConfirmModal;
+      // Сначала загружаем историю из IndexedDB (и при необходимости мигрируем
+      // старую из localStorage), затем рисуем — иначе история будет пустой.
+      await loadHistoryCache();
       renderDaily();
       loadProgress();
       renderHistory();
       toggleMode();
+
+      // Очередь отправки: показать индикатор и попытаться дослать при старте.
+      updateQueueIndicator();
+      flushQueue();
+
+      // Досылать автоматически при появлении сети.
+      window.addEventListener("online", () => {
+        showToast("Сеть появилась — досылаю данные…", 3000);
+        flushQueue();
+      });
+
+      // Периодическая попытка (на случай, если событие online не сработало).
+      setInterval(() => {
+        if (navigator.onLine) flushQueue();
+      }, 60000);
     });
+
+    // Регистрация service worker для офлайн-работы (PWA).
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(console.error);
+      });
+    }
   </script>
 </body>
 </html>
