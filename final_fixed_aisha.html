@@ -540,7 +540,9 @@
   </div>
 
   <script>
-    const CLICK_ENDPOINT = "https://script.google.com/macros/s/AKfycbzu1szsSlgORc4uFgbhy5LvFdCF99UiVuEbzCe_K7UqLvZlmVanUbp6r4pukXbvXZs/exec";
+    // Отдельные клики больше не отправляются (по решению пользователя,
+    // 2026-07: полная последовательность ответов и так уходит в итогах
+    // сессии). На сервер идут только итоги по кнопке «Отправить данные».
     const SESSION_ENDPOINT = "https://script.google.com/macros/s/AKfycbx1ZyMrh8XoRud0rOeqP_2yBZd6C8AJ8e_v2IATRgztmZV-Q9659GmKmnbhNrAmXbU/exec";
     const PROMPT_CODES = ["G", "V", "E", "PF", "FF"];
     // Обобщённая подсказка (короткое нажатие 🤝 без выбора типа).
@@ -1160,21 +1162,7 @@
       }
     }
 
-    // Клики кладём в очередь и сразу пытаемся разослать. Если офлайн —
-    // останутся в очереди и уйдут позже. Не блокируем нажатие тераписта.
-    function sendClickToGoogle(protocol, goal, responseType) {
-      queueAdd({
-        endpoint: CLICK_ENDPOINT,
-        payload: { protocol, goal, response: responseType }
-      })
-        .then(() => {
-          updateQueueIndicator();
-          flushQueue();
-        })
-        .catch(console.error);
-    }
-
-    // Итоги сессии тоже через очередь. Возвращаем промис записи в очередь —
+    // Итоги сессии идут через очередь. Возвращаем промис записи в очередь —
     // он успешен, как только данные надёжно сохранены локально (в IndexedDB),
     // даже если сети нет. Отправка в сеть идёт следом, асинхронно.
     async function sendSessionResults(sessionData) {
@@ -1215,15 +1203,12 @@
 
       const block = btn.closest(".block");
       const blockIndex = Array.from(document.querySelectorAll(".block")).indexOf(block);
-      const protocol = btn.closest(".protocol-container").querySelector("h3").textContent.trim();
-      const goal = block.querySelector(".goal-label").textContent.trim();
       const responseCode = getResponseCode(type);
       const responseLog = getSavedResponseLog();
       responseLog[blockIndex] = responseLog[blockIndex] || [];
       responseLog[blockIndex].push(responseCode);
       setSavedResponseLog(responseLog);
 
-      sendClickToGoogle(protocol, goal, responseCode);
       updatePercentages();
       saveProgress();
       undoStack.push({ button: btn, type: responseCode, blockIndex });
