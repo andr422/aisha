@@ -556,7 +556,9 @@
     // Отдельные клики больше не отправляются (по решению пользователя,
     // 2026-07: полная последовательность ответов и так уходит в итогах
     // сессии). На сервер идут только итоги по кнопке «Отправить данные».
-    const SESSION_ENDPOINT = "https://script.google.com/macros/s/AKfycbx1ZyMrh8XoRud0rOeqP_2yBZd6C8AJ8e_v2IATRgztmZV-Q9659GmKmnbhNrAmXbU/exec";
+    // Новое развёртывание (июль 2026): скрипт сам раскладывает данные по
+    // таблицам детей («ABA — <метка>» в папке «ABA — дети» на Диске).
+    const SESSION_ENDPOINT = "https://script.google.com/macros/s/AKfycbyb6efAwZyi1qLvFr4AeOZhXYvdM70xICSXdRI2eAeK7vdqdpa0jHEK4g7EGxJQhfD4cw/exec";
     const PROMPT_CODES = ["G", "V", "E", "PF", "FF"];
     // Обобщённая подсказка (короткое нажатие 🤝 без выбора типа).
     const GENERIC_PROMPT = "P";
