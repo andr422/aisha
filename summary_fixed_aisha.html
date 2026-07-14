@@ -80,6 +80,36 @@
       margin-top: 4px;
     }
 
+    .child-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    #childSelect {
+      flex: 1;
+      min-width: 120px;
+      max-width: 220px;
+      padding: 6px 8px;
+      font-size: 15px;
+      border: 1px solid #1a3ea9;
+      border-radius: 4px;
+    }
+
+    .child-btn {
+      padding: 6px 10px;
+      font-size: 15px;
+      border: 1px solid #b9c2cc;
+      background: #fff;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .child-btn-danger {
+      border-color: #e3a0a0;
+    }
+
     .warn-banner {
       background: #fff3cd;
       border: 1px solid #e0c068;
@@ -215,13 +245,6 @@
 <body>
   <h2>Сводный чек-лист</h2>
 
-  <div class="warn-banner">
-    ⚠️ <b>Внимание:</b> данные разных детей на этом устройстве пока <u>не разделяются</u>.
-    Имя/ID — это только метка для таблицы. Перед тем как переключиться на другого
-    ребёнка, отправьте данные текущего на ежедневной странице, иначе замеры
-    смешаются. Раздельные профили детей — в планах.
-  </div>
-
   <div class="toolbar">
     <button type="button" class="btn-export" id="exportBtn">⬇ Экспорт настроек</button>
     <button type="button" class="btn-import" id="importBtn">⬆ Импорт настроек</button>
@@ -230,9 +253,14 @@
 
   <div class="session-info">
     <div>
-      <label for="childName">Инициалы или ID ребёнка</label>
-      <input type="text" id="childName" placeholder="Напр. И.П. или 042" />
-      <div class="field-hint">Не вводите полное имя — только инициалы или код.</div>
+      <label for="childSelect">Ребёнок (профиль)</label>
+      <div class="child-row">
+        <select id="childSelect"></select>
+        <button type="button" id="addChildBtn" class="child-btn" title="Добавить">＋</button>
+        <button type="button" id="renameChildBtn" class="child-btn" title="Переименовать">✎</button>
+        <button type="button" id="deleteChildBtn" class="child-btn child-btn-danger" title="Удалить">🗑</button>
+      </div>
+      <div class="field-hint">У каждого ребёнка свои протоколы, цели и история. Метка — только инициалы или ID, не полное имя.</div>
     </div>
     <div>
       <label for="sessionDate">Дата сессии</label>
@@ -256,8 +284,225 @@
       const nameKey = "child_name";
       const container = document.getElementById("protocolsContainer");
       const dateInput = document.getElementById("sessionDate");
-      const nameInput = document.getElementById("childName");
+      const childSelect = document.getElementById("childSelect");
       const toast = document.getElementById("toast");
+
+      // === Профили детей ===
+      // У каждого ребёнка свой набор «рабочих» ключей (protocol*, счётчики, лог,
+      // дата, метка). Активен всегда один — его данные лежат под этими ключами.
+      // Переключение сворачивает рабочий набор текущего в блок aba_child_<id>
+      // и разворачивает выбранного. История (IndexedDB) — под ключом на ребёнка.
+      const CHILDREN_KEY = "aba_children";
+      const ACTIVE_CHILD_KEY = "aba_active_child";
+
+      // Рабочие ключи, принадлежащие конкретному ребёнку (свёртываются при смене).
+      function isChildDataKey(key) {
+        return (
+          /^protocol\d+_/.test(key) ||
+          key === "aba_counts" ||
+          key === "aba_prompt_details" ||
+          key === "aba_response_log" ||
+          key === sessionKey ||
+          key === nameKey
+        );
+      }
+
+      function getChildren() {
+        try {
+          const list = JSON.parse(localStorage.getItem(CHILDREN_KEY) || "[]");
+          return Array.isArray(list) ? list : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function setChildren(list) {
+        localStorage.setItem(CHILDREN_KEY, JSON.stringify(list));
+      }
+
+      function getActiveChildId() {
+        return localStorage.getItem(ACTIVE_CHILD_KEY) || "";
+      }
+
+      function getChildLabel(id) {
+        const found = getChildren().find((c) => c.id === id);
+        return found ? found.label : "";
+      }
+
+      function ensureActiveChild() {
+        let children = getChildren();
+        if (!children.length) {
+          const label = (localStorage.getItem(nameKey) || "").trim() || "Ребёнок 1";
+          const id = "c" + Date.now().toString(36);
+          children = [{ id, label }];
+          setChildren(children);
+          localStorage.setItem(ACTIVE_CHILD_KEY, id);
+          localStorage.setItem(nameKey, label);
+          return;
+        }
+        if (!children.some((c) => c.id === getActiveChildId())) {
+          localStorage.setItem(ACTIVE_CHILD_KEY, children[0].id);
+          localStorage.setItem(nameKey, children[0].label);
+        }
+      }
+
+      // Свёртка/развёртка рабочего набора активного ребёнка.
+      function collectWorkingSet() {
+        const blob = {};
+        Object.keys(localStorage).forEach((k) => {
+          if (isChildDataKey(k)) blob[k] = localStorage.getItem(k);
+        });
+        return blob;
+      }
+
+      function clearWorkingSet() {
+        Object.keys(localStorage)
+          .filter(isChildDataKey)
+          .forEach((k) => localStorage.removeItem(k));
+      }
+
+      function loadWorkingSet(blob) {
+        Object.keys(blob || {}).forEach((k) => localStorage.setItem(k, blob[k]));
+      }
+
+      // Есть ли у текущего ребёнка несданные данные сессии (ненулевые счётчики)?
+      function hasUnsentData() {
+        try {
+          const counts = JSON.parse(localStorage.getItem("aba_counts") || "[]");
+          return counts.some((c) => Number(c) > 0);
+        } catch {
+          return false;
+        }
+      }
+
+      // Переключение активного ребёнка со свёрткой текущего набора.
+      function switchChild(targetId) {
+        const currentId = getActiveChildId();
+        if (!targetId || targetId === currentId) return;
+
+        // Предупреждаем, но разрешаем: несданные данные останутся в профиле
+        // текущего ребёнка неотправленными.
+        if (hasUnsentData()) {
+          const ok = window.confirm(
+            "У текущего ребёнка есть несохранённые данные сессии (ненулевые " +
+              "счётчики). Они сохранятся в его профиль, но НЕ будут отправлены. " +
+              "Переключиться на другого ребёнка?"
+          );
+          if (!ok) {
+            renderChildSelector();
+            return;
+          }
+        }
+
+        localStorage.setItem("aba_child_" + currentId, JSON.stringify(collectWorkingSet()));
+        clearWorkingSet();
+        const blob = JSON.parse(localStorage.getItem("aba_child_" + targetId) || "{}");
+        loadWorkingSet(blob);
+        localStorage.setItem(ACTIVE_CHILD_KEY, targetId);
+        localStorage.setItem(nameKey, getChildLabel(targetId));
+
+        initSessionFields();
+        renderSummary();
+        updateActiveNotice();
+      }
+
+      function addChild() {
+        const label = (window.prompt("Инициалы или ID нового ребёнка:") || "").trim();
+        if (!label) return;
+        const id = "c" + Date.now().toString(36);
+        const children = getChildren();
+        children.push({ id, label });
+        setChildren(children);
+        // Переключаемся на нового: его рабочий набор пуст — чистый старт.
+        switchChild(id);
+        showToast(`Добавлен профиль: ${label}.`);
+      }
+
+      function renameChild() {
+        const id = getActiveChildId();
+        const current = getChildLabel(id);
+        const label = (window.prompt("Новая метка ребёнка:", current) || "").trim();
+        if (!label || label === current) return;
+        const children = getChildren().map((c) => (c.id === id ? { ...c, label } : c));
+        setChildren(children);
+        localStorage.setItem(nameKey, label);
+        renderChildSelector();
+        showToast("Метка обновлена.");
+      }
+
+      async function deleteChild() {
+        const id = getActiveChildId();
+        const label = getChildLabel(id);
+        const ok = window.confirm(
+          `Удалить профиль «${label}» вместе со всеми его настройками и историей? ` +
+            `Действие необратимо.`
+        );
+        if (!ok) return;
+
+        // Удаляем блок настроек, историю (IndexedDB) и запись из списка.
+        localStorage.removeItem("aba_child_" + id);
+        await deleteChildHistory(id).catch(() => {});
+        const remaining = getChildren().filter((c) => c.id !== id);
+        setChildren(remaining);
+
+        // Текущий рабочий набор принадлежал удалённому — стираем его.
+        clearWorkingSet();
+
+        if (remaining.length) {
+          const next = remaining[0].id;
+          const blob = JSON.parse(localStorage.getItem("aba_child_" + next) || "{}");
+          loadWorkingSet(blob);
+          localStorage.setItem(ACTIVE_CHILD_KEY, next);
+          localStorage.setItem(nameKey, getChildLabel(next));
+        } else {
+          // Удалили последнего — заводим свежего по умолчанию.
+          localStorage.removeItem(ACTIVE_CHILD_KEY);
+          localStorage.removeItem(nameKey);
+          ensureActiveChild();
+        }
+
+        initSessionFields();
+        renderSummary();
+        updateActiveNotice();
+        showToast(`Профиль «${label}» удалён.`);
+      }
+
+      // Удаление истории ребёнка из IndexedDB (aba_history::<id>). Сводная сама
+      // не работает с IDB, поэтому открываем базу минимально и только для delete.
+      function deleteChildHistory(id) {
+        return new Promise((resolve, reject) => {
+          if (!("indexedDB" in window)) {
+            resolve();
+            return;
+          }
+          const req = indexedDB.open("aba_db", 2);
+          req.onsuccess = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains("history")) {
+              resolve();
+              return;
+            }
+            const tx = db.transaction("history", "readwrite");
+            tx.objectStore("history").delete("aba_history::" + id);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          };
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      function renderChildSelector() {
+        const children = getChildren();
+        const active = getActiveChildId();
+        childSelect.innerHTML = "";
+        children.forEach((c) => {
+          const opt = document.createElement("option");
+          opt.value = c.id;
+          opt.textContent = c.label;
+          opt.selected = c.id === active;
+          childSelect.append(opt);
+        });
+      }
 
       // Какие ключи localStorage относятся к настройкам (для экспорта/импорта).
       // Конфигурация протоколов/целей + выбранные цели + сессия и ребёнок.
@@ -335,11 +580,13 @@
           }
 
           const ok = window.confirm(
-            `Импортировать ${keys.length} настроек? Текущие настройки протоколов и целей будут заменены.`
+            `Импортировать ${keys.length} настроек в профиль «${getChildLabel(getActiveChildId())}»? ` +
+              `Настройки протоколов и целей ТЕКУЩЕГО ребёнка будут заменены. ` +
+              `Другие профили не затрагиваются.`
           );
           if (!ok) return;
 
-          // Удаляем старые настройки, затем записываем новые.
+          // Удаляем старые настройки текущего профиля, затем записываем новые.
           Object.keys(localStorage)
             .filter(isSettingKey)
             .forEach((key) => localStorage.removeItem(key));
@@ -347,6 +594,14 @@
           keys.forEach((key) => {
             localStorage.setItem(key, payload.data[key]);
           });
+
+          // Синхронизируем метку активного профиля с импортированным child_name,
+          // чтобы селектор и child_name не разошлись.
+          const importedLabel = (localStorage.getItem(nameKey) || "").trim();
+          if (importedLabel) {
+            const id = getActiveChildId();
+            setChildren(getChildren().map((c) => (c.id === id ? { ...c, label: importedLabel } : c)));
+          }
 
           // Перерисовываем страницу с новыми значениями.
           initSessionFields();
@@ -365,33 +620,9 @@
           localStorage.setItem(sessionKey, dateInput.value);
         };
 
-        const savedName = localStorage.getItem(nameKey);
-        nameInput.value = savedName || "";
-        nameInput.oninput = () => {
-          localStorage.setItem(nameKey, nameInput.value);
-        };
-
-        // #7: при попытке сменить ребёнка, когда уже есть настройки/данные,
-        // напоминаем, что локально данные не разделяются. Показываем один раз
-        // за фокус, не на каждое нажатие, чтобы не мешать.
-        let reminded = false;
-        nameInput.addEventListener("focus", () => {
-          if (reminded) return;
-          const anyData = (() => {
-            for (let i = 1; i <= summaryCount; i += 1) {
-              if (protocolHasData(i)) return true;
-            }
-            return false;
-          })();
-          if (anyData && nameInput.value.trim()) {
-            showToast(
-              "Помните: протоколы и история не разделяются по детям. " +
-                "Отправьте данные текущего ребёнка перед переключением.",
-              6000
-            );
-            reminded = true;
-          }
-        });
+        // Дата и метки протоколов теперь принадлежат активному ребёнку —
+        // селектор профилей рисуем заново на случай смены/переименования.
+        renderChildSelector();
       }
 
       // Есть ли у протокола хоть какие-то заполненные данные?
@@ -580,6 +811,13 @@
         };
       }
 
+      function bindChildControls() {
+        childSelect.onchange = () => switchChild(childSelect.value);
+        document.getElementById("addChildBtn").onclick = addChild;
+        document.getElementById("renameChildBtn").onclick = renameChild;
+        document.getElementById("deleteChildBtn").onclick = deleteChild;
+      }
+
       // #3: ежедневная страница рисует протоколы 1..max(номер с названием).
       // Если названия идут с «дырой» (напр. заполнен 5-й, а 1–4 пустые),
       // на ежедневной появятся протоколы-пустышки. Предупреждаем об этом.
@@ -623,10 +861,12 @@
       }
 
       function init() {
+        ensureActiveChild();
         initSessionFields();
         renderSummary();
         bindEvents();
         bindToolbar();
+        bindChildControls();
         updateActiveNotice();
       }
 

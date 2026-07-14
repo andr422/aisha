@@ -46,6 +46,18 @@
       margin-bottom: 16px;
     }
 
+    .active-child {
+      text-align: center;
+      font-weight: bold;
+      color: var(--accent);
+      margin-bottom: 12px;
+      min-height: 20px;
+    }
+
+    .active-child:empty {
+      display: none;
+    }
+
     .controls {
       display: flex;
       justify-content: space-between;
@@ -479,6 +491,7 @@
 <body>
   <div class="page">
     <h2>Ежедневный ABA Чек-лист</h2>
+    <div id="activeChild" class="active-child"></div>
 
     <div class="controls mb-16">
       <div>
@@ -571,8 +584,68 @@
     const IDB_NAME = "aba_db";
     const IDB_STORE = "history";
     const IDB_QUEUE = "send_queue";
-    const IDB_KEY = "aba_history";
     let historyCache = [];
+
+    // === Профили детей ===
+    // Данные каждого ребёнка живут под общими «рабочими» ключами (protocol*,
+    // счётчики, лог, история). Активен всегда ровно один ребёнок — его данные и
+    // лежат под этими ключами, поэтому весь код ввода/истории их не различает.
+    // Переключение (на сводной) сворачивает рабочий набор текущего в блок
+    // aba_child_<id> и разворачивает выбранного. История в IndexedDB хранится
+    // под ключом на каждого ребёнка: aba_history::<id>.
+    const CHILDREN_KEY = "aba_children";
+    const ACTIVE_CHILD_KEY = "aba_active_child";
+
+    function getChildren() {
+      try {
+        const list = JSON.parse(localStorage.getItem(CHILDREN_KEY) || "[]");
+        return Array.isArray(list) ? list : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function getActiveChildId() {
+      return localStorage.getItem(ACTIVE_CHILD_KEY) || "";
+    }
+
+    function getActiveChildLabel() {
+      const found = getChildren().find((c) => c.id === getActiveChildId());
+      return found ? found.label : "";
+    }
+
+    // Гарантируем, что есть хотя бы один профиль и он активен. При первом запуске
+    // текущие данные (если были) становятся данными первого ребёнка — ничего не
+    // переносится и не теряется.
+    function ensureActiveChild() {
+      let children = getChildren();
+      if (!children.length) {
+        const label = (localStorage.getItem("child_name") || "").trim() || "Ребёнок 1";
+        const id = "c" + Date.now().toString(36);
+        children = [{ id, label }];
+        localStorage.setItem(CHILDREN_KEY, JSON.stringify(children));
+        localStorage.setItem(ACTIVE_CHILD_KEY, id);
+        localStorage.setItem("child_name", label);
+        return;
+      }
+      if (!children.some((c) => c.id === getActiveChildId())) {
+        localStorage.setItem(ACTIVE_CHILD_KEY, children[0].id);
+        localStorage.setItem("child_name", children[0].label);
+      }
+    }
+
+    // Ключ истории активного ребёнка.
+    function historyKey() {
+      return "aba_history::" + getActiveChildId();
+    }
+
+    // Показать, чей сейчас сбор данных. Переключение — на сводной странице.
+    function renderActiveChild() {
+      const el = document.getElementById("activeChild");
+      if (!el) return;
+      const label = getActiveChildLabel();
+      el.textContent = label ? `Ребёнок: ${label}` : "";
+    }
     let dbPromise = null;
     let flushing = false;
 
@@ -628,14 +701,23 @@
     // localStorage есть старая история — переносим её один раз (миграция).
     async function loadHistoryCache() {
       try {
-        let history = await idbGet(IDB_KEY);
+        let history = await idbGet(historyKey());
         if (!Array.isArray(history)) {
-          const legacy = localStorage.getItem("aba_history");
-          if (legacy) {
-            history = JSON.parse(legacy);
-            await idbSet(IDB_KEY, history);
-            // Старую копию НЕ удаляем сразу — оставляем как страховку.
-            // Можно убрать позже: localStorage.removeItem("aba_history").
+          // Первый ребёнок наследует старую единую историю (до профилей), если
+          // она была: сперва из IndexedDB (ключ aba_history), затем из localStorage.
+          // Новые дети (не первый в списке) начинают с пустой истории.
+          const isFirstChild = (getChildren()[0] || {}).id === getActiveChildId();
+          let legacy = null;
+          if (isFirstChild) {
+            legacy = await idbGet("aba_history");
+            if (!Array.isArray(legacy)) {
+              const ls = localStorage.getItem("aba_history");
+              legacy = ls ? JSON.parse(ls) : null;
+            }
+          }
+          if (Array.isArray(legacy)) {
+            history = legacy;
+            await idbSet(historyKey(), history);
           } else {
             history = [];
           }
@@ -644,8 +726,8 @@
       } catch (err) {
         console.error("IndexedDB недоступен, откат на localStorage:", err);
         // Деградация: если IndexedDB не работает (например, приватный режим),
-        // продолжаем читать/писать в localStorage, чтобы приложение не падало.
-        historyCache = JSON.parse(localStorage.getItem("aba_history") || "[]");
+        // продолжаем читать/писать в localStorage (по ключу ребёнка).
+        historyCache = JSON.parse(localStorage.getItem(historyKey()) || localStorage.getItem("aba_history") || "[]");
         window.__abaIdbFailed = true;
       }
     }
@@ -659,14 +741,14 @@
     async function setHistory(history) {
       historyCache = Array.isArray(history) ? history : [];
       if (window.__abaIdbFailed) {
-        localStorage.setItem("aba_history", JSON.stringify(historyCache));
+        localStorage.setItem(historyKey(), JSON.stringify(historyCache));
         return;
       }
       try {
-        await idbSet(IDB_KEY, historyCache);
+        await idbSet(historyKey(), historyCache);
       } catch (err) {
         console.error("Сбой записи в IndexedDB, пишу в localStorage:", err);
-        localStorage.setItem("aba_history", JSON.stringify(historyCache));
+        localStorage.setItem(historyKey(), JSON.stringify(historyCache));
         window.__abaIdbFailed = true;
       }
     }
@@ -1679,8 +1761,12 @@
       document.getElementById("prevGoalBtn").onclick = () => moveGoal(-1);
       document.getElementById("nextGoalBtn").onclick = () => moveGoal(1);
       sendBtn.onclick = openConfirmModal;
-      // Сначала загружаем историю из IndexedDB (и при необходимости мигрируем
-      // старую из localStorage), затем рисуем — иначе история будет пустой.
+      // Гарантируем активный профиль ребёнка ДО загрузки истории (ключ истории
+      // зависит от активного ребёнка) и показываем, чей сейчас сбор.
+      ensureActiveChild();
+      renderActiveChild();
+      // Сначала загружаем историю из IndexedDB (и при необходимости наследуем
+      // старую единую историю), затем рисуем — иначе история будет пустой.
       await loadHistoryCache();
       renderDaily();
       loadProgress();
