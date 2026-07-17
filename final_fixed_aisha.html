@@ -8,17 +8,44 @@
   <meta name="theme-color" content="#0d6efd" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <style>
+    /* Палитра «море / песок / камень» + тёплый фон.
+       Шрифты: Unbounded (акценты) и Onest (текст) подхватятся автоматически,
+       если положить файлы в папку fonts/ репозитория; до тех пор — системные. */
+    @font-face {
+      font-family: "Unbounded";
+      src: url("fonts/Unbounded.woff2") format("woff2");
+      font-weight: 400 900;
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: "Onest";
+      src: url("fonts/Onest.woff2") format("woff2");
+      font-weight: 300 800;
+      font-display: swap;
+    }
+
     :root {
-      --bg: #f8f9fa;
+      --bg: #f3f2ed;
       --card: #ffffff;
-      --line: #d9dee3;
-      --text: #1f2933;
-      --muted: #667085;
-      --ok: #d4edda;
-      --prompt: #fff3cd;
-      --err: #f8d7da;
-      --accent: #0d6efd;
-      --danger: #dc3545;
+      --line: #e4e2d9;
+      --text: #1f2429;
+      --muted: #6b7280;
+      --ok: #dff0f3;
+      --ok-edge: #b5d9df;
+      --ok-ink: #0e7490;
+      --prompt: #f4ebd6;
+      --prompt-edge: #e0d0a8;
+      --prompt-ink: #8a6a14;
+      --err: #ecedef;
+      --err-edge: #d3d6db;
+      --err-ink: #596270;
+      --low-ink: #b4552d;
+      --mastered: #4c9a63;
+      --accent: #0e7490;
+      --danger: #b4552d;
+      --font-display: "Unbounded", -apple-system, "Segoe UI", Roboto, sans-serif;
+      --font-body: "Onest", -apple-system, "Segoe UI", Roboto, sans-serif;
     }
 
     * {
@@ -28,7 +55,7 @@
     body {
       margin: 0;
       padding: 16px;
-      font-family: sans-serif;
+      font-family: var(--font-body);
       color: var(--text);
       background: var(--bg);
     }
@@ -40,12 +67,15 @@
 
     h2, h3 {
       text-align: center;
+      font-family: var(--font-display);
+      letter-spacing: 0.02em;
     }
 
     .mb-16 {
       margin-bottom: 16px;
     }
 
+    /* Индикатор активного ребёнка (переключение — на сводной). */
     .active-child {
       text-align: center;
       font-weight: bold;
@@ -99,76 +129,26 @@
       display: block;
     }
 
+    /* В режиме одной цели кнопки — гигантские: вся ширина экрана на троих,
+       промахнуться сложнее, чем по жестовой зоне, и всё видно. */
     body.single-mode .block .btn-set {
-      display: none;
+      gap: 14px;
+      margin: 6px 0 10px;
+    }
+
+    body.single-mode .block .btn-set button {
+      padding: 34px 0 30px;
+      font-size: 46px;
+      border-radius: 18px;
+    }
+
+    body.single-mode .block .btn-set .count {
+      font-size: 20px;
+      margin-top: 8px;
     }
 
     body.single-mode .protocol-header .btn {
       display: none;
-    }
-
-    .gesture-zone {
-      position: relative;
-      background: #eef1f4;
-      border-radius: 12px;
-      padding: 44px 12px;
-      text-align: center;
-      color: var(--muted);
-      font-size: 15px;
-      margin-bottom: 10px;
-      touch-action: none;
-      user-select: none;
-      -webkit-user-select: none;
-    }
-
-    .gesture-zone .gz-left,
-    .gesture-zone .gz-right,
-    .gesture-zone .gz-down {
-      position: absolute;
-      font-size: 14px;
-      font-weight: bold;
-      pointer-events: none;
-    }
-
-    .gesture-zone .gz-left {
-      left: 12px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: #c92a2a;
-    }
-
-    .gesture-zone .gz-right {
-      right: 12px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: #2b8a3e;
-    }
-
-    .gesture-zone .gz-down {
-      bottom: 8px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: #d97706;
-    }
-
-    .gesture-flash {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 44px;
-      background: rgba(255, 255, 255, 0.85);
-      border-radius: 12px;
-      opacity: 1;
-      transition: opacity 0.45s ease;
-      pointer-events: none;
-    }
-
-    .today-counts {
-      font-size: 13px;
-      color: var(--muted);
-      margin-bottom: 6px;
     }
 
     .single-nav {
@@ -226,22 +206,47 @@
 
     .block {
       margin-bottom: 16px;
-      padding: 10px;
-      border-radius: 10px;
-      border: 1px solid transparent;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: var(--card);
     }
 
     .block.mastered {
-      border-color: #55a630;
-      background: #eefae9;
+      border-color: #d8e8dc;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .block.mastered::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 5px;
+      background: var(--mastered);
+    }
+
+    .block-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
     }
 
     .goal-label {
-      display: block;
-      padding: 8px;
-      background: #e9ecef;
-      border-radius: 6px;
-      margin-bottom: 8px;
+      flex: 1;
+      min-width: 0;
+      font-size: 15px;
+      line-height: 1.45;
+      padding-top: 4px;
+    }
+
+    .block-stats {
+      text-align: right;
+      flex-shrink: 0;
     }
 
     .btn-set {
@@ -257,63 +262,125 @@
 
     .btn-set button {
       width: 100%;
-      padding: 18px;
-      font-size: 26px;
+      padding: 14px 0 12px;
+      font-size: 30px;
+      font-family: var(--font-display);
+      font-weight: 900;
+      line-height: 1;
       border: none;
-      border-radius: 12px;
+      border-radius: 14px;
       cursor: pointer;
+      transition: transform 0.06s ease, box-shadow 0.06s ease;
       /* Быстрые повторные тапы не должны вызывать double-tap-зум,
-         а долгое нажатие 🤝 — системное меню на iOS. */
+         а долгое нажатие P — системное меню на iOS. */
       touch-action: manipulation;
       -webkit-touch-callout: none;
     }
 
+    .btn-set button:active {
+      transform: translateY(3px);
+      box-shadow: none !important;
+    }
+
     .btn-success {
       background: var(--ok);
+      color: var(--ok-ink);
+      box-shadow: 0 3px 0 var(--ok-edge);
     }
 
     .btn-prompt {
       background: var(--prompt);
+      color: var(--prompt-ink);
+      box-shadow: 0 3px 0 var(--prompt-edge);
     }
 
     .btn-error {
       background: var(--err);
+      color: var(--err-ink);
+      box-shadow: 0 3px 0 var(--err-edge);
+    }
+
+    @keyframes recordFlash {
+      0% { filter: saturate(2.2) brightness(1.05); }
+      100% { filter: none; }
+    }
+
+    .btn-set button.flash {
+      animation: recordFlash 0.45s ease-out;
     }
 
     .count {
       text-align: center;
-      font-weight: bold;
+      font-weight: 800;
       font-size: 16px;
       margin-top: 6px;
+      font-family: var(--font-display);
     }
 
     .percent {
-      text-align: right;
-      font-weight: bold;
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-size: 34px;
+      line-height: 0.95;
+      letter-spacing: -0.02em;
+      color: var(--muted);
+    }
+
+    .percent .pct-sign {
+      font-size: 18px;
+      font-weight: 700;
     }
 
     .percent.green {
-      color: #2b8a3e;
+      color: var(--ok-ink);
     }
 
     .percent.orange {
-      color: #d97706;
+      color: var(--prompt-ink);
     }
 
     .percent.red {
-      color: #c92a2a;
+      color: var(--low-ink);
     }
 
-    .prev-percent,
+    .sparkline {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 24px;
+    }
+
+    .sparkline svg {
+      display: block;
+    }
+
+    .sparkline-last {
+      font-weight: bold;
+      font-size: 13px;
+    }
+
+    .mastered-badge {
+      display: inline-block;
+      margin-left: 8px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      color: var(--mastered);
+      border: 1.5px solid var(--mastered);
+      border-radius: 8px;
+      padding: 1px 7px;
+      vertical-align: middle;
+      text-transform: uppercase;
+    }
+
     .prompt-details {
       font-size: 12px;
       color: var(--muted);
       margin-top: 4px;
-    }
-
-    .prev-percent::before {
-      content: "Пред. сессии: ";
-      font-weight: bold;
     }
 
     .prompt-details:empty {
@@ -332,7 +399,6 @@
       border-radius: 8px;
       color: #fff;
       cursor: pointer;
-      touch-action: manipulation;
     }
 
     .btn:disabled {
@@ -421,7 +487,7 @@
 
     #toast {
       position: fixed;
-      bottom: 80px;
+      bottom: calc(148px + env(safe-area-inset-bottom, 0px));
       left: 50%;
       transform: translateX(-50%);
       background: #1f2933;
@@ -438,7 +504,7 @@
 
     #undo-banner {
       position: fixed;
-      bottom: 20px;
+      bottom: calc(88px + env(safe-area-inset-bottom, 0px));
       left: 50%;
       transform: translateX(-50%);
       background: #e0e0e0;
@@ -451,21 +517,6 @@
       z-index: 1001;
     }
 
-    .nav-left-floating {
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-    }
-
-    .nav-left-floating a {
-      display: inline-block;
-      background: var(--accent);
-      color: white;
-      padding: 14px 18px;
-      border-radius: 30px;
-      text-decoration: none;
-    }
-
     @media (max-width: 640px) {
       body {
         padding: 12px;
@@ -476,15 +527,10 @@
       }
 
       .btn-set button {
-        padding: 14px;
-        font-size: 22px;
+        padding: 12px 0 10px;
+        font-size: 26px;
       }
 
-      .nav-left-floating {
-        position: static;
-        margin: 24px 0 12px;
-        text-align: center;
-      }
     }
   </style>
 </head>
@@ -500,7 +546,7 @@
         <span id="modeText">Запись ответов</span>
       </div>
       <div class="controls-right">
-        <span id="queueStatus" style="display:none;align-self:center;font-size:13px;color:#d97706;font-weight:bold;"></span>
+        <span id="queueStatus" style="display:none;align-self:center;font-size:13px;color:var(--prompt-ink);font-weight:bold;"></span>
         <button id="viewModeBtn" class="btn btn-secondary">Вид: список</button>
         <button id="undoBtn" class="btn btn-secondary">Отменить действие</button>
         <button id="sendBtn" class="btn btn-danger">Отправить данные</button>
@@ -532,7 +578,7 @@
       <div class="modal-content">
         <h3>Отправить и завершить сессию?</h3>
         <p id="confirm-summary" style="font-size:14px;color:#667085;"></p>
-        <p style="font-size:13px;color:#c92a2a;">После отправки счётчики обнулятся. Убедитесь, что есть интернет.</p>
+        <p style="font-size:13px;color:var(--low-ink);">После отправки счётчики обнулятся. Убедитесь, что есть интернет.</p>
         <button class="btn btn-danger" type="button" onclick="confirmFinalize()">Отправить</button>
         <button class="btn btn-secondary" type="button" onclick="closeConfirmModal()">Отмена</button>
       </div>
@@ -547,20 +593,16 @@
     <div id="undo-banner">Отменить действие</div>
     <div id="historyContainer"><h2>История сессий</h2></div>
 
-    <div class="nav-left-floating">
-      <a href="summary_fixed_aisha.html">⬅ Сводный чек-лист</a>
-    </div>
   </div>
 
   <script>
-    // Отдельные клики больше не отправляются (по решению пользователя,
-    // 2026-07: полная последовательность ответов и так уходит в итогах
-    // сессии). На сервер идут только итоги по кнопке «Отправить данные».
-    // Новое развёртывание (июль 2026): скрипт сам раскладывает данные по
-    // таблицам детей («ABA — <метка>» в папке «ABA — дети» на Диске).
+    // Отдельные клики не отправляются (решение пользователя, июль 2026):
+    // полная последовательность ответов и так уходит в итогах сессии.
+    // Развёртывание от 14.07.2026: скрипт сам раскладывает данные по таблицам
+    // детей («ABA — <метка>» в папке «ABA — дети» на Диске).
     const SESSION_ENDPOINT = "https://script.google.com/macros/s/AKfycbyb6efAwZyi1qLvFr4AeOZhXYvdM70xICSXdRI2eAeK7vdqdpa0jHEK4g7EGxJQhfD4cw/exec";
     const PROMPT_CODES = ["G", "V", "E", "PF", "FF"];
-    // Обобщённая подсказка (короткое нажатие 🤝 без выбора типа).
+    // Обобщённая подсказка (короткое нажатие P без выбора типа).
     const GENERIC_PROMPT = "P";
 
     const modeSlider = document.getElementById("modeSlider");
@@ -648,6 +690,7 @@
       const label = getActiveChildLabel();
       el.textContent = label ? `Ребёнок: ${label}` : "";
     }
+
     let dbPromise = null;
     let flushing = false;
 
@@ -699,8 +742,7 @@
       );
     }
 
-    // Загрузка истории в кэш при старте. Если в IndexedDB пусто, но в
-    // localStorage есть старая история — переносим её один раз (миграция).
+    // Загрузка истории активного ребёнка в кэш при старте.
     async function loadHistoryCache() {
       try {
         let history = await idbGet(historyKey());
@@ -1029,21 +1071,21 @@
     }
 
     // === Миграция текущих (несданных) данных при смене списка целей ===
-    // aba_counts / aba_prompt_details / aba_response_log хранятся по позиции
+    // aba_counts_v2 / aba_prompt_details / aba_response_log хранятся по позиции
     // блока на странице. При смене выбранных целей позиции сдвигаются, поэтому
     // перед перерисовкой запоминаем данные по ключу «протокол + имя цели»,
     // а после — раскладываем по новым позициям.
 
     function snapshotInProgressData() {
-      const counts = JSON.parse(localStorage.getItem("aba_counts") || "[]");
+      const perBlock = JSON.parse(localStorage.getItem("aba_counts_v2") || "[]");
       const details = getSavedPromptDetails();
       const log = getSavedResponseLog();
       const map = new Map();
       Array.from(document.querySelectorAll(".block")).forEach((block, k) => {
         const proto = block.closest(".protocol-container").dataset.index;
-        const name = block.querySelector(".goal-label").textContent.trim();
+        const name = (block.dataset.goalName || block.querySelector(".goal-label").textContent).trim();
         map.set(`${proto}||${name}`, {
-          counts: counts.slice(k * 3, k * 3 + 3),
+          counts: perBlock[k],
           detail: details[k],
           log: log[k]
         });
@@ -1052,18 +1094,18 @@
     }
 
     function restoreInProgressData(map) {
-      const counts = [];
+      const perBlock = [];
       const details = [];
       const log = [];
       Array.from(document.querySelectorAll(".block")).forEach((block) => {
         const proto = block.closest(".protocol-container").dataset.index;
-        const name = block.querySelector(".goal-label").textContent.trim();
+        const name = (block.dataset.goalName || block.querySelector(".goal-label").textContent).trim();
         const saved = map.get(`${proto}||${name}`);
-        counts.push(...(saved && saved.counts.length === 3 ? saved.counts : ["0", "0", "0"]));
+        perBlock.push(saved && saved.counts ? saved.counts : { s: 0, p: 0, e: 0 });
         details.push(saved && saved.detail ? saved.detail : emptyPromptDetail());
         log.push(saved && Array.isArray(saved.log) ? saved.log : []);
       });
-      localStorage.setItem("aba_counts", JSON.stringify(counts));
+      localStorage.setItem("aba_counts_v2", JSON.stringify(perBlock));
       setSavedPromptDetails(details);
       setSavedResponseLog(log);
     }
@@ -1100,10 +1142,60 @@
       return selected.length ? selected : [1, 2, 3];
     }
 
+    // Спарклайн прогресса: SVG-линия по процентам последних сессий.
+    // values — массив чисел 0–100 (null уже отфильтрованы). Цвет — по
+    // последнему значению, теми же порогами, что и текст процента.
+    function buildSparkline(values) {
+      const wrap = document.createElement("div");
+      wrap.className = "sparkline";
+
+      if (!values.length) {
+        wrap.textContent = "нет данных";
+        return wrap;
+      }
+
+      const last = values[values.length - 1];
+      const color = last >= 80 ? "#0e7490" : last >= 50 ? "#8a6a14" : "#b4552d";
+
+      const lastLabel = document.createElement("span");
+      lastLabel.className = "sparkline-last";
+      lastLabel.style.color = color;
+      lastLabel.textContent = `${last}%`;
+
+      if (values.length === 1) {
+        // Одна точка — линию не нарисовать, показываем просто значение.
+        wrap.append(lastLabel);
+        return wrap;
+      }
+
+      const W = 90;
+      const H = 24;
+      const PAD = 3;
+      const stepX = (W - PAD * 2) / (values.length - 1);
+      const toY = (v) => PAD + (1 - v / 100) * (H - PAD * 2);
+      const points = values
+        .map((v, idx) => `${(PAD + idx * stepX).toFixed(1)},${toY(v).toFixed(1)}`)
+        .join(" ");
+      const endX = (PAD + (values.length - 1) * stepX).toFixed(1);
+      const endY = toY(last).toFixed(1);
+
+      // Данные только числовые — сборка SVG-строки безопасна.
+      const svgWrap = document.createElement("span");
+      svgWrap.innerHTML =
+        `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">` +
+        `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="2" ` +
+        `stroke-linecap="round" stroke-linejoin="round"/>` +
+        `<circle cx="${endX}" cy="${endY}" r="2.5" fill="${color}"/></svg>`;
+
+      wrap.append(svgWrap, lastLabel);
+      return wrap;
+    }
+
     function renderDaily() {
       const count = getProtocolsCount();
       const history = getHistory();
       const lastThreeSessions = history.slice(-3);
+      const trendSessions = history.slice(-10);
       dailyContainer.innerHTML = "";
 
       if (!count) {
@@ -1135,36 +1227,55 @@
         selectedGoals.forEach((goalId, rowPos) => {
           const goalName = localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`;
           const goalHistory = lastThreeSessions.map((session) => session.data[i - 1]?.[rowPos] ?? null);
+          const trendValues = trendSessions
+            .map((session) => session.data[i - 1]?.[rowPos] ?? null)
+            .filter((value) => value != null);
           const previousPercents = goalHistory.map((value) => (value == null ? "—" : `${value}%`)).join(" | ");
           const mastered = checkMastery(goalHistory);
 
           const block = document.createElement("div");
           block.className = `block${mastered ? " mastered" : ""}`;
+          // Имя цели храним отдельно от отображения, чтобы бейдж «освоено»
+          // не попадал в имя при отправке данных.
+          block.dataset.goalName = goalName;
 
           const goalLabel = document.createElement("div");
           goalLabel.className = "goal-label";
           goalLabel.textContent = goalName;
+          if (mastered) {
+            const badge = document.createElement("span");
+            badge.className = "mastered-badge";
+            badge.textContent = "освоено";
+            goalLabel.append(badge);
+          }
 
-          const btnSet = document.createElement("div");
-          btnSet.className = "btn-set";
-          btnSet.innerHTML = `
-            <div><button class="btn-success" type="button" onclick="increment(this, '+')">✅</button><div class="count">0</div></div>
-            <div><button class="btn-prompt" type="button">🤝</button><div class="count">0</div></div>
-            <div><button class="btn-error" type="button" onclick="increment(this, '-')">➖</button><div class="count">0</div></div>
-          `;
-
+          // Шапка блока: имя слева, процент-герой и тренд справа.
+          const stats = document.createElement("div");
+          stats.className = "block-stats";
           const percent = document.createElement("div");
           percent.className = "percent";
           percent.textContent = "—";
+          const prevPercent = buildSparkline(trendValues);
+          prevPercent.title = `Пред. сессии: ${previousPercents}`;
+          stats.append(percent, prevPercent);
 
-          const prevPercent = document.createElement("div");
-          prevPercent.className = "prev-percent";
-          prevPercent.textContent = previousPercents;
+          const head = document.createElement("div");
+          head.className = "block-head";
+          head.append(goalLabel, stats);
+
+          // Порядок кнопок: − слева, + справа — по числовой оси (ABA-нотация).
+          const btnSet = document.createElement("div");
+          btnSet.className = "btn-set";
+          btnSet.innerHTML = `
+            <div><button class="btn-error" type="button" onclick="increment(this, '-')">−</button><div class="count">0</div></div>
+            <div><button class="btn-prompt" type="button">P</button><div class="count">0</div></div>
+            <div><button class="btn-success" type="button" onclick="increment(this, '+')">+</button><div class="count">0</div></div>
+          `;
 
           const promptDetails = document.createElement("div");
           promptDetails.className = "prompt-details";
 
-          block.append(goalLabel, btnSet, percent, prevPercent, promptDetails);
+          block.append(head, btnSet, promptDetails);
           wrapper.append(block);
         });
 
@@ -1193,7 +1304,7 @@
 
       if (history.length > visibleHistory.length) {
         const note = document.createElement("p");
-        note.style.cssText = "text-align:center;color:#667085;font-size:13px;";
+        note.style.cssText = "text-align:center;color:var(--muted);font-size:13px;";
         note.textContent = `Показаны последние ${visibleHistory.length} из ${history.length} сессий.`;
         historyContainer.append(note);
       }
@@ -1277,6 +1388,12 @@
       return GENERIC_PROMPT;
     }
 
+    // Счётчик кнопки — по её классу, независимо от порядка кнопок на экране.
+    function countOf(block, btnClass) {
+      const btn = block.querySelector(`.${btnClass}`);
+      return btn ? Number(btn.nextElementSibling.textContent) || 0 : 0;
+    }
+
     function increment(btn, type) {
       if (document.body.classList.contains("editing") || btn.disabled) {
         return;
@@ -1284,6 +1401,12 @@
 
       const countEl = btn.nextElementSibling;
       countEl.textContent = String((Number(countEl.textContent) || 0) + 1);
+
+      // Вспышка-подтверждение записи + вибрация (Android).
+      btn.classList.remove("flash");
+      void btn.offsetWidth;
+      btn.classList.add("flash");
+      if (navigator.vibrate) navigator.vibrate(20);
 
       const block = btn.closest(".block");
       const blockIndex = Array.from(document.querySelectorAll(".block")).indexOf(block);
@@ -1301,8 +1424,12 @@
 
     function updatePercentages() {
       document.querySelectorAll(".block").forEach((block) => {
-        const counts = Array.from(block.querySelectorAll(".count")).map((item) => Number(item.textContent) || 0);
-        const total = counts.reduce((sum, value) => sum + value, 0);
+        // Считаем по классам кнопок, а не по позиции — порядок кнопок
+        // на экране (− P +) на расчёт не влияет.
+        const success = countOf(block, "btn-success");
+        const prompts = countOf(block, "btn-prompt");
+        const errors = countOf(block, "btn-error");
+        const total = success + prompts + errors;
         const percentEl = block.querySelector(".percent");
 
         if (!total) {
@@ -1311,29 +1438,60 @@
           return;
         }
 
-        // Процент самостоятельных реакций: ✅ / (✅ + 🤝 + ➖).
-        const success = counts[0];
+        // Процент самостоятельных реакций: + / (+ P −).
         const percent = Math.round((success / total) * 100);
-        percentEl.textContent = `${percent}%`;
+        percentEl.innerHTML = `${percent}<span class="pct-sign">%</span>`;
         percentEl.className = `percent ${percent >= 80 ? "green" : percent >= 50 ? "orange" : "red"}`;
       });
     }
 
+    // Сохранение счётчиков по классам кнопок (aba_counts_v2), чтобы порядок
+    // кнопок на экране не влиял на восстановление.
     function saveProgress() {
-      const counts = Array.from(document.querySelectorAll(".count")).map((item) => item.textContent);
-      localStorage.setItem("aba_counts", JSON.stringify(counts));
+      const perBlock = Array.from(document.querySelectorAll(".block")).map((block) => ({
+        s: countOf(block, "btn-success"),
+        p: countOf(block, "btn-prompt"),
+        e: countOf(block, "btn-error")
+      }));
+      localStorage.setItem("aba_counts_v2", JSON.stringify(perBlock));
     }
 
     function loadProgress() {
-      const counts = JSON.parse(localStorage.getItem("aba_counts") || "[]");
-      document.querySelectorAll(".count").forEach((item, index) => {
-        if (counts[index] != null) {
-          item.textContent = counts[index];
+      let perBlock = JSON.parse(localStorage.getItem("aba_counts_v2") || "null");
+
+      // Миграция старого формата: плоский массив в старом порядке кнопок
+      // (успех, подсказка, ошибка) на каждый блок.
+      if (!perBlock) {
+        const legacy = JSON.parse(localStorage.getItem("aba_counts") || "[]");
+        if (legacy.length) {
+          perBlock = [];
+          for (let i = 0; i + 2 < legacy.length; i += 3) {
+            perBlock.push({
+              s: Number(legacy[i]) || 0,
+              p: Number(legacy[i + 1]) || 0,
+              e: Number(legacy[i + 2]) || 0
+            });
+          }
+          localStorage.setItem("aba_counts_v2", JSON.stringify(perBlock));
+          localStorage.removeItem("aba_counts");
         }
-      });
+      }
+
+      if (Array.isArray(perBlock)) {
+        document.querySelectorAll(".block").forEach((block, index) => {
+          const saved = perBlock[index];
+          if (!saved) return;
+          const map = { "btn-success": saved.s, "btn-prompt": saved.p, "btn-error": saved.e };
+          Object.entries(map).forEach(([cls, value]) => {
+            const btn = block.querySelector(`.${cls}`);
+            if (btn && value != null) {
+              btn.nextElementSibling.textContent = String(value);
+            }
+          });
+        });
+      }
       updatePercentages();
       updatePromptDetailsUI();
-      refreshSingleCounts();
     }
 
     function undoLastAction() {
@@ -1365,7 +1523,6 @@
 
       updatePercentages();
       saveProgress();
-      refreshSingleCounts();
       if (!undoStack.length) {
         undoBanner.style.display = "none";
       }
@@ -1387,7 +1544,7 @@
       });
       // Показываем ребёнка и дату, чтобы поймать «вчерашнюю» дату или чужого
       // ребёнка ДО отправки (session_date сам не сбрасывается).
-      const child = (localStorage.getItem("child_name") || "").trim() || "не указан";
+      const child = getActiveChildLabel() || (localStorage.getItem("child_name") || "").trim() || "не указан";
       const summary = document.getElementById("confirm-summary");
       summary.textContent =
         `Ребёнок: ${child}. Дата сессии: ${getSessionDateForHistory()}. ` +
@@ -1437,10 +1594,10 @@
         const protocolPromptDetails = [];
 
         Array.from(protocolContainer.querySelectorAll(".block")).forEach((block) => {
-          const name = block.querySelector(".goal-label").textContent.trim();
-          const counts = Array.from(block.querySelectorAll(".count")).map((item) => Number(item.textContent) || 0);
-          const total = counts.reduce((sum, value) => sum + value, 0);
-          const percent = total ? Math.round((counts[0] / total) * 100) : null;
+          const name = block.dataset.goalName || block.querySelector(".goal-label").textContent.trim();
+          const success = countOf(block, "btn-success");
+          const total = success + countOf(block, "btn-prompt") + countOf(block, "btn-error");
+          const percent = total ? Math.round((success / total) * 100) : null;
           const globalIndex = allBlocks.indexOf(block);
           const promptText = compactPrompt(promptDetails[globalIndex]);
           const responses = Array.isArray(responseLog[globalIndex]) ? responseLog[globalIndex] : [];
@@ -1519,7 +1676,7 @@
             suppressNextClick = false;
             return;
           }
-          // Короткое нажатие 🤝: обобщённая подсказка. Теперь пишем её и в разбивку.
+          // Короткое нажатие P: обобщённая подсказка. Теперь пишем её и в разбивку.
           registerGenericPrompt(btn);
         });
       });
@@ -1557,11 +1714,6 @@
       details[blockIndex][code] = (details[blockIndex][code] || 0) + 1;
       setSavedPromptDetails(details);
       updatePromptDetailsUI();
-      refreshSingleCounts();
-      const activeBlock = document.querySelector(".block.goal-active");
-      if (activeBlock && activeBlock === block) {
-        flashFeedback(block, "🤝");
-      }
       currentPromptTarget = null;
     }
 
@@ -1591,8 +1743,8 @@
       if (single) {
         renderSingleUI();
       } else {
-        // Убираем жестовые зоны и служебные элементы режима C.
-        document.querySelectorAll(".gesture-zone, .today-counts, .goal-position").forEach((el) => el.remove());
+        // Убираем служебные элементы режима C.
+        document.querySelectorAll(".goal-position").forEach((el) => el.remove());
         document.querySelectorAll(".goal-active, .proto-active").forEach((el) => {
           el.classList.remove("goal-active", "proto-active");
         });
@@ -1607,7 +1759,7 @@
 
       blocks.forEach((b) => b.classList.remove("goal-active"));
       document.querySelectorAll(".protocol-container").forEach((p) => p.classList.remove("proto-active"));
-      document.querySelectorAll(".gesture-zone, .today-counts, .goal-position").forEach((el) => el.remove());
+      document.querySelectorAll(".goal-position").forEach((el) => el.remove());
 
       const block = blocks[activeGoalIndex];
       block.classList.add("goal-active");
@@ -1622,24 +1774,6 @@
       posBadge.textContent = `цель ${posInProto} из ${blocksInProto.length}`;
       proto.querySelector(".protocol-header").appendChild(posBadge);
 
-      // Жестовая зона после названия цели.
-      const zone = document.createElement("div");
-      zone.className = "gesture-zone";
-      zone.innerHTML =
-        '<span class="gz-left">← ➖</span>' +
-        '<span>зона жеста</span>' +
-        '<span class="gz-right">✅ →</span>' +
-        '<span class="gz-down">↓ 🤝</span>';
-      block.querySelector(".goal-label").after(zone);
-
-      // Строка «Сегодня: x / y / z» из скрытых счётчиков.
-      const counts = Array.from(block.querySelectorAll(".count")).map((c) => c.textContent);
-      const today = document.createElement("div");
-      today.className = "today-counts";
-      today.textContent = `Сегодня: ${counts.join(" / ")}`;
-      zone.after(today);
-
-      attachGesture(zone, block);
       updateSingleNav(blocks.length);
     }
 
@@ -1656,100 +1790,6 @@
       if (next < 0 || next >= total) return;
       activeGoalIndex = next;
       renderSingleUI();
-    }
-
-    function refreshSingleCounts() {
-      if (getViewMode() !== "single") return;
-      const block = document.querySelector(".block.goal-active");
-      if (!block) return;
-      const todayEl = block.querySelector(".today-counts");
-      if (!todayEl) return;
-      const counts = Array.from(block.querySelectorAll(".count")).map((c) => c.textContent);
-      todayEl.textContent = `Сегодня: ${counts.join(" / ")}`;
-    }
-
-    function flashFeedback(block, symbol) {
-      const zone = block.querySelector(".gesture-zone");
-      if (!zone) return;
-      const flash = document.createElement("div");
-      flash.className = "gesture-flash";
-      flash.textContent = symbol;
-      zone.appendChild(flash);
-      if (navigator.vibrate) navigator.vibrate(30);
-      requestAnimationFrame(() => {
-        flash.style.opacity = "0";
-      });
-      setTimeout(() => flash.remove(), 500);
-    }
-
-    // Жесты: вправо ✅, влево ➖, вниз 🤝 (обычная), удержание — меню типа.
-    // Порог 70px и доминирование оси 1.5x — чтобы смазанные касания
-    // не записывались как ответы.
-    function attachGesture(zone, block) {
-      let startX = 0;
-      let startY = 0;
-      let holdTimer = null;
-      let moved = false;
-      let holdFired = false;
-
-      const successBtn = block.querySelector(".btn-success");
-      const promptBtn = block.querySelector(".btn-prompt");
-      const errorBtn = block.querySelector(".btn-error");
-
-      zone.addEventListener("pointerdown", (e) => {
-        if (document.body.classList.contains("editing")) return;
-        startX = e.clientX;
-        startY = e.clientY;
-        moved = false;
-        holdFired = false;
-        zone.setPointerCapture(e.pointerId);
-        holdTimer = setTimeout(() => {
-          if (!moved) {
-            holdFired = true;
-            currentPromptTarget = promptBtn;
-            promptModal.style.display = "flex";
-            if (navigator.vibrate) navigator.vibrate(15);
-          }
-        }, 550);
-      });
-
-      zone.addEventListener("pointermove", (e) => {
-        if (Math.abs(e.clientX - startX) > 10 || Math.abs(e.clientY - startY) > 10) {
-          moved = true;
-          clearTimeout(holdTimer);
-        }
-      });
-
-      const cancel = () => {
-        clearTimeout(holdTimer);
-      };
-      zone.addEventListener("pointercancel", cancel);
-      zone.addEventListener("pointerleave", cancel);
-
-      zone.addEventListener("pointerup", (e) => {
-        clearTimeout(holdTimer);
-        if (holdFired || document.body.classList.contains("editing")) return;
-
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        const T = 70;
-
-        if (Math.abs(dx) >= T && Math.abs(dx) > Math.abs(dy) * 1.5) {
-          if (dx > 0) {
-            increment(successBtn, "+");
-            flashFeedback(block, "✅");
-          } else {
-            increment(errorBtn, "-");
-            flashFeedback(block, "➖");
-          }
-          refreshSingleCounts();
-        } else if (dy >= T && Math.abs(dy) > Math.abs(dx) * 1.5) {
-          registerGenericPrompt(promptBtn);
-          flashFeedback(block, "🤝");
-          refreshSingleCounts();
-        }
-        // Короткие/диагональные движения игнорируются намеренно.
-      });
     }
 
     undoBanner.onclick = () => {
@@ -1798,5 +1838,7 @@
       });
     }
   </script>
+  <script src="timer.js"></script>
+  <script src="tabbar.js"></script>
 </body>
 </html>
