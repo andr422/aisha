@@ -87,13 +87,15 @@
     }
 
     .menu-drop {
-      position: absolute;
-      right: 0;
-      top: calc(100% + 6px);
+      /* Координаты выставляет wireMenu() с прижимом к краям экрана:
+         на узких экранах кнопка ⋮ может оказаться у левого края,
+         и жёсткое right:0 уводило меню за экран. */
+      position: fixed;
       background: var(--card);
       border-radius: 12px;
       box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
       min-width: 230px;
+      max-width: calc(100vw - 16px);
       padding: 6px;
       z-index: 1200;
     }
@@ -2089,7 +2091,18 @@ ${body || "<p>Нет данных за период.</p>"}
 
       btn.onclick = (e) => {
         e.stopPropagation();
-        drop.hidden = !drop.hidden;
+        if (drop.hidden) {
+          drop.hidden = false;
+          // Позиционируем под кнопкой, правым краем к ней, но не даём
+          // выйти за пределы экрана (минимум 8px от краёв).
+          const r = btn.getBoundingClientRect();
+          const w = drop.offsetWidth;
+          const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
+          drop.style.left = `${left}px`;
+          drop.style.top = `${r.bottom + 6}px`;
+        } else {
+          drop.hidden = true;
+        }
         btn.setAttribute("aria-expanded", String(!drop.hidden));
       };
 

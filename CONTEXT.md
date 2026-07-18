@@ -94,7 +94,7 @@ PWA для ежедневного сбора ABA-данных тераписта
 ## PWA
 manifest.json, sw.js (network-first страницы, cache-first статика, POST не
 перехватывается). APP_SHELL включает tabbar.js и timer.js.
-CACHE_NAME сейчас v12 — ПОДНИМАТЬ ПРИ ЛЮБОЙ ПРАВКЕ HTML/JS.
+CACHE_NAME сейчас v13 — ПОДНИМАТЬ ПРИ ЛЮБОЙ ПРАВКЕ HTML/JS.
 Шрифты в APP_SHELL НЕ добавлять (addAll упадёт целиком, если файлов нет);
 они кэшируются рантаймом.
 
