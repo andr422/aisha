@@ -75,6 +75,64 @@
       margin-bottom: 16px;
     }
 
+    /* Меню «⋮» в шапке: вторичные действия (вид, графики, экспорт). */
+    .menu-wrap {
+      position: relative;
+    }
+
+    #menuBtn {
+      font-size: 20px;
+      line-height: 1;
+      padding: 8px 12px;
+    }
+
+    .menu-drop {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+      min-width: 230px;
+      padding: 6px;
+      z-index: 1200;
+    }
+
+    .menu-drop[hidden] {
+      display: none;
+    }
+
+    .menu-drop button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 12px 14px;
+      border: none;
+      background: none;
+      font-size: 15px;
+      color: var(--text);
+      border-radius: 8px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .menu-drop button:active {
+      background: #eef1f4;
+    }
+
+    .goal-chart {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    }
+
+    .goal-chart-name {
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
     /* Индикатор активного ребёнка (переключение — на сводной). */
     .active-child {
       text-align: center;
@@ -547,9 +605,17 @@
       </div>
       <div class="controls-right">
         <span id="queueStatus" style="display:none;align-self:center;font-size:13px;color:var(--prompt-ink);font-weight:bold;"></span>
-        <button id="viewModeBtn" class="btn btn-secondary">Вид: список</button>
         <button id="undoBtn" class="btn btn-secondary">Отменить действие</button>
         <button id="sendBtn" class="btn btn-danger">Отправить данные</button>
+        <div class="menu-wrap">
+          <button id="menuBtn" class="btn btn-secondary" type="button" aria-label="Меню" aria-expanded="false">⋮</button>
+          <div id="menuDrop" class="menu-drop" hidden>
+            <button id="viewModeBtn" type="button">Вид: список</button>
+            <button id="menuCharts" type="button">📊 Графики</button>
+            <button id="menuCsv" type="button">⬇ Экспорт (CSV)</button>
+            <button id="menuReport" type="button">⬇ Отчёт с графиками</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1302,6 +1368,12 @@
         return;
       }
 
+      // Контейнер графиков (управляется из меню «⋮» в шапке).
+      const chartsBox = document.createElement("div");
+      chartsBox.className = "charts-box";
+      historyContainer.append(chartsBox);
+      if (chartsVisible) renderCharts(chartsBox);
+
       if (history.length > visibleHistory.length) {
         const note = document.createElement("p");
         note.style.cssText = "text-align:center;color:var(--muted);font-size:13px;";
@@ -1355,6 +1427,204 @@
         section.append(table);
         historyContainer.append(section);
       }
+    }
+
+    // === Экспорт истории замеров в CSV ===
+    // Длинный формат (строка = цель в сессии) — удобно для сводных таблиц.
+    // Имена целей берутся из текущих настроек, как и в renderHistory:
+    // позиции в истории мигрируют при смене целей, поэтому совпадают.
+    function buildHistoryCsv() {
+      const history = getHistory();
+      const protocolsCount = getProtocolsCount();
+      const rows = [["Дата", "Протокол", "Цель", "Процент", "Подсказки"]];
+
+      history.forEach((session) => {
+        for (let i = 1; i <= protocolsCount; i += 1) {
+          const title = localStorage.getItem(`protocol${i}_title`) || `Протокол ${i}`;
+          getSelectedGoalIds(i).forEach((goalId, rowIndex) => {
+            const percent = session.data[i - 1]?.[rowIndex];
+            // Пустые замеры (в сессии по этой цели не работали) не выгружаем.
+            if (percent == null) return;
+            const goal = localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`;
+            const prompts = session.promptDetails?.[i - 1]?.[rowIndex] || "";
+            rows.push([session.date, title, goal, `${percent}%`, prompts]);
+          });
+        }
+      });
+
+      // Разделитель ";" и кавычки — чтобы русский Excel открывал двойным кликом.
+      const escapeCell = (value) => `"${String(value).replace(/"/g, '""')}"`;
+      return rows.map((row) => row.map(escapeCell).join(";")).join("\r\n");
+    }
+
+    // === Графики динамики ===
+    // Общие данные для раздела «Графики» и HTML-отчёта: по каждому протоколу —
+    // цели с точками {date, value} по всем сессиям истории (null-замеры
+    // пропущены). Имена целей — из текущих настроек, позиции мигрируют.
+    function collectChartData() {
+      const history = getHistory();
+      const protocols = [];
+      const count = getProtocolsCount();
+      for (let i = 1; i <= count; i += 1) {
+        const goals = [];
+        getSelectedGoalIds(i).forEach((goalId, rowIndex) => {
+          const points = [];
+          history.forEach((session) => {
+            const value = session.data[i - 1]?.[rowIndex];
+            if (value != null) points.push({ date: session.date, value });
+          });
+          if (points.length) {
+            goals.push({ name: localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`, points });
+          }
+        });
+        if (goals.length) {
+          protocols.push({ title: localStorage.getItem(`protocol${i}_title`) || `Протокол ${i}`, goals });
+        }
+      }
+      return protocols;
+    }
+
+    // SVG-график одной цели: шкала 0–100%, пунктирные пороги 80/50,
+    // точки окрашены теми же порогами, что спарклайн и процент.
+    function buildChartSvg(points) {
+      const W = 640, H = 190;
+      const padL = 34, padR = 10, padT = 12, padB = 26;
+      const plotW = W - padL - padR;
+      const plotH = H - padT - padB;
+      const n = points.length;
+      const x = (i) => padL + (n === 1 ? plotW / 2 : (i * plotW) / (n - 1));
+      const y = (v) => padT + ((100 - v) * plotH) / 100;
+      const dotColor = (v) => (v >= 80 ? "#0e7490" : v >= 50 ? "#8a6a14" : "#b4552d");
+
+      let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block">`;
+      [0, 50, 80, 100].forEach((v) => {
+        const yy = y(v).toFixed(1);
+        const dash = v === 50 || v === 80 ? ' stroke-dasharray="4 4"' : "";
+        const col = v === 80 ? "#0e7490" : v === 50 ? "#8a6a14" : "#d9d5c9";
+        svg += `<line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}" stroke="${col}" stroke-width="1"${dash} opacity="0.6"/>`;
+        svg += `<text x="${padL - 6}" y="${Number(yy) + 3.5}" text-anchor="end" font-size="11" fill="#667085">${v}</text>`;
+      });
+      if (n > 1) {
+        const path = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(" ");
+        svg += `<path d="${path}" fill="none" stroke="#0f6b7a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+      }
+      points.forEach((p, i) => {
+        svg += `<circle cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="4.5" fill="${dotColor(p.value)}"/>`;
+      });
+      // Подписи дат: первая, средняя и последняя.
+      const labelIdx = [...new Set(n < 3 ? [0, n - 1] : [0, Math.floor((n - 1) / 2), n - 1])];
+      labelIdx.forEach((i) => {
+        const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
+        const ax = i === 0 ? padL : i === n - 1 ? W - padR : x(i).toFixed(1);
+        svg += `<text x="${ax}" y="${H - 8}" text-anchor="${anchor}" font-size="11" fill="#667085">${points[i].date}</text>`;
+      });
+      svg += "</svg>";
+      return svg;
+    }
+
+    // Раздел «Графики» в приложении (рисуется по требованию).
+    let chartsVisible = false;
+
+    function renderCharts(container) {
+      container.innerHTML = "";
+      const data = collectChartData();
+      if (!data.length) {
+        container.innerHTML = '<p style="text-align:center;color:var(--muted);">Пока нет замеров для графиков.</p>';
+        return;
+      }
+      data.forEach((proto) => {
+        const h = document.createElement("h3");
+        h.textContent = proto.title;
+        container.append(h);
+        proto.goals.forEach((goal) => {
+          const wrap = document.createElement("div");
+          wrap.className = "goal-chart";
+          const label = document.createElement("div");
+          label.className = "goal-chart-name";
+          label.textContent = goal.name;
+          const chart = document.createElement("div");
+          chart.innerHTML = buildChartSvg(goal.points);
+          wrap.append(label, chart);
+          container.append(wrap);
+        });
+      });
+    }
+
+    // === HTML-отчёт с графиками (самодостаточный файл для родителей/супервизора) ===
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function buildReportHtml() {
+      const data = collectChartData();
+      const history = getHistory();
+      const child = getActiveChildLabel() || "—";
+      const period = history.length ? `${history[0].date} — ${history[history.length - 1].date}` : "—";
+      const today = new Date().toLocaleDateString("ru-RU");
+      let body = "";
+      data.forEach((proto) => {
+        body += `<h2>${escapeHtml(proto.title)}</h2>`;
+        proto.goals.forEach((goal) => {
+          const last = goal.points[goal.points.length - 1].value;
+          body +=
+            `<div class="goal"><div class="goal-name">${escapeHtml(goal.name)} ` +
+            `<span class="goal-meta">замеров: ${goal.points.length}, последний: ${last}%</span></div>` +
+            buildChartSvg(goal.points) + `</div>`;
+        });
+      });
+      return `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ABA-отчёт: ${escapeHtml(child)}</title><style>
+  body{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;max-width:760px;margin:0 auto;padding:24px 16px;color:#1f2933;background:#faf9f5}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:#667085;font-size:14px;margin-bottom:16px}
+  .legend{font-size:12px;color:#667085;margin-bottom:20px}
+  h2{font-size:18px;margin:28px 0 8px;border-bottom:2px solid #e5e2d9;padding-bottom:4px}
+  .goal{background:#fff;border:1px solid #e5e2d9;border-radius:10px;padding:12px 14px;margin-bottom:14px}
+  .goal-name{font-weight:600;margin-bottom:8px}
+  .goal-meta{color:#667085;font-weight:400;font-size:13px}
+</style></head><body>
+<h1>ABA-отчёт: ${escapeHtml(child)}</h1>
+<div class="sub">Период: ${period} · Сформирован: ${today}</div>
+<div class="legend">Процент самостоятельных реакций по сессиям. Пунктирные линии — пороги 80% (критерий освоения) и 50%.</div>
+${body || "<p>Нет данных за период.</p>"}
+</body></html>`;
+    }
+
+    // Общее скачивание файла (CSV/HTML).
+    function downloadFile(content, mime, filename) {
+      const blob = new Blob([content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function safeChildLabel() {
+      return (getActiveChildLabel() || "ребёнок").replace(/[^\wа-яА-ЯёЁ.-]+/g, "_");
+    }
+
+    function exportHistoryReport() {
+      if (!getHistory().length) {
+        showToast("История пуста — нечего выгружать.");
+        return;
+      }
+      const stamp = new Date().toISOString().split("T")[0];
+      downloadFile(buildReportHtml(), "text/html;charset=utf-8", `aba_отчёт_${safeChildLabel()}_${stamp}.html`);
+      showToast("Отчёт с графиками выгружен.");
+    }
+
+    function exportHistoryCsv() {
+      if (!getHistory().length) {
+        showToast("История пуста — нечего выгружать.");
+        return;
+      }
+      const stamp = new Date().toISOString().split("T")[0];
+      // BOM, иначе Excel прочитает кириллицу кракозябрами.
+      downloadFile("﻿" + buildHistoryCsv(), "text/csv;charset=utf-8", `aba_история_${safeChildLabel()}_${stamp}.csv`);
+      showToast(`История выгружена: ${getHistory().length} сессий.`);
     }
 
     // Итоги сессии идут через очередь. Возвращаем промис записи в очередь —
@@ -1792,6 +2062,53 @@
       renderSingleUI();
     }
 
+    // === Меню «⋮» в шапке ===
+    function closeMenu() {
+      const drop = document.getElementById("menuDrop");
+      drop.hidden = true;
+      document.getElementById("menuBtn").setAttribute("aria-expanded", "false");
+    }
+
+    function toggleChartsFromMenu() {
+      if (!getHistory().length) {
+        showToast("Пока нет замеров для графиков.");
+        return;
+      }
+      chartsVisible = !chartsVisible;
+      document.getElementById("menuCharts").textContent = chartsVisible ? "📊 Скрыть графики" : "📊 Графики";
+      renderHistory();
+      if (chartsVisible) {
+        const box = document.querySelector(".charts-box");
+        if (box) box.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
+    function wireMenu() {
+      const btn = document.getElementById("menuBtn");
+      const drop = document.getElementById("menuDrop");
+
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        drop.hidden = !drop.hidden;
+        btn.setAttribute("aria-expanded", String(!drop.hidden));
+      };
+
+      // Любой пункт меню закрывает его после действия.
+      drop.addEventListener("click", () => closeMenu());
+      document.getElementById("menuCharts").addEventListener("click", toggleChartsFromMenu);
+      document.getElementById("menuCsv").addEventListener("click", exportHistoryCsv);
+      document.getElementById("menuReport").addEventListener("click", exportHistoryReport);
+      // «Вид: список/по одной» навешивается в DOMContentLoaded (viewModeBtn).
+
+      // Клик мимо меню и Esc — закрыть.
+      document.addEventListener("click", (e) => {
+        if (!drop.hidden && !e.target.closest(".menu-wrap")) closeMenu();
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeMenu();
+      });
+    }
+
     undoBanner.onclick = () => {
       undoLastAction();
     };
@@ -1800,6 +2117,7 @@
       modeSlider.oninput = toggleMode;
       document.getElementById("undoBtn").onclick = undoLastAction;
       document.getElementById("viewModeBtn").onclick = toggleViewMode;
+      wireMenu();
       document.getElementById("prevGoalBtn").onclick = () => moveGoal(-1);
       document.getElementById("nextGoalBtn").onclick = () => moveGoal(1);
       sendBtn.onclick = openConfirmModal;
