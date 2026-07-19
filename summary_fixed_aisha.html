@@ -281,7 +281,9 @@
       function isChildDataKey(key) {
         return (
           /^protocol\d+_/.test(key) ||
+          /^abc_/.test(key) ||
           key === "aba_counts" ||
+          key === "aba_counts_v2" ||
           key === "aba_prompt_details" ||
           key === "aba_response_log" ||
           key === sessionKey ||
@@ -350,6 +352,12 @@
       // Есть ли у текущего ребёнка несданные данные сессии (ненулевые счётчики)?
       function hasUnsentData() {
         try {
+          // Новый формат: aba_counts_v2 — [{s,p,e}] на блок.
+          const v2 = JSON.parse(localStorage.getItem("aba_counts_v2") || "null");
+          if (Array.isArray(v2)) {
+            return v2.some((b) => b && (Number(b.s) || 0) + (Number(b.p) || 0) + (Number(b.e) || 0) > 0);
+          }
+          // Старый формат: плоский массив чисел.
           const counts = JSON.parse(localStorage.getItem("aba_counts") || "[]");
           return counts.some((c) => Number(c) > 0);
         } catch {

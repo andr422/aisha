@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ABC — запись поведения</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0d6efd" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <style>
+    @font-face {
+      font-family: "Unbounded";
+      src: url("fonts/Unbounded.woff2") format("woff2");
+      font-weight: 400 900;
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: "Onest";
+      src: url("fonts/Onest.woff2") format("woff2");
+      font-weight: 300 800;
+      font-display: swap;
+    }
+
+    :root {
+      --bg: #f3f2ed;
+      --card: #ffffff;
+      --text: #1f2933;
+      --muted: #667085;
+      --accent: #0e7490;
+      --line: #e5e2d9;
+      --danger: #b4552d;
+      --font-display: "Unbounded", system-ui, sans-serif;
+      --font-body: "Onest", -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: var(--font-body);
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    h2 {
+      text-align: center;
+      font-family: var(--font-display);
+      font-weight: 700;
+    }
+
+    .active-child {
+      text-align: center;
+      font-weight: bold;
+      color: var(--accent);
+      margin-bottom: 12px;
+      min-height: 20px;
+    }
+
+    .active-child:empty {
+      display: none;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    #queueStatus {
+      font-size: 13px;
+      color: #8a6a14;
+      font-weight: bold;
+    }
+
+    .btn {
+      padding: 8px 14px;
+      font-size: 14px;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      touch-action: manipulation;
+      background: #6c757d;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+    }
+
+    .section-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin: 16px 0 8px;
+    }
+
+    .section-label:first-child {
+      margin-top: 0;
+    }
+
+    .time-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .time-row input {
+      font-size: 18px;
+      padding: 8px 10px;
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      font-family: var(--font-body);
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      padding: 10px 14px;
+      border-radius: 20px;
+      border: 1.5px solid #d5d1c4;
+      background: #fff;
+      font-size: 15px;
+      font-family: var(--font-body);
+      color: var(--text);
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .chip.sel {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .chip.custom {
+      border-style: dashed;
+      color: var(--muted);
+    }
+
+    .chip.custom.sel {
+      border-style: solid;
+      color: #fff;
+    }
+
+    .save-btn {
+      display: block;
+      width: 100%;
+      margin-top: 20px;
+      padding: 16px;
+      font-size: 17px;
+      font-weight: 700;
+      font-family: var(--font-body);
+      border: none;
+      border-radius: 12px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      touch-action: manipulation;
+      box-shadow: 0 3px 0 #0a5566;
+    }
+
+    .save-btn:active {
+      transform: translateY(3px);
+      box-shadow: none;
+    }
+
+    /* Настройка списков. */
+    #settingsBox label {
+      display: block;
+      font-weight: 600;
+      margin: 12px 0 4px;
+    }
+
+    #settingsBox textarea {
+      width: 100%;
+      min-height: 96px;
+      font-size: 15px;
+      font-family: var(--font-body);
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 10px;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* Журнал. */
+    .log-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      background: var(--card);
+      border-radius: 12px;
+      padding: 10px 14px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .log-item .when {
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .log-item .del {
+      border: none;
+      background: none;
+      color: var(--muted);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 2px 6px;
+      touch-action: manipulation;
+    }
+
+    .empty-note {
+      text-align: center;
+      color: var(--muted);
+    }
+
+    #toast {
+      position: fixed;
+      bottom: 96px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1f2933;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      z-index: 1100;
+      max-width: 90%;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h2>ABC — запись поведения</h2>
+    <div id="activeChild" class="active-child"></div>
+
+    <div class="topbar">
+      <span id="queueStatus" style="display:none;"></span>
+      <button id="settingsBtn" class="btn" type="button">⚙ Списки</button>
+      <button id="csvBtn" class="btn" type="button">⬇ Экспорт (CSV)</button>
+    </div>
+
+    <div id="settingsBox" class="card" hidden>
+      <div class="hint">По одному варианту на строку. Списки свои у каждого ребёнка.</div>
+      <label for="setB">Поведения (B)</label>
+      <textarea id="setB"></textarea>
+      <label for="setA">Что предшествовало (A)</label>
+      <textarea id="setA"></textarea>
+      <label for="setC">Что последовало (C)</label>
+      <textarea id="setC"></textarea>
+    </div>
+
+    <div class="card">
+      <div class="section-label">Время эпизода</div>
+      <div class="time-row">
+        <input type="time" id="epTime" />
+        <button class="btn" type="button" id="nowBtn">сейчас</button>
+      </div>
+
+      <div class="section-label">Поведение (B) — обязательно</div>
+      <div class="chips" id="chipsB"></div>
+
+      <div class="section-label">Что предшествовало (A)</div>
+      <div class="chips" id="chipsA"></div>
+
+      <div class="section-label">Что последовало (C)</div>
+      <div class="chips" id="chipsC"></div>
+
+      <div class="section-label">Длительность</div>
+      <div class="chips" id="chipsD"></div>
+
+      <div class="section-label">Интенсивность</div>
+      <div class="chips" id="chipsI"></div>
+
+      <button class="save-btn" type="button" id="saveBtn">Записать эпизод</button>
+    </div>
+
+    <h2>Журнал</h2>
+    <div id="logList"></div>
+
+    <div id="toast"></div>
+  </div>
+
+  <script>
+    // Тот же приёмник, что и у итогов сессий: скрипт различает пакеты по
+    // полю type ("abc" → лист «ABC» в таблице ребёнка).
+    const SESSION_ENDPOINT = "https://script.google.com/macros/s/AKfycbyb6efAwZyi1qLvFr4AeOZhXYvdM70xICSXdRI2eAeK7vdqdpa0jHEK4g7EGxJQhfD4cw/exec";
+
+    // Ключи данных — с префиксом abc_, входят в рабочий набор ребёнка
+    // (сводная сворачивает их при переключении профиля, см. isChildDataKey).
+    const KEY_A = "abc_antecedents";
+    const KEY_B = "abc_behaviors";
+    const KEY_C = "abc_consequences";
+    const KEY_LOG = "abc_log";
+    const LOG_LIMIT = 500;
+
+    const DEFAULT_A = [
+      "Предъявлено требование",
+      "Отказано в желаемом",
+      "Переход между активностями",
+      "Убрали предмет/игрушку",
+      "Мало внимания",
+      "Без видимой причины"
+    ];
+    const DEFAULT_B = [
+      "Крик",
+      "Плач",
+      "Падение на пол",
+      "Агрессия к другим",
+      "Самоагрессия",
+      "Бросание предметов"
+    ];
+    const DEFAULT_C = [
+      "Игнорирование",
+      "Переключение внимания",
+      "Требование снято / перерыв",
+      "Требование доведено до конца",
+      "Дали желаемое",
+      "Удержание / блокировка"
+    ];
+    const DURATIONS = ["до 10 с", "10–30 с", "30 с – 1 мин", "1–5 мин", "более 5 мин"];
+    const INTENSITIES = ["низкая", "средняя", "высокая"];
+
+    const toast = document.getElementById("toast");
+
+    // === Профили детей (как на ежедневной странице) ===
+    const CHILDREN_KEY = "aba_children";
+    const ACTIVE_CHILD_KEY = "aba_active_child";
+
+    function getChildren() {
+      try {
+        const list = JSON.parse(localStorage.getItem(CHILDREN_KEY) || "[]");
+        return Array.isArray(list) ? list : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function getActiveChildId() {
+      return localStorage.getItem(ACTIVE_CHILD_KEY) || "";
+    }
+
+    function getActiveChildLabel() {
+      const found = getChildren().find((c) => c.id === getActiveChildId());
+      return found ? found.label : "";
+    }
+
+    function ensureActiveChild() {
+      let children = getChildren();
+      if (!children.length) {
+        const label = (localStorage.getItem("child_name") || "").trim() || "Ребёнок 1";
+        const id = "c" + Date.now().toString(36);
+        children = [{ id, label }];
+        localStorage.setItem(CHILDREN_KEY, JSON.stringify(children));
+        localStorage.setItem(ACTIVE_CHILD_KEY, id);
+        localStorage.setItem("child_name", label);
+        return;
+      }
+      if (!children.some((c) => c.id === getActiveChildId())) {
+        localStorage.setItem(ACTIVE_CHILD_KEY, children[0].id);
+        localStorage.setItem("child_name", children[0].label);
+      }
+    }
+
+    function renderActiveChild() {
+      const el = document.getElementById("activeChild");
+      const label = getActiveChildLabel();
+      el.textContent = label ? `Ребёнок: ${label}` : "";
+    }
+
+    // === Очередь отправки (общая IndexedDB aba_db/send_queue) ===
+    const IDB_NAME = "aba_db";
+    const IDB_STORE = "history";
+    const IDB_QUEUE = "send_queue";
+    let dbPromise = null;
+    let flushing = false;
+
+    function openDB() {
+      if (dbPromise) return dbPromise;
+      dbPromise = new Promise((resolve, reject) => {
+        if (!("indexedDB" in window)) {
+          reject(new Error("IndexedDB не поддерживается"));
+          return;
+        }
+        const req = indexedDB.open(IDB_NAME, 2);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(IDB_STORE)) {
+            db.createObjectStore(IDB_STORE);
+          }
+          if (!db.objectStoreNames.contains(IDB_QUEUE)) {
+            db.createObjectStore(IDB_QUEUE, { keyPath: "id", autoIncrement: true });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      return dbPromise;
+    }
+
+    function queueAdd(item) {
+      if (window.__abaIdbFailed) {
+        return fetch(item.endpoint, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(item.payload)
+        }).catch((err) => console.error("Прямая отправка не удалась:", err));
+      }
+      return openDB()
+        .then(
+          (db) =>
+            new Promise((resolve, reject) => {
+              const tx = db.transaction(IDB_QUEUE, "readwrite");
+              tx.objectStore(IDB_QUEUE).add({ ...item, createdAt: Date.now() });
+              tx.oncomplete = () => resolve();
+              tx.onerror = () => reject(tx.error);
+            })
+        )
+        .catch((err) => {
+          // Сбой IndexedDB — деградация до прямой отправки, как на ежедневной.
+          window.__abaIdbFailed = true;
+          console.error("Очередь недоступна, шлю напрямую:", err);
+          return queueAdd(item);
+        });
+    }
+
+    function queueGetAll() {
+      return openDB().then(
+        (db) =>
+          new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_QUEUE, "readonly");
+            const req = tx.objectStore(IDB_QUEUE).getAll();
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => reject(req.error);
+          })
+      );
+    }
+
+    function queueDelete(id) {
+      return openDB().then(
+        (db) =>
+          new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_QUEUE, "readwrite");
+            tx.objectStore(IDB_QUEUE).delete(id);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          })
+      );
+    }
+
+    async function flushQueue() {
+      if (flushing || window.__abaIdbFailed) return;
+      flushing = true;
+      try {
+        const items = await queueGetAll();
+        for (const item of items) {
+          try {
+            await fetch(item.endpoint, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(item.payload)
+            });
+            await queueDelete(item.id);
+          } catch (err) {
+            console.warn("Отправка не удалась, элемент остаётся в очереди:", err);
+            break;
+          }
+        }
+      } catch (err) {
+        console.warn("Очередь отправки недоступна:", err);
+      } finally {
+        flushing = false;
+        updateQueueIndicator();
+      }
+    }
+
+    async function updateQueueIndicator() {
+      let n = 0;
+      try {
+        n = (await queueGetAll()).length;
+      } catch {}
+      const el = document.getElementById("queueStatus");
+      if (n > 0) {
+        el.style.display = "inline";
+        el.textContent = `⏳ Ожидают отправки: ${n}`;
+      } else {
+        el.style.display = "none";
+      }
+    }
+
+    function showToast(message, ms = 3000) {
+      toast.textContent = message;
+      toast.style.display = "block";
+      clearTimeout(window.toastTimeout);
+      window.toastTimeout = setTimeout(() => {
+        toast.style.display = "none";
+      }, ms);
+    }
+
+    // === Списки чипов (настройки, по ребёнку) ===
+    function getList(key, defaults) {
+      try {
+        const list = JSON.parse(localStorage.getItem(key) || "null");
+        return Array.isArray(list) && list.length ? list : defaults;
+      } catch {
+        return defaults;
+      }
+    }
+
+    function setList(key, lines) {
+      const list = lines.split("\n").map((s) => s.trim()).filter(Boolean);
+      if (list.length) {
+        localStorage.setItem(key, JSON.stringify(list));
+      } else {
+        localStorage.removeItem(key); // пусто = вернуться к дефолтам
+      }
+    }
+
+    // === Чипы эпизода ===
+    // selected: значение группы или null. Кастомный чип «✎ другое» хранит
+    // введённый текст прямо в подписи.
+    const selected = { A: null, B: null, C: null, D: null, I: null };
+
+    function renderChipGroup(containerId, values, group, allowCustom) {
+      const box = document.getElementById(containerId);
+      box.innerHTML = "";
+      selected[group] = null;
+
+      const make = (text, isCustom) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "chip" + (isCustom ? " custom" : "");
+        chip.textContent = text;
+        chip.onclick = () => {
+          if (isCustom && !chip.classList.contains("sel")) {
+            const val = (window.prompt("Свой вариант:") || "").trim();
+            if (!val) return;
+            chip.textContent = val;
+          }
+          const wasSelected = chip.classList.contains("sel");
+          box.querySelectorAll(".chip").forEach((c) => c.classList.remove("sel"));
+          if (wasSelected) {
+            selected[group] = null;
+            if (isCustom) chip.textContent = "✎ вписать";
+          } else {
+            chip.classList.add("sel");
+            selected[group] = chip.textContent;
+          }
+        };
+        box.append(chip);
+      };
+
+      // «Вписать» — первым: свой вариант нужен чаще, чем кажется.
+      if (allowCustom) make("✎ вписать", true);
+      values.forEach((v) => make(v, false));
+    }
+
+    function renderAllChips() {
+      renderChipGroup("chipsB", getList(KEY_B, DEFAULT_B), "B", true);
+      renderChipGroup("chipsA", getList(KEY_A, DEFAULT_A), "A", true);
+      renderChipGroup("chipsC", getList(KEY_C, DEFAULT_C), "C", true);
+      renderChipGroup("chipsD", DURATIONS, "D", false);
+      renderChipGroup("chipsI", INTENSITIES, "I", false);
+    }
+
+    function setTimeNow() {
+      const now = new Date();
+      document.getElementById("epTime").value =
+        `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    }
+
+    // === Журнал эпизодов (локально, по ребёнку) ===
+    function getLog() {
+      try {
+        const log = JSON.parse(localStorage.getItem(KEY_LOG) || "[]");
+        return Array.isArray(log) ? log : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function setLog(log) {
+      localStorage.setItem(KEY_LOG, JSON.stringify(log.slice(-LOG_LIMIT)));
+    }
+
+    function renderLog() {
+      const box = document.getElementById("logList");
+      box.innerHTML = "";
+      const log = getLog();
+      if (!log.length) {
+        box.innerHTML = '<p class="empty-note">Эпизодов пока нет.</p>';
+        return;
+      }
+
+      const recent = log.slice(-30).reverse();
+      recent.forEach((ep) => {
+        const item = document.createElement("div");
+        item.className = "log-item";
+
+        const text = document.createElement("div");
+        const when = document.createElement("span");
+        when.className = "when";
+        when.textContent = `${ep.date} ${ep.time}`;
+        const details = document.createElement("span");
+        const parts = [` · ${ep.behavior}`];
+        if (ep.antecedent !== "—") parts.push(`A: ${ep.antecedent}`);
+        if (ep.consequence !== "—") parts.push(`C: ${ep.consequence}`);
+        if (ep.duration !== "—") parts.push(ep.duration);
+        if (ep.intensity !== "—") parts.push(ep.intensity);
+        details.textContent = parts.join(" · ");
+        text.append(when, details);
+
+        const del = document.createElement("button");
+        del.className = "del";
+        del.type = "button";
+        del.textContent = "✕";
+        del.onclick = () => {
+          const ok = window.confirm(
+            "Удалить эпизод из журнала на этом устройстве? " +
+              "Из таблицы Google уже отправленная запись не удалится."
+          );
+          if (!ok) return;
+          setLog(getLog().filter((e) => e.id !== ep.id));
+          renderLog();
+        };
+
+        item.append(text, del);
+        box.append(item);
+      });
+
+      if (log.length > recent.length) {
+        const note = document.createElement("p");
+        note.className = "empty-note";
+        note.style.fontSize = "13px";
+        note.textContent = `Показаны последние ${recent.length} из ${log.length}. Полный список — в экспорте.`;
+        box.append(note);
+      }
+    }
+
+    // === Запись эпизода ===
+    function saveEpisode() {
+      if (!selected.B) {
+        showToast("Выберите поведение (B) — без него эпизод не записывается.");
+        return;
+      }
+      const timeInput = document.getElementById("epTime");
+      if (!timeInput.value) setTimeNow();
+      const now = new Date();
+      const ep = {
+        id: "e" + Date.now().toString(36),
+        date: now.toLocaleDateString("ru-RU"),
+        time: timeInput.value,
+        behavior: selected.B,
+        antecedent: selected.A || "—",
+        consequence: selected.C || "—",
+        duration: selected.D || "—",
+        intensity: selected.I || "—"
+      };
+
+      const log = getLog();
+      log.push(ep);
+      setLog(log);
+
+      queueAdd({
+        endpoint: SESSION_ENDPOINT,
+        payload: {
+          type: "abc",
+          child: getActiveChildLabel() || (localStorage.getItem("child_name") || ""),
+          date: ep.date,
+          time: ep.time,
+          behavior: ep.behavior,
+          antecedent: ep.antecedent,
+          consequence: ep.consequence,
+          duration: ep.duration,
+          intensity: ep.intensity
+        }
+      }).then(() => {
+        updateQueueIndicator();
+        flushQueue();
+      });
+
+      renderAllChips();
+      setTimeNow();
+      renderLog();
+      showToast(`Эпизод записан: ${ep.behavior}, ${ep.time}.`);
+    }
+
+    // === Экспорт журнала в CSV (как у истории замеров) ===
+    function exportCsv() {
+      const log = getLog();
+      if (!log.length) {
+        showToast("Журнал пуст — нечего выгружать.");
+        return;
+      }
+      const rows = [["Дата", "Время", "Поведение", "A (перед)", "C (после)", "Длительность", "Интенсивность"]];
+      log.forEach((ep) => {
+        rows.push([ep.date, ep.time, ep.behavior, ep.antecedent, ep.consequence, ep.duration, ep.intensity]);
+      });
+      const escapeCell = (v) => `"${String(v).replace(/"/g, '""')}"`;
+      const csv = rows.map((r) => r.map(escapeCell).join(";")).join("\r\n");
+      const label = (getActiveChildLabel() || "ребёнок").replace(/[^\wа-яА-ЯёЁ.-]+/g, "_");
+      const stamp = new Date().toISOString().split("T")[0];
+      const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `abc_${label}_${stamp}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`Выгружено эпизодов: ${log.length}.`);
+    }
+
+    // === Настройка списков ===
+    function wireSettings() {
+      const box = document.getElementById("settingsBox");
+      document.getElementById("settingsBtn").onclick = () => {
+        box.hidden = !box.hidden;
+        if (!box.hidden) {
+          document.getElementById("setA").value = getList(KEY_A, DEFAULT_A).join("\n");
+          document.getElementById("setB").value = getList(KEY_B, DEFAULT_B).join("\n");
+          document.getElementById("setC").value = getList(KEY_C, DEFAULT_C).join("\n");
+        }
+      };
+      document.getElementById("setA").onchange = (e) => { setList(KEY_A, e.target.value); renderAllChips(); };
+      document.getElementById("setB").onchange = (e) => { setList(KEY_B, e.target.value); renderAllChips(); };
+      document.getElementById("setC").onchange = (e) => { setList(KEY_C, e.target.value); renderAllChips(); };
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      ensureActiveChild();
+      renderActiveChild();
+      renderAllChips();
+      setTimeNow();
+      renderLog();
+      wireSettings();
+      document.getElementById("saveBtn").onclick = saveEpisode;
+      document.getElementById("nowBtn").onclick = setTimeNow;
+      document.getElementById("csvBtn").onclick = exportCsv;
+
+      updateQueueIndicator();
+      flushQueue();
+      window.addEventListener("online", () => flushQueue());
+      setInterval(() => {
+        if (navigator.onLine) flushQueue();
+      }, 60000);
+    });
+
+    // Регистрация service worker для офлайн-работы (PWA).
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(console.error);
+      });
+    }
+  </script>
+  <script src="timer.js"></script>
+  <script src="tabbar.js"></script>
+</body>
+</html>

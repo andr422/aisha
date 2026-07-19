@@ -11,6 +11,12 @@
         '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 12l2 2 4-4"/></svg>'
     },
     {
+      href: "abc.html",
+      label: "ABC",
+      icon:
+        '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="3"/><text x="12" y="15.5" text-anchor="middle" font-size="8" font-weight="800" fill="currentColor" stroke="none" font-family="inherit">ABC</text></svg>'
+    },
+    {
       // Вкладка-действие: не ссылка, а вызов функции (визуальный таймер).
       action: () => window.abaTimer && window.abaTimer.open(),
       label: "Таймер",
@@ -25,7 +31,6 @@
     }
     // Примеры на будущее:
     // { href: "frequency.html", label: "Частота", icon: '<svg ...>...</svg>' },
-    // { href: "abc.html", label: "ABC", icon: '<svg ...>...</svg>' },
   ];
 
   // Стили самодостаточны (без зависимостей от переменных страницы),
