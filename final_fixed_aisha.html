@@ -1068,34 +1068,45 @@
       setSavedResponseLog(next);
     }
 
+    // Номера целей протокола, у которых есть непустое имя (цели теперь
+    // добавляются на сводной динамически, без фиксированной десятки).
+    function existingGoalIds(protocolIndex) {
+      const re = new RegExp(`^protocol${protocolIndex}_goal(\\d+)$`);
+      return Object.keys(localStorage)
+        .map((key) => (key.match(re) || [])[1])
+        .filter(Boolean)
+        .map(Number)
+        .filter((j) => (localStorage.getItem(`protocol${protocolIndex}_goal${j}`) || "").trim())
+        .sort((a, b) => a - b);
+    }
+
     function openGoalSelector(idx) {
       window.currentProtocol = idx;
       const options = document.getElementById("goal-options");
       const saved = JSON.parse(localStorage.getItem(`protocol${idx}_selectedGoals`) || "[]");
       options.innerHTML = "";
 
-      for (let j = 1; j <= 10; j += 1) {
-        const text = localStorage.getItem(`protocol${idx}_goal${j}`) || `Цель ${j}`;
+      const goalIds = existingGoalIds(idx);
+      if (!goalIds.length) {
+        options.innerHTML = '<p style="color:var(--muted);">У протокола пока нет целей — добавьте их на странице «Настройка».</p>';
+      }
+
+      goalIds.forEach((j) => {
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.id = `protocol${idx}_goal_option_${j}`;
         checkbox.value = String(j);
         checkbox.checked = saved.includes(j);
-        checkbox.onchange = () => {
-          if (options.querySelectorAll("input:checked").length > 10) {
-            checkbox.checked = false;
-          }
-        };
 
         const label = document.createElement("label");
         label.htmlFor = checkbox.id;
-        label.textContent = text;
+        label.textContent = localStorage.getItem(`protocol${idx}_goal${j}`);
 
         const row = document.createElement("div");
         row.className = "goal-option";
         row.append(checkbox, label);
         options.append(row);
-      }
+      });
 
       document.getElementById("goal-selector-modal").style.display = "flex";
     }
@@ -1206,8 +1217,11 @@
     }
 
     function getSelectedGoalIds(protocolIndex) {
-      const selected = JSON.parse(localStorage.getItem(`protocol${protocolIndex}_selectedGoals`) || "[]");
-      return selected.length ? selected : [1, 2, 3];
+      const existing = existingGoalIds(protocolIndex);
+      const selected = JSON.parse(localStorage.getItem(`protocol${protocolIndex}_selectedGoals`) || "[]")
+        .filter((j) => existing.includes(j)); // удалённые на сводной цели выпадают
+      // Без явного выбора показываем все существующие цели протокола.
+      return selected.length ? selected : existing;
     }
 
     // Спарклайн прогресса: SVG-линия по процентам последних сессий.

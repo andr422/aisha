@@ -143,20 +143,55 @@
       background: #fff;
     }
 
-    .protocol-toggle {
-      display: inline-block;
-      margin-bottom: 8px;
-      padding: 6px 12px;
-      font-size: 14px;
-      border: none;
-      border-radius: 6px;
-      background: #6c757d;
-      color: #fff;
-      cursor: pointer;
+    /* Шапка карточки протокола: заголовок + удаление. */
+    .protocol-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
     }
 
-    .goals-wrap.collapsed {
-      display: none;
+    .protocol-head h3 {
+      margin: 0 0 8px;
+      text-align: left;
+    }
+
+    .del-proto {
+      border: none;
+      background: none;
+      color: #a3261b;
+      font-size: 13px;
+      cursor: pointer;
+      padding: 4px 6px;
+      touch-action: manipulation;
+    }
+
+    /* Кнопки «Добавить протокол» / «Добавить цель». */
+    .add-btn {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      border: 2px dashed #93a7e4;
+      background: #f6f8ff;
+      color: #1a3ea9;
+      border-radius: 8px;
+      cursor: pointer;
+      touch-action: manipulation;
+      margin-bottom: 24px;
+    }
+
+    .add-btn.add-goal {
+      border-color: #ccc;
+      background: #fafafa;
+      color: #555;
+      margin: 8px 0 0;
+    }
+
+    .add-btn:active {
+      background: #e8edfb;
     }
 
     .protocol-title {
@@ -261,7 +296,6 @@
 
   <script>
     (function () {
-      const summaryCount = 15;
       const sessionKey = "session_date";
       const nameKey = "child_name";
       const container = document.getElementById("protocolsContainer");
@@ -282,6 +316,7 @@
         return (
           /^protocol\d+_/.test(key) ||
           /^abc_/.test(key) ||
+          key === "aba_archive" ||
           key === "aba_counts" ||
           key === "aba_counts_v2" ||
           key === "aba_prompt_details" ||
@@ -615,128 +650,325 @@
         renderChildSelector();
       }
 
+      // Все номера протоколов, встречающиеся в ключах (включая пустые).
+      function allProtocolKeyIndices() {
+        const set = new Set();
+        Object.keys(localStorage).forEach((key) => {
+          const m = key.match(/^protocol(\d+)_/);
+          if (m) set.add(Number(m[1]));
+        });
+        return [...set].sort((a, b) => a - b);
+      }
+
+      // Номера целей протокола i, встречающиеся в ключах.
+      function allGoalKeyIndices(i) {
+        const set = new Set();
+        const re = new RegExp(`^protocol${i}_goal(\\d+)`);
+        Object.keys(localStorage).forEach((key) => {
+          const m = key.match(re);
+          if (m) set.add(Number(m[1]));
+        });
+        return [...set].sort((a, b) => a - b);
+      }
+
       // Есть ли у протокола хоть какие-то заполненные данные?
       function protocolHasData(i) {
         if ((localStorage.getItem(`protocol${i}_title`) || "").trim()) return true;
-        for (let j = 1; j <= 10; j += 1) {
-          if ((localStorage.getItem(`protocol${i}_goal${j}`) || "").trim()) return true;
-        }
-        return false;
+        return allGoalKeyIndices(i).some((j) => goalHasData(i, j));
       }
 
-      // Построить 10 групп целей для протокола i (вызывается лениво — при
-      // первом раскрытии, чтобы не рисовать 150 групп сразу, #5).
-      function buildGoals(i) {
-        const wrap = document.createElement("div");
-        wrap.className = "goals-wrap";
-        for (let j = 1; j <= 10; j += 1) {
-          const group = document.createElement("div");
-          group.className = "goal-group";
+      // Есть ли данные у конкретной цели (имя, даты, генерализация)?
+      function goalHasData(i, j) {
+        return Boolean(
+          (localStorage.getItem(`protocol${i}_goal${j}`) || "").trim() ||
+            localStorage.getItem(`protocol${i}_goal${j}_introDate`) ||
+            localStorage.getItem(`protocol${i}_goal${j}_masteryDate`) ||
+            (localStorage.getItem(`protocol${i}_goal${j}_genStim`) || "").trim() ||
+            (localStorage.getItem(`protocol${i}_goal${j}_genPlace`) || "").trim() ||
+            (localStorage.getItem(`protocol${i}_goal${j}_genPeople`) || "").trim()
+        );
+      }
 
-          const rowMain = document.createElement("div");
-          rowMain.className = "row";
+      // Одна группа полей цели j протокола i.
+      function buildGoalGroup(i, j) {
+        const group = document.createElement("div");
+        group.className = "goal-group";
+        group.dataset.goalIndex = j;
 
-          const goal = document.createElement("input");
-          goal.type = "text";
-          goal.className = "goal-input";
-          goal.dataset.protocolIndex = i;
-          goal.dataset.goalIndex = j;
-          goal.placeholder = `Цель ${j}`;
-          goal.value = localStorage.getItem(`protocol${i}_goal${j}`) || "";
-          rowMain.appendChild(goal);
+        const rowMain = document.createElement("div");
+        rowMain.className = "row";
 
-          const intro = document.createElement("input");
-          intro.type = "date";
-          intro.className = "intro-date";
-          intro.dataset.protocolIndex = i;
-          intro.dataset.goalIndex = j;
-          intro.value = localStorage.getItem(`protocol${i}_goal${j}_introDate`) || "";
-          rowMain.appendChild(intro);
+        const goal = document.createElement("input");
+        goal.type = "text";
+        goal.className = "goal-input";
+        goal.dataset.protocolIndex = i;
+        goal.dataset.goalIndex = j;
+        goal.placeholder = `Цель ${j}`;
+        goal.value = localStorage.getItem(`protocol${i}_goal${j}`) || "";
+        rowMain.appendChild(goal);
 
-          const mastery = document.createElement("input");
-          mastery.type = "date";
-          mastery.className = "mastery-date";
-          mastery.dataset.protocolIndex = i;
-          mastery.dataset.goalIndex = j;
-          mastery.value = localStorage.getItem(`protocol${i}_goal${j}_masteryDate`) || "";
-          rowMain.appendChild(mastery);
+        const intro = document.createElement("input");
+        intro.type = "date";
+        intro.className = "intro-date";
+        intro.dataset.protocolIndex = i;
+        intro.dataset.goalIndex = j;
+        intro.value = localStorage.getItem(`protocol${i}_goal${j}_introDate`) || "";
+        rowMain.appendChild(intro);
 
-          group.appendChild(rowMain);
+        const mastery = document.createElement("input");
+        mastery.type = "date";
+        mastery.className = "mastery-date";
+        mastery.dataset.protocolIndex = i;
+        mastery.dataset.goalIndex = j;
+        mastery.value = localStorage.getItem(`protocol${i}_goal${j}_masteryDate`) || "";
+        rowMain.appendChild(mastery);
 
-          const rowGen = document.createElement("div");
-          rowGen.className = "row";
-          ["Stim", "Place", "People"].forEach((type) => {
-            const input = document.createElement("input");
-            input.type = "text";
-            input.className = "gen-input";
-            input.dataset.protocolIndex = i;
-            input.dataset.goalIndex = j;
-            input.dataset.genType = type.toLowerCase();
-            input.placeholder = `Генерализация: ${type.toLowerCase()}`;
-            input.value = localStorage.getItem(`protocol${i}_goal${j}_gen${type}`) || "";
-            rowGen.appendChild(input);
-          });
+        group.appendChild(rowMain);
 
-          group.appendChild(rowGen);
-          wrap.appendChild(group);
-        }
-        return wrap;
+        const rowGen = document.createElement("div");
+        rowGen.className = "row";
+        ["Stim", "Place", "People"].forEach((type) => {
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "gen-input";
+          input.dataset.protocolIndex = i;
+          input.dataset.goalIndex = j;
+          input.dataset.genType = type.toLowerCase();
+          input.placeholder = `Генерализация: ${type.toLowerCase()}`;
+          input.value = localStorage.getItem(`protocol${i}_goal${j}_gen${type}`) || "";
+          rowGen.appendChild(input);
+        });
+
+        group.appendChild(rowGen);
+        return group;
+      }
+
+      // Карточка протокола: заголовок с кнопкой удаления, название и только
+      // СУЩЕСТВУЮЩИЕ цели + кнопка «Добавить цель» (без ограничения числа).
+      // Пустая добавленная цель исчезнет при перерисовке, если в неё ничего
+      // не вписали, — это нормально.
+      function buildProtocolCard(i) {
+        const protocol = document.createElement("div");
+        protocol.className = "protocol-container";
+        protocol.dataset.index = i;
+
+        const head = document.createElement("div");
+        head.className = "protocol-head";
+        const titleHeading = document.createElement("h3");
+        titleHeading.textContent = `Протокол ${i}`;
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "del-proto";
+        delBtn.textContent = "🗑 Удалить протокол";
+        delBtn.onclick = () => deleteProtocol(i);
+        head.append(titleHeading, delBtn);
+        protocol.appendChild(head);
+
+        const titleInput = document.createElement("input");
+        titleInput.type = "text";
+        titleInput.className = "protocol-title";
+        titleInput.dataset.index = i;
+        titleInput.placeholder = `Название протокола ${i}`;
+        titleInput.value = localStorage.getItem(`protocol${i}_title`) || "";
+        protocol.appendChild(titleInput);
+
+        const goalsWrap = document.createElement("div");
+        goalsWrap.className = "goals-wrap";
+        allGoalKeyIndices(i).forEach((j) => {
+          if (goalHasData(i, j)) {
+            goalsWrap.appendChild(buildGoalGroup(i, j));
+          }
+        });
+        protocol.appendChild(goalsWrap);
+
+        const addGoalBtn = document.createElement("button");
+        addGoalBtn.type = "button";
+        addGoalBtn.className = "add-btn add-goal";
+        addGoalBtn.textContent = "＋ Добавить цель";
+        addGoalBtn.onclick = () => {
+          // Следующий свободный номер: больше всех существующих и показанных.
+          const inDom = Array.from(goalsWrap.querySelectorAll(".goal-group")).map((g) => Number(g.dataset.goalIndex));
+          const next = Math.max(0, ...allGoalKeyIndices(i), ...inDom) + 1;
+          const group = buildGoalGroup(i, next);
+          goalsWrap.appendChild(group);
+          group.querySelector(".goal-input").focus();
+        };
+        protocol.appendChild(addGoalBtn);
+
+        return protocol;
       }
 
       function renderSummary() {
         const fragment = document.createDocumentFragment();
-        for (let i = 1; i <= summaryCount; i += 1) {
-          const protocol = document.createElement("div");
-          protocol.className = "protocol-container";
-          protocol.dataset.index = i;
+        allProtocolKeyIndices().forEach((i) => {
+          if (protocolHasData(i)) {
+            fragment.appendChild(buildProtocolCard(i));
+          }
+        });
 
-          const titleHeading = document.createElement("h3");
-          titleHeading.textContent = `Протокол ${i}`;
-          protocol.appendChild(titleHeading);
+        const addProtocolBtn = document.createElement("button");
+        addProtocolBtn.type = "button";
+        addProtocolBtn.id = "addProtocolBtn";
+        addProtocolBtn.className = "add-btn";
+        addProtocolBtn.textContent = "＋ Добавить протокол";
+        addProtocolBtn.onclick = () => {
+          const inDom = Array.from(container.querySelectorAll(".protocol-container")).map((c) => Number(c.dataset.index));
+          const next = Math.max(0, ...allProtocolKeyIndices(), ...inDom) + 1;
+          const card = buildProtocolCard(next);
+          container.insertBefore(card, addProtocolBtn);
+          card.scrollIntoView({ behavior: "smooth", block: "center" });
+          card.querySelector(".protocol-title").focus();
+        };
 
-          const titleInput = document.createElement("input");
-          titleInput.type = "text";
-          titleInput.className = "protocol-title";
-          titleInput.dataset.index = i;
-          titleInput.placeholder = `Название протокола ${i}`;
-          titleInput.value = localStorage.getItem(`protocol${i}_title`) || "";
-          protocol.appendChild(titleInput);
-
-          // Кнопка раскрытия целей. Протоколы с данными раскрыты сразу,
-          // пустые — свёрнуты (и их 10 целей не строятся, пока не нужны).
-          const hasData = protocolHasData(i);
-          const toggle = document.createElement("button");
-          toggle.type = "button";
-          toggle.className = "protocol-toggle";
-
-          let goalsBuilt = false;
-          let goalsEl = null;
-
-          const setExpanded = (expanded) => {
-            if (expanded && !goalsBuilt) {
-              goalsEl = buildGoals(i);
-              protocol.appendChild(goalsEl);
-              goalsBuilt = true;
-            }
-            if (goalsEl) {
-              goalsEl.classList.toggle("collapsed", !expanded);
-            }
-            toggle.textContent = expanded ? "▲ Свернуть цели" : "▼ Показать/изменить цели";
-          };
-
-          toggle.onclick = () => {
-            const currentlyExpanded = goalsBuilt && goalsEl && !goalsEl.classList.contains("collapsed");
-            setExpanded(!currentlyExpanded);
-          };
-
-          protocol.appendChild(toggle);
-          setExpanded(hasData);
-
-          fragment.appendChild(protocol);
-        }
-
+        fragment.appendChild(addProtocolBtn);
         container.innerHTML = "";
         container.appendChild(fragment);
+      }
+
+      // === Удаление протокола с перенумерацией ===
+      // История замеров хранится по позиции протокола (session.data[i-1]),
+      // поэтому «дыру» оставлять нельзя: удаляем колонку истории протокола k
+      // и сдвигаем все протоколы выше на номер вниз (k+1 → k и т.д.).
+      // Несданные счётчики текущей сессии позиционные — сбрасываем их
+      // (пользователь предупреждён в подтверждении).
+
+      function removeKeysOfProtocol(i) {
+        Object.keys(localStorage)
+          .filter((key) => key.startsWith(`protocol${i}_`))
+          .forEach((key) => localStorage.removeItem(key));
+      }
+
+      function moveProtocolKeys(from, to) {
+        Object.keys(localStorage).forEach((key) => {
+          const m = key.match(/^protocol(\d+)_(.+)$/);
+          if (m && Number(m[1]) === from) {
+            localStorage.setItem(`protocol${to}_${m[2]}`, localStorage.getItem(key));
+            localStorage.removeItem(key);
+          }
+        });
+      }
+
+      // === Локальный архив удалённых протоколов (по ребёнку) ===
+      const ARCHIVE_KEY = "aba_archive";
+      const ARCHIVE_LIMIT = 50;
+
+      function getArchive() {
+        try {
+          const list = JSON.parse(localStorage.getItem(ARCHIVE_KEY) || "[]");
+          return Array.isArray(list) ? list : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function setArchive(list) {
+        localStorage.setItem(ARCHIVE_KEY, JSON.stringify(list.slice(-ARCHIVE_LIMIT)));
+      }
+
+      // Имена целей протокола в том порядке, в каком они лежат в истории
+      // (порядок выбранных целей; без выбора — все существующие).
+      function goalNamesForHistory(k) {
+        const existing = allGoalKeyIndices(k).filter(
+          (j) => (localStorage.getItem(`protocol${k}_goal${j}`) || "").trim()
+        );
+        let selected = [];
+        try {
+          selected = JSON.parse(localStorage.getItem(`protocol${k}_selectedGoals`) || "[]")
+            .filter((j) => existing.includes(j));
+        } catch {}
+        const ids = selected.length ? selected : existing;
+        return ids.map((j) => localStorage.getItem(`protocol${k}_goal${j}`) || `Цель ${j}`);
+      }
+
+      // Убрать колонку протокола k из истории активного ребёнка
+      // (IndexedDB aba_db/history, ключ aba_history::<id>; плюс фолбэк-копия
+      // в localStorage, если она есть). Если передан entry — вырезанная
+      // колонка складывается в него (для архива).
+      function spliceHistoryProtocol(k, entry) {
+        const histKey = "aba_history::" + getActiveChildId();
+        let captured = false;
+
+        const spliceSessions = (history) => {
+          history.forEach((s) => {
+            if (entry && !captured && Array.isArray(s.data) && s.data.length >= k) {
+              const values = s.data[k - 1];
+              if (Array.isArray(values) && values.some((v) => v != null)) {
+                entry.sessions.push({
+                  date: s.date,
+                  values,
+                  prompts: (s.promptDetails && s.promptDetails[k - 1]) || []
+                });
+              }
+            }
+            if (Array.isArray(s.data) && s.data.length >= k) s.data.splice(k - 1, 1);
+            if (Array.isArray(s.promptDetails) && s.promptDetails.length >= k) s.promptDetails.splice(k - 1, 1);
+          });
+          if (entry) captured = true; // не дублировать при втором проходе (ls+idb)
+          return history;
+        };
+
+        try {
+          const ls = localStorage.getItem(histKey);
+          if (ls) localStorage.setItem(histKey, JSON.stringify(spliceSessions(JSON.parse(ls))));
+        } catch {}
+
+        return new Promise((resolve) => {
+          let settled = false;
+          const done = () => { if (!settled) { settled = true; resolve(); } };
+          try {
+            const req = indexedDB.open("aba_db", 2);
+            req.onsuccess = () => {
+              const db = req.result;
+              let tx;
+              try {
+                tx = db.transaction("history", "readwrite");
+              } catch {
+                db.close();
+                done();
+                return;
+              }
+              const store = tx.objectStore("history");
+              const getReq = store.get(histKey);
+              getReq.onsuccess = () => {
+                if (Array.isArray(getReq.result)) {
+                  store.put(spliceSessions(getReq.result), histKey);
+                }
+              };
+              tx.oncomplete = () => { db.close(); done(); };
+              tx.onerror = () => { db.close(); done(); };
+            };
+            req.onerror = done;
+            setTimeout(done, 3000); // страховка от зависания
+          } catch {
+            done();
+          }
+        });
+      }
+
+      async function deleteProtocol(k) {
+        const title = (localStorage.getItem(`protocol${k}_title`) || "").trim() || `Протокол ${k}`;
+        const ok = window.confirm(
+          `Удалить протокол «${title}» со всеми целями и его историей замеров ` +
+            `на этом устройстве? Несданные счётчики текущей сессии будут сброшены ` +
+            `(отправьте данные перед удалением, если они нужны). ` +
+            `Уже отправленное в Google-таблицу не удаляется. Действие необратимо.`
+        );
+        if (!ok) return;
+
+        const maxI = Math.max(k, ...allProtocolKeyIndices());
+        removeKeysOfProtocol(k);
+        for (let i = k + 1; i <= maxI; i += 1) {
+          moveProtocolKeys(i, i - 1);
+        }
+        await spliceHistoryProtocol(k);
+
+        // Несданные позиционные данные текущей сессии после сдвига невалидны.
+        ["aba_counts", "aba_counts_v2", "aba_prompt_details", "aba_response_log"]
+          .forEach((key) => localStorage.removeItem(key));
+
+        renderSummary();
+        updateActiveNotice();
+        showToast(`Протокол «${title}» удалён.`);
       }
 
       function bindEvents() {
@@ -815,14 +1047,10 @@
         const notice = document.getElementById("activeNotice");
         if (!notice) return;
 
-        const titled = [];
-        let maxTitled = 0;
-        for (let i = 1; i <= summaryCount; i += 1) {
-          if ((localStorage.getItem(`protocol${i}_title`) || "").trim()) {
-            titled.push(i);
-            maxTitled = i;
-          }
-        }
+        const titled = allProtocolKeyIndices().filter(
+          (i) => (localStorage.getItem(`protocol${i}_title`) || "").trim()
+        );
+        const maxTitled = titled.length ? titled[titled.length - 1] : 0;
 
         if (!titled.length) {
           notice.className = "active-notice";
