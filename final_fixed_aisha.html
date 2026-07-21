@@ -122,6 +122,18 @@
       background: #eef1f4;
     }
 
+    /* Кнопка просмотра PDF протокола (видна и в режиме «по одной»). */
+    .pdf-open {
+      border: none;
+      background: #eef1f4;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: var(--text);
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
     .goal-chart {
       background: var(--card);
       border-radius: 12px;
@@ -1305,6 +1317,25 @@
         selectBtn.onclick = () => openGoalSelector(i);
         header.append(titleEl, selectBtn);
         wrapper.append(header);
+
+        // Кнопка просмотра PDF протокола (если прикреплён на сводной).
+        // Класс НЕ .btn — в режиме «по одной» кнопки .btn в шапке скрыты,
+        // а PDF терапист может захотеть открыть и там.
+        idbGet(`aba_pdf::${getActiveChildId()}::p${i}`)
+          .then((blob) => {
+            if (!blob) return;
+            const pdfBtn = document.createElement("button");
+            pdfBtn.type = "button";
+            pdfBtn.className = "pdf-open";
+            pdfBtn.textContent = "📄 протокол";
+            pdfBtn.onclick = () => {
+              const url = URL.createObjectURL(blob);
+              window.open(url, "_blank");
+              setTimeout(() => URL.revokeObjectURL(url), 60000);
+            };
+            header.insertBefore(pdfBtn, selectBtn);
+          })
+          .catch(() => {});
 
         selectedGoals.forEach((goalId, rowPos) => {
           const goalName = localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`;

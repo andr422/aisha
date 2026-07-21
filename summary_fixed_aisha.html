@@ -167,6 +167,132 @@
       touch-action: manipulation;
     }
 
+    /* Кнопки PDF в шапке протокола. */
+    .pdf-wrap {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .pdf-btn {
+      border: none;
+      background: #eef1f4;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .pdf-btn.pdf-del {
+      color: #a3261b;
+      padding: 6px 8px;
+    }
+
+    /* Шаблоны протоколов. */
+    .btn-tpl {
+      background: #6c757d;
+    }
+
+    #templatesBox {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+    }
+
+    #templatesBox .hint {
+      font-size: 12px;
+      color: #667085;
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+
+    .tpl-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid #eee;
+      font-size: 14px;
+    }
+
+    .tpl-btns button {
+      border: none;
+      background: #eef1f4;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      margin-left: 6px;
+      touch-action: manipulation;
+    }
+
+    .tpl-btns .tpl-del {
+      color: #a3261b;
+    }
+
+    #tplEditor {
+      width: 100%;
+      min-height: 110px;
+      font-size: 14px;
+      font-family: inherit;
+      border: 1.5px solid #ccc;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin: 10px 0 8px;
+    }
+
+    .tpl-hint:empty {
+      display: none;
+    }
+
+    .add-btn.tpl-apply {
+      border-color: #e0c068;
+      background: #fff8e6;
+      color: #8a6a14;
+      margin: 0 0 12px;
+    }
+
+    /* Архив удалённых протоколов. */
+    .archive-heading {
+      font-size: 15px;
+      color: #667085;
+      text-align: left;
+      margin: 24px 0 8px;
+    }
+
+    .archive-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .archive-btns button {
+      border: none;
+      background: #eef1f4;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      margin-left: 6px;
+      touch-action: manipulation;
+    }
+
+    .archive-btns .archive-del {
+      color: #a3261b;
+    }
+
     /* Кнопки «Добавить протокол» / «Добавить цель». */
     .add-btn {
       display: block;
@@ -269,7 +395,15 @@
   <div class="toolbar">
     <button type="button" class="btn-export" id="exportBtn">⬇ Экспорт настроек</button>
     <button type="button" class="btn-import" id="importBtn">⬆ Импорт настроек</button>
+    <button type="button" class="btn-tpl" id="templatesBtn">📚 Шаблоны</button>
     <input type="file" id="importFile" accept="application/json,.json" style="display:none" />
+  </div>
+
+  <div id="templatesBox" hidden>
+    <div class="hint">Шаблоны протоколов — общие для всех детей. В редакторе: первая строка — название протокола, дальше цели по строкам. Когда название нового протокола совпадёт с шаблоном, появится кнопка «⚡ Подставить цели».</div>
+    <div id="templatesList"></div>
+    <textarea id="tplEditor" placeholder="Название протокола&#10;Цель 1&#10;Цель 2&#10;Цель 3"></textarea>
+    <button type="button" class="btn-export" id="tplSave">Сохранить шаблон</button>
   </div>
 
   <div class="session-info">
@@ -292,6 +426,7 @@
   <div id="activeNotice" class="active-notice"></div>
 
   <div id="protocolsContainer"></div>
+  <div id="archiveBox"></div>
   <div id="toast"></div>
 
   <script>
@@ -464,9 +599,10 @@
         );
         if (!ok) return;
 
-        // Удаляем блок настроек, историю (IndexedDB) и запись из списка.
+        // Удаляем блок настроек, историю, PDF (IndexedDB) и запись из списка.
         localStorage.removeItem("aba_child_" + id);
         await deleteChildHistory(id).catch(() => {});
+        await deleteChildPdfs(id);
         const remaining = getChildren().filter((c) => c.id !== id);
         setChildren(remaining);
 
@@ -550,7 +686,63 @@
         }, ms);
       }
 
-      function exportSettings() {
+      // Blob ↔ строка (data:URL) для переноса PDF внутри JSON.
+      function blobToDataUrl(blob) {
+        return new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result);
+          r.onerror = () => reject(r.error);
+          r.readAsDataURL(blob);
+        });
+      }
+
+      function dataUrlToBlob(dataUrl) {
+        return fetch(dataUrl).then((r) => r.blob());
+      }
+
+      // Все PDF активного ребёнка: { "1": dataURL, "3": dataURL, ... }
+      // (ключи — номера протоколов). Пусто, если файлов нет.
+      async function collectPdfs() {
+        const childId = getActiveChildId();
+        const prefix = `aba_pdf::${childId}::p`;
+        const db = await openHistDB();
+        const entries = await new Promise((resolve) => {
+          const tx = db.transaction("history", "readonly");
+          const store = tx.objectStore("history");
+          const keysReq = store.getAllKeys();
+          keysReq.onsuccess = () => {
+            const keys = (keysReq.result || []).filter(
+              (k) => typeof k === "string" && k.startsWith(prefix)
+            );
+            const out = [];
+            let pending = keys.length;
+            if (!pending) {
+              resolve([]);
+              return;
+            }
+            keys.forEach((k) => {
+              const g = store.get(k);
+              g.onsuccess = () => {
+                out.push([k.slice(prefix.length), g.result]);
+                if (--pending === 0) resolve(out);
+              };
+              g.onerror = () => {
+                if (--pending === 0) resolve(out);
+              };
+            });
+          };
+          keysReq.onerror = () => resolve([]);
+        });
+        db.close();
+
+        const pdfs = {};
+        for (const [num, blob] of entries) {
+          if (blob) pdfs[num] = await blobToDataUrl(blob);
+        }
+        return pdfs;
+      }
+
+      async function exportSettings() {
         const data = {};
         Object.keys(localStorage).forEach((key) => {
           if (isSettingKey(key)) {
@@ -558,14 +750,29 @@
           }
         });
 
+        // Спрашиваем про PDF, только если они есть: файл с ними тяжелее в разы.
+        let pdfs = {};
+        const available = await collectPdfs();
+        if (Object.keys(available).length) {
+          const withPdf = window.confirm(
+            `У протоколов есть прикреплённые PDF (${Object.keys(available).length} шт.). ` +
+              `Включить их в файл настроек? Файл станет заметно больше. ` +
+              `ОК — с PDF, Отмена — только протоколы и цели.`
+          );
+          if (withPdf) pdfs = available;
+        }
+
         const payload = {
           _type: "aba_settings",
-          _version: 1,
+          _version: 2,
           _exportedAt: new Date().toISOString(),
-          data
+          data,
+          pdfs,
+          // Шаблоны протоколов (общие, лёгкие) — кладём всегда.
+          templates: getTemplates()
         };
 
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+        const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         const stamp = new Date().toISOString().split("T")[0];
@@ -575,7 +782,11 @@
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        showToast("Настройки выгружены в файл.");
+        showToast(
+          Object.keys(pdfs).length
+            ? `Настройки и ${Object.keys(pdfs).length} PDF выгружены.`
+            : "Настройки выгружены в файл."
+        );
       }
 
       function importSettings(file) {
@@ -628,14 +839,63 @@
             setChildren(getChildren().map((c) => (c.id === id ? { ...c, label: importedLabel } : c)));
           }
 
-          // Перерисовываем страницу с новыми значениями.
-          initSessionFields();
-          renderSummary();
-          updateActiveNotice();
-          showToast(`Импортировано настроек: ${keys.length}.`);
+          // Шаблоны из файла — домешиваем к имеющимся (совпавшие названия
+          // обновляются), ничего не стираем.
+          if (Array.isArray(payload.templates)) {
+            payload.templates.forEach((t) => {
+              if (t && t.title && Array.isArray(t.goals)) {
+                const goals = t.goals.map(String).map((s) => s.trim()).filter(Boolean);
+                if (goals.length) upsertTemplate(String(t.title), goals);
+              }
+            });
+            renderTemplates();
+          }
+
+          // PDF: заменяем файлы текущего профиля на пришедшие (если они есть).
+          const pdfs = payload.pdfs && typeof payload.pdfs === "object" ? payload.pdfs : {};
+          const pdfNums = Object.keys(pdfs);
+          restoreImportedPdfs(getActiveChildId(), pdfNums.length ? pdfs : null)
+            .catch(() => {})
+            .then(() => {
+              // Перерисовываем страницу с новыми значениями.
+              initSessionFields();
+              renderSummary();
+              updateActiveNotice();
+              showToast(
+                pdfNums.length
+                  ? `Импортировано: ${keys.length} настроек и ${pdfNums.length} PDF.`
+                  : `Импортировано настроек: ${keys.length}.`
+              );
+            });
         };
         reader.onerror = () => showToast("Ошибка чтения файла.", 5000);
         reader.readAsText(file);
+      }
+
+      // Заменить PDF профиля childId: стереть все его файлы и записать пришедшие.
+      // pdfs = { "1": dataURL, ... } или null (тогда просто чистим старые).
+      async function restoreImportedPdfs(childId, pdfs) {
+        await deleteChildPdfs(childId);
+        if (!pdfs) return;
+        for (const num of Object.keys(pdfs)) {
+          try {
+            const blob = await dataUrlToBlob(pdfs[num]);
+            await pdfPutFor(childId, Number(num), blob);
+          } catch {}
+        }
+      }
+
+      // pdfPut для произвольного ребёнка (у pdfPut он всегда активный).
+      function pdfPutFor(childId, i, blob) {
+        return openHistDB().then(
+          (db) =>
+            new Promise((resolve, reject) => {
+              const tx = db.transaction("history", "readwrite");
+              tx.objectStore("history").put(blob, pdfKeyFor(i, childId));
+              tx.oncomplete = () => { db.close(); resolve(); };
+              tx.onerror = () => { db.close(); reject(tx.error); };
+            })
+        );
       }
 
       function initSessionFields() {
@@ -756,12 +1016,99 @@
         head.className = "protocol-head";
         const titleHeading = document.createElement("h3");
         titleHeading.textContent = `Протокол ${i}`;
+
+        // PDF протокола: открыть / прикрепить (заменить) / убрать.
+        const pdfWrap = document.createElement("span");
+        pdfWrap.className = "pdf-wrap";
+        const fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.accept = "application/pdf";
+        fileInput.hidden = true;
+        const openBtn = document.createElement("button");
+        openBtn.type = "button";
+        openBtn.className = "pdf-btn";
+        openBtn.textContent = "📄 Открыть";
+        openBtn.hidden = true;
+        const attachBtn = document.createElement("button");
+        attachBtn.type = "button";
+        attachBtn.className = "pdf-btn";
+        attachBtn.textContent = "📎 PDF";
+        const removePdfBtn = document.createElement("button");
+        removePdfBtn.type = "button";
+        removePdfBtn.className = "pdf-btn pdf-del";
+        removePdfBtn.textContent = "✕";
+        removePdfBtn.title = "Убрать PDF";
+        removePdfBtn.hidden = true;
+
+        const refreshPdfUi = (has) => {
+          openBtn.hidden = !has;
+          removePdfBtn.hidden = !has;
+          attachBtn.textContent = has ? "📎 заменить" : "📎 PDF";
+        };
+        pdfGet(i).then((blob) => refreshPdfUi(Boolean(blob)));
+
+        attachBtn.onclick = () => fileInput.click();
+        fileInput.onchange = () => {
+          const file = fileInput.files && fileInput.files[0];
+          fileInput.value = "";
+          if (!file) return;
+          if (file.size > PDF_MAX_BYTES) {
+            showToast("Файл больше 20 МБ — прикрепите PDF поменьше.", 5000);
+            return;
+          }
+          pdfPut(i, file)
+            .then(() => {
+              refreshPdfUi(true);
+              showToast("PDF прикреплён к протоколу.");
+            })
+            .catch(() => showToast("Не удалось сохранить PDF (хранилище недоступно).", 5000));
+        };
+        openBtn.onclick = () => {
+          pdfGet(i).then((blob) => {
+            if (!blob) {
+              refreshPdfUi(false);
+              return;
+            }
+            openPdfBlob(blob);
+          });
+        };
+        removePdfBtn.onclick = () => {
+          if (!window.confirm("Убрать PDF у этого протокола?")) return;
+          pdfDelete(i).then(() => {
+            refreshPdfUi(false);
+            showToast("PDF убран.");
+          });
+        };
+        // «💾 В шаблоны»: сохранить название+цели протокола в общую библиотеку.
+        const tplSaveBtn = document.createElement("button");
+        tplSaveBtn.type = "button";
+        tplSaveBtn.className = "pdf-btn";
+        tplSaveBtn.textContent = "💾 В шаблоны";
+        tplSaveBtn.onclick = () => {
+          const title = (localStorage.getItem(`protocol${i}_title`) || "").trim();
+          if (!title) {
+            showToast("Сначала впишите название протокола.");
+            return;
+          }
+          const goals = allGoalKeyIndices(i)
+            .map((j) => (localStorage.getItem(`protocol${i}_goal${j}`) || "").trim())
+            .filter(Boolean);
+          if (!goals.length) {
+            showToast("У протокола нет целей — нечего сохранять в шаблон.");
+            return;
+          }
+          upsertTemplate(title, goals);
+          renderTemplates();
+          showToast(`Шаблон «${title}» сохранён (${goals.length} целей).`);
+        };
+        pdfWrap.append(openBtn, attachBtn, removePdfBtn, tplSaveBtn, fileInput);
+
         const delBtn = document.createElement("button");
         delBtn.type = "button";
         delBtn.className = "del-proto";
         delBtn.textContent = "🗑 Удалить протокол";
         delBtn.onclick = () => deleteProtocol(i);
-        head.append(titleHeading, delBtn);
+        head.append(titleHeading, pdfWrap, delBtn);
         protocol.appendChild(head);
 
         const titleInput = document.createElement("input");
@@ -771,6 +1118,11 @@
         titleInput.placeholder = `Название протокола ${i}`;
         titleInput.value = localStorage.getItem(`protocol${i}_title`) || "";
         protocol.appendChild(titleInput);
+
+        // Место для кнопки «⚡ Подставить цели из шаблона».
+        const tplHint = document.createElement("div");
+        tplHint.className = "tpl-hint";
+        protocol.appendChild(tplHint);
 
         const goalsWrap = document.createElement("div");
         goalsWrap.className = "goals-wrap";
@@ -795,6 +1147,7 @@
         };
         protocol.appendChild(addGoalBtn);
 
+        refreshTemplateHint(protocol);
         return protocol;
       }
 
@@ -823,6 +1176,9 @@
         fragment.appendChild(addProtocolBtn);
         container.innerHTML = "";
         container.appendChild(fragment);
+        // Архив живёт под протоколами и зависит от активного ребёнка —
+        // перерисовываем вместе со сводной (смена профиля, импорт, удаление).
+        renderArchive();
       }
 
       // === Удаление протокола с перенумерацией ===
@@ -948,19 +1304,36 @@
       async function deleteProtocol(k) {
         const title = (localStorage.getItem(`protocol${k}_title`) || "").trim() || `Протокол ${k}`;
         const ok = window.confirm(
-          `Удалить протокол «${title}» со всеми целями и его историей замеров ` +
-            `на этом устройстве? Несданные счётчики текущей сессии будут сброшены ` +
-            `(отправьте данные перед удалением, если они нужны). ` +
-            `Уже отправленное в Google-таблицу не удаляется. Действие необратимо.`
+          `Удалить протокол «${title}»? Его история замеров переедет в локальный ` +
+            `архив (внизу этой страницы) — оттуда её можно выгрузить в CSV. ` +
+            `Несданные счётчики текущей сессии будут сброшены (отправьте данные ` +
+            `перед удалением, если они нужны). Уже отправленное в Google-таблицу ` +
+            `не удаляется.`
         );
         if (!ok) return;
 
+        // Заготовка архивной записи: имена целей снимаем ДО удаления ключей.
+        const entry = {
+          archivedAt: new Date().toLocaleDateString("ru-RU"),
+          title,
+          goals: goalNamesForHistory(k),
+          sessions: []
+        };
+
         const maxI = Math.max(k, ...allProtocolKeyIndices());
         removeKeysOfProtocol(k);
+        await pdfDelete(k);
         for (let i = k + 1; i <= maxI; i += 1) {
           moveProtocolKeys(i, i - 1);
+          await pdfMove(i, i - 1); // PDF переезжает вместе с протоколом
         }
-        await spliceHistoryProtocol(k);
+        await spliceHistoryProtocol(k, entry);
+
+        if (entry.sessions.length) {
+          const archive = getArchive();
+          archive.push(entry);
+          setArchive(archive);
+        }
 
         // Несданные позиционные данные текущей сессии после сдвига невалидны.
         ["aba_counts", "aba_counts_v2", "aba_prompt_details", "aba_response_log"]
@@ -968,7 +1341,350 @@
 
         renderSummary();
         updateActiveNotice();
-        showToast(`Протокол «${title}» удалён.`);
+        showToast(
+          entry.sessions.length
+            ? `Протокол «${title}» удалён, история в архиве (${entry.sessions.length} сессий).`
+            : `Протокол «${title}» удалён (истории замеров у него не было).`
+        );
+      }
+
+      // === Библиотека шаблонов протоколов ===
+      // ОБЩАЯ для всех детей (в рабочий набор профиля НЕ входит): список
+      // {title, goals:[...]}. Совпадение названий — без регистра и пробелов.
+      const TEMPLATES_KEY = "aba_templates";
+
+      function getTemplates() {
+        try {
+          const list = JSON.parse(localStorage.getItem(TEMPLATES_KEY) || "[]");
+          return Array.isArray(list) ? list : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function setTemplates(list) {
+        localStorage.setItem(TEMPLATES_KEY, JSON.stringify(list));
+      }
+
+      function normTitle(s) {
+        return String(s || "").trim().toLowerCase();
+      }
+
+      function findTemplate(title) {
+        return getTemplates().find((t) => normTitle(t.title) === normTitle(title)) || null;
+      }
+
+      function upsertTemplate(title, goals) {
+        const list = getTemplates();
+        const idx = list.findIndex((t) => normTitle(t.title) === normTitle(title));
+        const tpl = { title: String(title).trim(), goals };
+        if (idx >= 0) list[idx] = tpl;
+        else list.push(tpl);
+        setTemplates(list);
+      }
+
+      function protocolHasAnyGoalData(i) {
+        return allGoalKeyIndices(i).some((j) => goalHasData(i, j));
+      }
+
+      // Кнопка «⚡ Подставить цели» под названием: только если название
+      // совпало с шаблоном И у протокола ещё нет целей (ничего не перетираем).
+      function refreshTemplateHint(card) {
+        const i = Number(card.dataset.index);
+        const hint = card.querySelector(".tpl-hint");
+        if (!hint) return;
+        hint.innerHTML = "";
+        const title = (card.querySelector(".protocol-title").value || "").trim();
+        if (!title || protocolHasAnyGoalData(i)) return;
+        const tpl = findTemplate(title);
+        if (!tpl || !tpl.goals.length) return;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "add-btn tpl-apply";
+        btn.textContent = `⚡ Подставить цели из шаблона (${tpl.goals.length})`;
+        btn.onclick = () => {
+          if (protocolHasAnyGoalData(i)) {
+            hint.innerHTML = "";
+            return;
+          }
+          tpl.goals.forEach((g, idx) => localStorage.setItem(`protocol${i}_goal${idx + 1}`, g));
+          renderSummary();
+          updateActiveNotice();
+          showToast(`Подставлено целей: ${tpl.goals.length}.`);
+        };
+        hint.append(btn);
+      }
+
+      function refreshAllTemplateHints() {
+        container.querySelectorAll(".protocol-container").forEach(refreshTemplateHint);
+      }
+
+      // Раздел «Шаблоны»: список + текстовый редактор
+      // (первая строка — название, дальше цели по строкам).
+      function renderTemplates() {
+        const list = document.getElementById("templatesList");
+        if (!list) return;
+        list.innerHTML = "";
+        const templates = getTemplates();
+        if (!templates.length) {
+          list.innerHTML = '<p class="hint">Шаблонов пока нет. Сохраните готовый протокол кнопкой «💾 В шаблоны» или впишите ниже.</p>';
+          return;
+        }
+        templates.forEach((tpl, idx) => {
+          const row = document.createElement("div");
+          row.className = "tpl-item";
+          const info = document.createElement("span");
+          info.textContent = `«${tpl.title}» — целей: ${tpl.goals.length}`;
+          const btns = document.createElement("span");
+          btns.className = "tpl-btns";
+          const edit = document.createElement("button");
+          edit.type = "button";
+          edit.textContent = "✎";
+          edit.title = "Редактировать";
+          edit.onclick = () => {
+            document.getElementById("tplEditor").value = [tpl.title, ...tpl.goals].join("\n");
+            document.getElementById("tplEditor").focus();
+          };
+          const del = document.createElement("button");
+          del.type = "button";
+          del.textContent = "✕";
+          del.className = "tpl-del";
+          del.title = "Удалить шаблон";
+          del.onclick = () => {
+            if (!window.confirm(`Удалить шаблон «${tpl.title}»?`)) return;
+            const all = getTemplates();
+            all.splice(idx, 1);
+            setTemplates(all);
+            renderTemplates();
+            refreshAllTemplateHints();
+          };
+          btns.append(edit, del);
+          row.append(info, btns);
+          list.append(row);
+        });
+      }
+
+      function wireTemplates() {
+        document.getElementById("templatesBtn").onclick = () => {
+          const box = document.getElementById("templatesBox");
+          box.hidden = !box.hidden;
+        };
+        document.getElementById("tplSave").onclick = () => {
+          const editor = document.getElementById("tplEditor");
+          const lines = editor.value.split("\n").map((s) => s.trim());
+          const title = (lines.shift() || "").trim();
+          const goals = lines.filter(Boolean);
+          if (!title) {
+            showToast("Первая строка — название протокола.");
+            return;
+          }
+          if (!goals.length) {
+            showToast("Добавьте хотя бы одну цель (со второй строки).");
+            return;
+          }
+          upsertTemplate(title, goals);
+          editor.value = "";
+          renderTemplates();
+          refreshAllTemplateHints();
+          showToast(`Шаблон «${title}» сохранён (${goals.length} целей).`);
+        };
+      }
+
+      // === PDF протоколов ===
+      // Файлы лежат в IndexedDB (стор history, ключ aba_pdf::<childId>::p<i>) —
+      // localStorage для файлов не годится (лимит ~5МБ и раздувание рабочего
+      // набора профиля). PDF по ребёнку и протоколу, в Google не отправляется.
+      const PDF_MAX_BYTES = 20 * 1024 * 1024;
+
+      function openHistDB() {
+        return new Promise((resolve, reject) => {
+          const req = indexedDB.open("aba_db", 2);
+          req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains("history")) db.createObjectStore("history");
+            if (!db.objectStoreNames.contains("send_queue")) {
+              db.createObjectStore("send_queue", { keyPath: "id", autoIncrement: true });
+            }
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      function pdfKeyFor(i, childId) {
+        return `aba_pdf::${childId || getActiveChildId()}::p${i}`;
+      }
+
+      function pdfGet(i) {
+        return openHistDB()
+          .then(
+            (db) =>
+              new Promise((resolve) => {
+                const tx = db.transaction("history", "readonly");
+                const r = tx.objectStore("history").get(pdfKeyFor(i));
+                r.onsuccess = () => resolve(r.result || null);
+                r.onerror = () => resolve(null);
+                tx.oncomplete = () => db.close();
+              })
+          )
+          .catch(() => null);
+      }
+
+      function pdfPut(i, blob) {
+        return openHistDB().then(
+          (db) =>
+            new Promise((resolve, reject) => {
+              const tx = db.transaction("history", "readwrite");
+              tx.objectStore("history").put(blob, pdfKeyFor(i));
+              tx.oncomplete = () => { db.close(); resolve(); };
+              tx.onerror = () => { db.close(); reject(tx.error); };
+            })
+        );
+      }
+
+      function pdfDelete(i) {
+        return openHistDB()
+          .then(
+            (db) =>
+              new Promise((resolve) => {
+                const tx = db.transaction("history", "readwrite");
+                tx.objectStore("history").delete(pdfKeyFor(i));
+                tx.oncomplete = () => { db.close(); resolve(); };
+                tx.onerror = () => { db.close(); resolve(); };
+              })
+          )
+          .catch(() => {});
+      }
+
+      // Переносим PDF при перенумерации протоколов (from → to).
+      function pdfMove(from, to) {
+        return openHistDB()
+          .then(
+            (db) =>
+              new Promise((resolve) => {
+                const tx = db.transaction("history", "readwrite");
+                const store = tx.objectStore("history");
+                const r = store.get(pdfKeyFor(from));
+                r.onsuccess = () => {
+                  if (r.result) {
+                    store.put(r.result, pdfKeyFor(to));
+                    store.delete(pdfKeyFor(from));
+                  }
+                };
+                tx.oncomplete = () => { db.close(); resolve(); };
+                tx.onerror = () => { db.close(); resolve(); };
+              })
+          )
+          .catch(() => {});
+      }
+
+      // Удалить все PDF ребёнка (при удалении профиля).
+      function deleteChildPdfs(childId) {
+        const prefix = `aba_pdf::${childId}::`;
+        return openHistDB()
+          .then(
+            (db) =>
+              new Promise((resolve) => {
+                const tx = db.transaction("history", "readwrite");
+                const store = tx.objectStore("history");
+                const r = store.getAllKeys();
+                r.onsuccess = () => {
+                  (r.result || [])
+                    .filter((key) => typeof key === "string" && key.startsWith(prefix))
+                    .forEach((key) => store.delete(key));
+                };
+                tx.oncomplete = () => { db.close(); resolve(); };
+                tx.onerror = () => { db.close(); resolve(); };
+              })
+          )
+          .catch(() => {});
+      }
+
+      function openPdfBlob(blob) {
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+        // Отзываем позже: вкладке нужно успеть загрузить файл.
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }
+
+      // === Раздел «Архив удалённых протоколов» ===
+      function archiveCsv(entry) {
+        const rows = [["Дата", "Цель", "Процент", "Подсказки"]];
+        entry.sessions.forEach((s) => {
+          entry.goals.forEach((goalName, idx) => {
+            const value = s.values[idx];
+            if (value == null) return;
+            rows.push([s.date, goalName, `${value}%`, (s.prompts && s.prompts[idx]) || ""]);
+          });
+        });
+        const escapeCell = (v) => `"${String(v).replace(/"/g, '""')}"`;
+        return rows.map((r) => r.map(escapeCell).join(";")).join("\r\n");
+      }
+
+      function downloadArchiveCsv(entry) {
+        const stamp = new Date().toISOString().split("T")[0];
+        const safeTitle = entry.title.replace(/[^\wа-яА-ЯёЁ.-]+/g, "_");
+        const blob = new Blob(["﻿" + archiveCsv(entry)], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `aba_архив_${safeTitle}_${stamp}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast(`Архив «${entry.title}» выгружен.`);
+      }
+
+      function renderArchive() {
+        const box = document.getElementById("archiveBox");
+        if (!box) return;
+        box.innerHTML = "";
+        const archive = getArchive();
+        if (!archive.length) return;
+
+        const heading = document.createElement("h3");
+        heading.className = "archive-heading";
+        heading.textContent = `Архив удалённых протоколов (${archive.length})`;
+        box.append(heading);
+
+        archive.slice().reverse().forEach((entry, revIdx) => {
+          const realIdx = archive.length - 1 - revIdx;
+          const row = document.createElement("div");
+          row.className = "archive-item";
+
+          const info = document.createElement("div");
+          const dates = entry.sessions.map((s) => s.date);
+          info.textContent =
+            `«${entry.title}» — сессий: ${entry.sessions.length}` +
+            (dates.length ? ` (${dates[0]} – ${dates[dates.length - 1]})` : "") +
+            `, удалён ${entry.archivedAt}`;
+
+          const btns = document.createElement("div");
+          btns.className = "archive-btns";
+          const csvBtn = document.createElement("button");
+          csvBtn.type = "button";
+          csvBtn.textContent = "⬇ CSV";
+          csvBtn.onclick = () => downloadArchiveCsv(entry);
+          const delBtn = document.createElement("button");
+          delBtn.type = "button";
+          delBtn.className = "archive-del";
+          delBtn.textContent = "✕ стереть";
+          delBtn.onclick = () => {
+            const sure = window.confirm(
+              `Стереть архив протокола «${entry.title}» окончательно? Действие необратимо.`
+            );
+            if (!sure) return;
+            const list = getArchive();
+            list.splice(realIdx, 1);
+            setArchive(list);
+            renderArchive();
+          };
+          btns.append(csvBtn, delBtn);
+
+          row.append(info, btns);
+          box.append(row);
+        });
       }
 
       function bindEvents() {
@@ -992,6 +1708,9 @@
           if (el.classList.contains("protocol-title")) {
             save(`protocol${protocolIndex}_title`);
             updateActiveNotice();
+            // Название могло совпасть с шаблоном — обновляем подсказку.
+            const card = el.closest(".protocol-container");
+            if (card) refreshTemplateHint(card);
             return;
           }
 
@@ -1085,6 +1804,8 @@
         bindEvents();
         bindToolbar();
         bindChildControls();
+        wireTemplates();
+        renderTemplates();
         updateActiveNotice();
       }
 
