@@ -39,6 +39,50 @@
       cursor: pointer;
     }
 
+    /* Меню «⋮» — как на ежедневной: вторичные действия под одной кнопкой. */
+    .menu-wrap {
+      position: relative;
+    }
+
+    .btn-menu {
+      background: #495057;
+      font-size: 16px;
+    }
+
+    .menu-drop {
+      /* Координаты выставляет wireMenu() с прижимом к краям экрана. */
+      position: fixed;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+      min-width: 240px;
+      max-width: calc(100vw - 16px);
+      padding: 6px;
+      z-index: 1200;
+    }
+
+    .menu-drop[hidden] {
+      display: none;
+    }
+
+    .toolbar .menu-drop button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 12px 14px;
+      border: none;
+      background: none;
+      border-radius: 8px;
+      font-size: 15px;
+      color: #1f2933;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .toolbar .menu-drop button:active {
+      background: #eef1f4;
+    }
+
     .btn-export {
       background: #198754;
     }
@@ -187,6 +231,48 @@
     .pdf-btn.pdf-del {
       color: #a3261b;
       padding: 6px 8px;
+    }
+
+    /* Бэкап планшета. */
+    .btn-backup {
+      background: #495057;
+    }
+
+    #backupBox {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+    }
+
+    #backupBox .hint {
+      font-size: 12px;
+      color: #667085;
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+
+    #backupBox .hint-warn {
+      color: #a3261b;
+      margin: 10px 0 0;
+    }
+
+    .backup-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-danger-outline {
+      padding: 8px 14px;
+      font-size: 14px;
+      border: 1.5px solid #c0392b;
+      border-radius: 8px;
+      background: #fff;
+      color: #a3261b;
+      cursor: pointer;
+      touch-action: manipulation;
     }
 
     /* Шаблоны протоколов. */
@@ -393,10 +479,26 @@
   <h2>Сводный чек-лист</h2>
 
   <div class="toolbar">
-    <button type="button" class="btn-export" id="exportBtn">⬇ Экспорт настроек</button>
-    <button type="button" class="btn-import" id="importBtn">⬆ Импорт настроек</button>
-    <button type="button" class="btn-tpl" id="templatesBtn">📚 Шаблоны</button>
+    <div class="menu-wrap">
+      <button type="button" id="menuBtn" class="btn-menu" aria-label="Меню" aria-expanded="false">⋮ Меню</button>
+      <div id="menuDrop" class="menu-drop" hidden>
+        <button type="button" id="exportBtn">⬇ Экспорт настроек</button>
+        <button type="button" id="importBtn">⬆ Импорт настроек</button>
+        <button type="button" id="templatesBtn">📚 Шаблоны протоколов</button>
+        <button type="button" id="backupBtn">🗄 Бэкап планшета</button>
+      </div>
+    </div>
     <input type="file" id="importFile" accept="application/json,.json" style="display:none" />
+  </div>
+
+  <div id="backupBox" hidden>
+    <div class="hint">Полная резервная копия <b>всего планшета</b>: все дети, вся история замеров, ABC-журналы, PDF, шаблоны и настройки — в одном файле. Пригодится, если планшет потеряется или сломается.</div>
+    <div class="backup-row">
+      <button type="button" class="btn-export" id="backupSaveBtn">💾 Скачать копию</button>
+      <button type="button" class="btn-danger-outline" id="restoreBtn">♻ Восстановить из файла</button>
+    </div>
+    <div class="hint hint-warn">⚠ Восстановление ПОЛНОСТЬЮ заменит все данные на этом планшете данными из файла. Текущие — сотрутся. Обычно нужно только на новом/чистом планшете.</div>
+    <input type="file" id="backupFile" accept="application/json,.json" style="display:none" />
   </div>
 
   <div id="templatesBox" hidden>
@@ -665,13 +767,16 @@
         });
       }
 
-      // Какие ключи localStorage относятся к настройкам (для экспорта/импорта).
-      // Конфигурация протоколов/целей + выбранные цели + сессия и ребёнок.
-      // Намеренно НЕ экспортируем накопленные данные сессий (aba_history и т.п.) —
-      // это настройки, а не клинические данные. При желании можно расширить.
+      // Какие ключи localStorage экспортируются как данные АКТИВНОГО ребёнка:
+      // протоколы/цели, ABC-списки и журнал, архив, сессия и метка ребёнка.
+      // История замеров (IndexedDB) добавляется отдельно (см. exportSettings).
+      // НЕ включаем счётчики текущей несданной сессии (aba_counts* и пр.) —
+      // это временное состояние, не переносится.
       function isSettingKey(key) {
         return (
           /^protocol\d+_/.test(key) ||
+          /^abc_/.test(key) ||
+          key === "aba_archive" ||
           key === sessionKey ||
           key === nameKey
         );
@@ -742,6 +847,39 @@
         return pdfs;
       }
 
+      // История замеров активного ребёнка (IndexedDB history, ключ
+      // aba_history::<id>) — для экспорта/импорта данных ребёнка.
+      function readActiveHistory() {
+        const key = "aba_history::" + getActiveChildId();
+        return openHistDB()
+          .then(
+            (db) =>
+              new Promise((resolve) => {
+                const tx = db.transaction("history", "readonly");
+                const r = tx.objectStore("history").get(key);
+                r.onsuccess = () => resolve(Array.isArray(r.result) ? r.result : []);
+                r.onerror = () => resolve([]);
+                tx.oncomplete = () => db.close();
+              })
+          )
+          .catch(() => []);
+      }
+
+      function writeActiveHistory(history) {
+        const key = "aba_history::" + getActiveChildId();
+        return openHistDB()
+          .then(
+            (db) =>
+              new Promise((resolve) => {
+                const tx = db.transaction("history", "readwrite");
+                tx.objectStore("history").put(Array.isArray(history) ? history : [], key);
+                tx.oncomplete = () => { db.close(); resolve(); };
+                tx.onerror = () => { db.close(); resolve(); };
+              })
+          )
+          .catch(() => {});
+      }
+
       async function exportSettings() {
         const data = {};
         Object.keys(localStorage).forEach((key) => {
@@ -769,7 +907,9 @@
           data,
           pdfs,
           // Шаблоны протоколов (общие, лёгкие) — кладём всегда.
-          templates: getTemplates()
+          templates: getTemplates(),
+          // История замеров активного ребёнка (IndexedDB).
+          history: await readActiveHistory()
         };
 
         const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
@@ -782,9 +922,13 @@
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        const histCount = payload.history.length;
+        const parts = [];
+        if (Object.keys(pdfs).length) parts.push(`${Object.keys(pdfs).length} PDF`);
+        if (histCount) parts.push(`история (${histCount} сессий)`);
         showToast(
-          Object.keys(pdfs).length
-            ? `Настройки и ${Object.keys(pdfs).length} PDF выгружены.`
+          parts.length
+            ? `Выгружено: настройки, ${parts.join(", ")}.`
             : "Настройки выгружены в файл."
         );
       }
@@ -815,10 +959,12 @@
             return;
           }
 
+          const hasHistory = Array.isArray(payload.history);
           const ok = window.confirm(
-            `Импортировать ${keys.length} настроек в профиль «${getChildLabel(getActiveChildId())}»? ` +
-              `Настройки протоколов и целей ТЕКУЩЕГО ребёнка будут заменены. ` +
-              `Другие профили не затрагиваются.`
+            `Импортировать данные в профиль «${getChildLabel(getActiveChildId())}»? ` +
+              `Протоколы, цели, ABC-списки/журнал` +
+              (hasHistory ? ` и история замеров` : ``) +
+              ` ТЕКУЩЕГО ребёнка будут заменены. Другие профили не затрагиваются.`
           );
           if (!ok) return;
 
@@ -854,19 +1000,29 @@
           // PDF: заменяем файлы текущего профиля на пришедшие (если они есть).
           const pdfs = payload.pdfs && typeof payload.pdfs === "object" ? payload.pdfs : {};
           const pdfNums = Object.keys(pdfs);
-          restoreImportedPdfs(getActiveChildId(), pdfNums.length ? pdfs : null)
-            .catch(() => {})
-            .then(() => {
-              // Перерисовываем страницу с новыми значениями.
-              initSessionFields();
-              renderSummary();
-              updateActiveNotice();
-              showToast(
-                pdfNums.length
-                  ? `Импортировано: ${keys.length} настроек и ${pdfNums.length} PDF.`
-                  : `Импортировано настроек: ${keys.length}.`
-              );
-            });
+          // История замеров: заменяем, только если в файле есть поле history
+          // (старые файлы без него не трогают текущую историю).
+          const historyPromise = hasHistory
+            ? writeActiveHistory(payload.history)
+            : Promise.resolve();
+
+          Promise.all([
+            restoreImportedPdfs(getActiveChildId(), pdfNums.length ? pdfs : null).catch(() => {}),
+            historyPromise.catch(() => {})
+          ]).then(() => {
+            // Перерисовываем страницу с новыми значениями.
+            initSessionFields();
+            renderSummary();
+            updateActiveNotice();
+            const extras = [];
+            if (pdfNums.length) extras.push(`${pdfNums.length} PDF`);
+            if (hasHistory) extras.push(`история (${payload.history.length} сессий)`);
+            showToast(
+              extras.length
+                ? `Импортировано: настройки, ${extras.join(", ")}.`
+                : `Импортировано настроек: ${keys.length}.`
+            );
+          });
         };
         reader.onerror = () => showToast("Ошибка чтения файла.", 5000);
         reader.readAsText(file);
@@ -1252,12 +1408,14 @@
                 entry.sessions.push({
                   date: s.date,
                   values,
-                  prompts: (s.promptDetails && s.promptDetails[k - 1]) || []
+                  prompts: (s.promptDetails && s.promptDetails[k - 1]) || [],
+                  goalNames: (s.goalNames && s.goalNames[k - 1]) || null
                 });
               }
             }
             if (Array.isArray(s.data) && s.data.length >= k) s.data.splice(k - 1, 1);
             if (Array.isArray(s.promptDetails) && s.promptDetails.length >= k) s.promptDetails.splice(k - 1, 1);
+            if (Array.isArray(s.goalNames) && s.goalNames.length >= k) s.goalNames.splice(k - 1, 1);
           });
           if (entry) captured = true; // не дублировать при втором проходе (ls+idb)
           return history;
@@ -1346,6 +1504,156 @@
             ? `Протокол «${title}» удалён, история в архиве (${entry.sessions.length} сессий).`
             : `Протокол «${title}» удалён (истории замеров у него не было).`
         );
+      }
+
+      // === Полный бэкап планшета одним файлом ===
+      // Берёт ВСЁ: localStorage целиком (все профили, шаблоны, архивы, ABC-
+      // журналы, настройки) + весь стор history в IndexedDB (история замеров
+      // всех детей + PDF). Очередь отправки (send_queue) НЕ включаем — это
+      // временное состояние доставки, сами данные уже в history/журналах.
+
+      function idbGetAllEntries() {
+        return openHistDB()
+          .then(
+            (db) =>
+              new Promise((resolve) => {
+                const tx = db.transaction("history", "readonly");
+                const store = tx.objectStore("history");
+                const keysReq = store.getAllKeys();
+                const valsReq = store.getAll();
+                let keys = null;
+                let vals = null;
+                const tryZip = () => {
+                  if (keys && vals) resolve(keys.map((k, i) => [k, vals[i]]));
+                };
+                keysReq.onsuccess = () => { keys = keysReq.result || []; tryZip(); };
+                valsReq.onsuccess = () => { vals = valsReq.result || []; tryZip(); };
+                tx.onerror = () => resolve([]);
+                tx.oncomplete = () => db.close();
+              })
+          )
+          .catch(() => []);
+      }
+
+      async function backupDevice() {
+        const ls = {};
+        Object.keys(localStorage).forEach((k) => {
+          ls[k] = localStorage.getItem(k);
+        });
+
+        const entries = await idbGetAllEntries();
+        const idb = [];
+        for (const [key, val] of entries) {
+          if (val instanceof Blob) {
+            idb.push([key, { __blob: true, type: val.type, data: await blobToDataUrl(val) }]);
+          } else {
+            idb.push([key, val]);
+          }
+        }
+
+        const childrenCount = getChildren().length;
+        const payload = {
+          _type: "aba_backup",
+          _version: 1,
+          _createdAt: new Date().toISOString(),
+          childrenCount,
+          localStorage: ls,
+          idb
+        };
+
+        const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const stamp = new Date().toISOString().split("T")[0];
+        a.href = url;
+        a.download = `aba_backup_${stamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast(`Резервная копия создана (детей: ${childrenCount}).`);
+      }
+
+      async function restoreDevice(payload) {
+        // Заранее декодируем PDF-блобы (это асинхронно), потом одной
+        // транзакцией чистим стор и записываем всё — атомарно и надёжно.
+        const decoded = [];
+        for (const [key, val] of payload.idb || []) {
+          decoded.push([key, val && val.__blob ? await dataUrlToBlob(val.data) : val]);
+        }
+
+        // localStorage: полностью заменяем.
+        localStorage.clear();
+        const ls = payload.localStorage || {};
+        Object.keys(ls).forEach((k) => localStorage.setItem(k, ls[k]));
+
+        // IndexedDB history: чистим и переписываем в одной транзакции.
+        const db = await openHistDB();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction("history", "readwrite");
+          const store = tx.objectStore("history");
+          store.clear();
+          decoded.forEach(([k, v]) => store.put(v, k));
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+      }
+
+      function importBackup(file) {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          let payload;
+          try {
+            payload = JSON.parse(reader.result);
+          } catch {
+            showToast("Не удалось прочитать файл резервной копии.", 5000);
+            return;
+          }
+          if (!payload || payload._type !== "aba_backup" || typeof payload.localStorage !== "object") {
+            showToast("Это не файл резервной копии ABA.", 5000);
+            return;
+          }
+          const when = payload._createdAt ? payload._createdAt.split("T")[0] : "?";
+          const ok = window.confirm(
+            `Восстановить резервную копию от ${when} (детей: ${payload.childrenCount ?? "?"})?\n\n` +
+              `ВСЕ текущие данные на этом планшете будут ПОЛНОСТЬЮ заменены и не подлежат ` +
+              `восстановлению. Продолжить?`
+          );
+          if (!ok) return;
+          showToast("Восстановление…", 60000);
+          try {
+            await restoreDevice(payload);
+            // Перезагрузка — чтобы всё перечиталось из хранилищ с нуля.
+            location.reload();
+          } catch (err) {
+            console.error(err);
+            showToast("Ошибка восстановления. Данные могли частично измениться.", 6000);
+          }
+        };
+        reader.onerror = () => showToast("Ошибка чтения файла.", 5000);
+        reader.readAsText(file);
+      }
+
+      function wireBackup() {
+        document.getElementById("backupBtn").onclick = () => {
+          const box = document.getElementById("backupBox");
+          box.hidden = !box.hidden;
+        };
+        document.getElementById("backupSaveBtn").onclick = () => {
+          backupDevice().catch((err) => {
+            console.error(err);
+            showToast("Не удалось создать копию.", 5000);
+          });
+        };
+        const backupFile = document.getElementById("backupFile");
+        document.getElementById("restoreBtn").onclick = () => backupFile.click();
+        backupFile.onchange = () => {
+          if (backupFile.files && backupFile.files[0]) {
+            importBackup(backupFile.files[0]);
+            backupFile.value = "";
+          }
+        };
       }
 
       // === Библиотека шаблонов протоколов ===
@@ -1752,6 +2060,40 @@
         };
       }
 
+      // Меню «⋮»: открытие/закрытие; пункты внутри уже привязаны по id
+      // (bindToolbar / wireTemplates / wireBackup).
+      function wireMenu() {
+        const btn = document.getElementById("menuBtn");
+        const drop = document.getElementById("menuDrop");
+        const closeMenu = () => {
+          drop.hidden = true;
+          btn.setAttribute("aria-expanded", "false");
+        };
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          if (drop.hidden) {
+            drop.hidden = false;
+            // Прижим к краям экрана (минимум 8px от краёв).
+            const r = btn.getBoundingClientRect();
+            const w = drop.offsetWidth;
+            const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+            drop.style.left = `${left}px`;
+            drop.style.top = `${r.bottom + 6}px`;
+          } else {
+            drop.hidden = true;
+          }
+          btn.setAttribute("aria-expanded", String(!drop.hidden));
+        };
+        // Любой пункт закрывает меню после действия.
+        drop.addEventListener("click", () => closeMenu());
+        document.addEventListener("click", (e) => {
+          if (!drop.hidden && !e.target.closest(".menu-wrap")) closeMenu();
+        });
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") closeMenu();
+        });
+      }
+
       function bindChildControls() {
         childSelect.onchange = () => switchChild(childSelect.value);
         document.getElementById("addChildBtn").onclick = addChild;
@@ -1806,6 +2148,8 @@
         bindChildControls();
         wireTemplates();
         renderTemplates();
+        wireBackup();
+        wireMenu();
         updateActiveNotice();
       }
 
