@@ -881,16 +881,33 @@
     // Каждый запрос к Google сначала кладём сюда, затем пытаемся разослать.
     // Что ушло — удаляем; что не ушло (офлайн) — досылаем позже автоматически.
 
+    // Честная отправка пакета: обычный запрос (НЕ no-cors), ответ читается.
+    // Content-Type text/plain — чтобы браузер не требовал preflight-запрос,
+    // который Apps Script не умеет; тело всё равно JSON-строка.
+    // true = скрипт подтвердил запись ({ok:true}, либо «OK» у старой версии).
+    async function sendPacket(endpoint, payload) {
+      const resp = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload),
+        redirect: "follow"
+      });
+      if (!resp.ok) return false;
+      const text = (await resp.text()).trim();
+      if (text === "OK") return true; // скрипт до перехода на JSON-ответы
+      try {
+        const parsed = JSON.parse(text);
+        return Boolean(parsed && parsed.ok === true);
+      } catch {
+        return false;
+      }
+    }
+
     function queueAdd(item) {
       // Если IndexedDB недоступна — очередь невозможна. Шлём напрямую
       // (как в исходной версии), чтобы не потерять попытку отправки.
       if (window.__abaIdbFailed) {
-        return fetch(item.endpoint, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(item.payload)
-        }).catch((err) => {
+        return sendPacket(item.endpoint, item.payload).catch((err) => {
           console.error("Прямая отправка не удалась:", err);
         });
       }
@@ -930,6 +947,19 @@
       );
     }
 
+    // Обновить элемент очереди (счётчик попыток).
+    function queuePut(item) {
+      return openDB().then(
+        (db) =>
+          new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_QUEUE, "readwrite");
+            tx.objectStore(IDB_QUEUE).put(item);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          })
+      );
+    }
+
     async function queueCount() {
       try {
         const all = await queueGetAll();
@@ -939,9 +969,14 @@
       }
     }
 
-    // Разослать очередь. Один запрос за раз, по порядку. Успех (при no-cors) =
-    // fetch завершился без сетевой ошибки; тогда удаляем элемент. При первой
-    // сетевой ошибке останавливаемся — значит сети нет, нет смысла продолжать.
+    // Порог «застревания»: сервер стабильно отвечает отказом (битый пакет
+    // или сломанное развёртывание). Такой пакет пропускаем при рассылке,
+    // индикатор предупреждает, тап по нему повторяет попытки.
+    const STUCK_ATTEMPTS = 30;
+
+    // Разослать очередь по порядку. Доставлено = сервер ПОДТВЕРДИЛ запись
+    // (честный ответ, не как раньше «fetch не упал»). Сетевая ошибка —
+    // стоп до следующего раза; отказ сервера — счётчик попыток и дальше.
     async function flushQueue() {
       if (flushing) return;
       // Без IndexedDB очереди нет — queueAdd в этом режиме шлёт напрямую.
@@ -950,18 +985,21 @@
       try {
         const items = await queueGetAll();
         for (const item of items) {
+          if ((item.attempts || 0) >= STUCK_ATTEMPTS) continue;
+          let delivered;
           try {
-            await fetch(item.endpoint, {
-              method: "POST",
-              mode: "no-cors",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(item.payload)
-            });
-            await queueDelete(item.id);
+            delivered = await sendPacket(item.endpoint, item.payload);
           } catch (err) {
-            // Сетевая ошибка — прекращаем, оставшееся досылаем в другой раз.
+            // Сетевая ошибка — сети нет, оставшееся досылаем в другой раз.
             console.warn("Отправка не удалась, элемент остаётся в очереди:", err);
             break;
+          }
+          if (delivered) {
+            await queueDelete(item.id);
+          } else {
+            item.attempts = (item.attempts || 0) + 1;
+            await queuePut(item);
+            console.warn("Сервер не подтвердил пакет, попытка", item.attempts);
           }
         }
       } catch (err) {
@@ -974,14 +1012,37 @@
     }
 
     async function updateQueueIndicator() {
-      const n = await queueCount();
+      let items = [];
+      try {
+        items = await queueGetAll();
+      } catch {}
       const el = document.getElementById("queueStatus");
       if (!el) return;
-      if (n > 0) {
+      const stuck = items.filter((i) => (i.attempts || 0) >= STUCK_ATTEMPTS).length;
+      if (stuck > 0) {
         el.style.display = "inline";
-        el.textContent = `⏳ Ожидают отправки: ${n}`;
+        el.style.color = "#b4552d";
+        el.style.cursor = "pointer";
+        el.textContent = `⚠ Не доставлено: ${stuck}. Нажмите — повторить`;
+        el.onclick = async () => {
+          for (const item of items) {
+            if ((item.attempts || 0) >= STUCK_ATTEMPTS) {
+              item.attempts = 0;
+              await queuePut(item);
+            }
+          }
+          showToast("Повторяю отправку…");
+          flushQueue();
+        };
+      } else if (items.length > 0) {
+        el.style.display = "inline";
+        el.style.color = "var(--prompt-ink)";
+        el.style.cursor = "";
+        el.onclick = null;
+        el.textContent = `⏳ Ожидают отправки: ${items.length}`;
       } else {
         el.style.display = "none";
+        el.onclick = null;
       }
     }
 
