@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Тренажёр — обучение работе с приложением</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0d6efd" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <style>
+    @font-face {
+      font-family: "Unbounded";
+      src: url("fonts/Unbounded.woff2") format("woff2");
+      font-weight: 400 900;
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: "Onest";
+      src: url("fonts/Onest.woff2") format("woff2");
+      font-weight: 300 800;
+      font-display: swap;
+    }
+
+    :root {
+      --bg: #f3f2ed;
+      --card: #ffffff;
+      --text: #1f2933;
+      --muted: #667085;
+      --accent: #0e7490;
+      --line: #e5e2d9;
+      --ok: #dbeef3;
+      --ok-ink: #0e7490;
+      --ok-edge: #b4d7de;
+      --prompt: #f5ead2;
+      --prompt-ink: #8a6a14;
+      --prompt-edge: #e0cfa4;
+      --err: #ebecee;
+      --err-ink: #5c6670;
+      --err-edge: #d3d6d9;
+      --good: #2b8a3e;
+      --bad: #b4552d;
+      --font-display: "Unbounded", system-ui, sans-serif;
+      --font-body: "Onest", -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: var(--font-body);
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    h2 {
+      text-align: center;
+      font-family: var(--font-display);
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .sub {
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+
+    .demo-badge {
+      display: block;
+      text-align: center;
+      background: #fff3cd;
+      border: 1px solid #e0c068;
+      color: #5c4813;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+
+    /* Прогресс. */
+    .progress-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .progress-bar {
+      height: 8px;
+      background: #e5e2d9;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      width: 0;
+      transition: width 0.3s ease;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+    }
+
+    .task-text {
+      font-size: 17px;
+      line-height: 1.5;
+    }
+
+    .task-scene {
+      display: block;
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    /* Учебная карточка цели — как в бою. */
+    .block-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .goal-label {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .percent {
+      font-family: var(--font-display);
+      font-size: 30px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .percent.green { color: #0e7490; }
+    .percent.orange { color: #8a6a14; }
+    .percent.red { color: #b4552d; }
+
+    .btn-set {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-set > div {
+      flex: 1;
+    }
+
+    .btn-set button {
+      width: 100%;
+      padding: 16px 0 14px;
+      font-size: 30px;
+      font-family: var(--font-display);
+      font-weight: 900;
+      line-height: 1;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-touch-callout: none;
+      transition: transform 0.06s ease, box-shadow 0.06s ease;
+    }
+
+    .btn-set button:active {
+      transform: translateY(3px);
+      box-shadow: none !important;
+    }
+
+    .btn-success { background: var(--ok); color: var(--ok-ink); box-shadow: 0 3px 0 var(--ok-edge); }
+    .btn-prompt { background: var(--prompt); color: var(--prompt-ink); box-shadow: 0 3px 0 var(--prompt-edge); }
+    .btn-error { background: var(--err); color: var(--err-ink); box-shadow: 0 3px 0 var(--err-edge); }
+
+    .count {
+      text-align: center;
+      font-weight: bold;
+      font-size: 15px;
+      margin-top: 6px;
+    }
+
+    .undo-row {
+      margin-top: 12px;
+      text-align: center;
+    }
+
+    .btn {
+      padding: 10px 16px;
+      font-size: 14px;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      background: #6c757d;
+      cursor: pointer;
+      touch-action: manipulation;
+      font-family: var(--font-body);
+    }
+
+    .btn-primary { background: var(--accent); }
+
+    /* Варианты ответа для вопросов. */
+    .choices {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .choice {
+      padding: 14px;
+      font-size: 15px;
+      font-family: var(--font-body);
+      text-align: left;
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--text);
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .choice:active { background: #eef1f4; }
+
+    /* Обратная связь. */
+    .feedback {
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 16px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .feedback.good { background: #e7f5ea; border: 1px solid #a8d5b5; color: #1e5b2c; }
+    .feedback.bad { background: #fdecea; border: 1px solid #eaa88f; color: #8c3d1c; }
+    .feedback b { font-family: var(--font-display); }
+
+    /* Модалка типов подсказки — как в бою. */
+    #prompt-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      background: #fff;
+      padding: 20px;
+      border-radius: 12px;
+      max-width: 420px;
+      width: 100%;
+    }
+
+    .modal-content h3 { margin-top: 0; }
+
+    .modal-content button {
+      display: block;
+      width: 100%;
+      margin-bottom: 8px;
+      padding: 12px;
+      font-size: 15px;
+      font-family: var(--font-body);
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--text);
+      cursor: pointer;
+      text-align: left;
+    }
+
+    /* Итог. */
+    .result {
+      text-align: center;
+    }
+
+    .result-score {
+      font-family: var(--font-display);
+      font-size: 48px;
+      font-weight: 900;
+      margin: 8px 0;
+    }
+
+    .result-line {
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    #toast {
+      position: fixed;
+      bottom: 96px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1f2933;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      display: none;
+      z-index: 1100;
+      max-width: 90%;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h2>🎓 Тренажёр</h2>
+    <div class="sub">Учимся записывать данные — на выдуманном ребёнке</div>
+    <div class="demo-badge">Это тренировка. Данные никуда не сохраняются и не отправляются в таблицы.</div>
+
+    <div id="trainer">
+      <div class="progress-row">
+        <span id="progressText">Задание 1</span>
+        <span id="scoreText">Очки: 0</span>
+      </div>
+      <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+
+      <div id="feedback" class="feedback" hidden></div>
+
+      <div class="card">
+        <div id="taskText" class="task-text"></div>
+        <div id="choices" class="choices" hidden></div>
+      </div>
+
+      <div id="practice" class="card">
+        <div class="block-head">
+          <div class="goal-label">Хлопает в ладоши по образцу</div>
+          <div id="percent" class="percent">—</div>
+        </div>
+        <div class="btn-set">
+          <div><button class="btn-error" type="button" id="btnMinus">−</button><div class="count" id="cMinus">0</div></div>
+          <div><button class="btn-prompt" type="button" id="btnPrompt">P</button><div class="count" id="cPrompt">0</div></div>
+          <div><button class="btn-success" type="button" id="btnPlus">+</button><div class="count" id="cPlus">0</div></div>
+        </div>
+        <div class="undo-row">
+          <button class="btn" type="button" id="btnUndo">Отменить действие</button>
+        </div>
+      </div>
+
+      <div style="text-align:center;">
+        <button class="btn btn-primary" type="button" id="nextBtn" hidden>Дальше →</button>
+      </div>
+    </div>
+
+    <div id="result" class="card result" hidden>
+      <h2 id="resultTitle">Готово!</h2>
+      <div id="resultScore" class="result-score"></div>
+      <div id="resultLine" class="result-line"></div>
+      <div id="resultBest" class="result-line"></div>
+      <button class="btn btn-primary" type="button" id="restartBtn">Пройти заново</button>
+    </div>
+
+    <div id="prompt-modal">
+      <div class="modal-content">
+        <h3>Выберите тип подсказки</h3>
+        <button type="button" data-code="G">Жестовая (G)</button>
+        <button type="button" data-code="V">Вербальная (V)</button>
+        <button type="button" data-code="E">Эхо (E)</button>
+        <button type="button" data-code="PF">Частичная физическая (PF)</button>
+        <button type="button" data-code="FF">Полная физическая (FF)</button>
+        <button type="button" data-code="">Отмена</button>
+      </div>
+    </div>
+
+    <div id="toast"></div>
+  </div>
+
+  <script>
+    // Тренажёр для новых терапистов. Всё в памяти: ни один реальный ключ
+    // данных не трогается, на сервер ничего не уходит. Кнопки и жесты —
+    // ровно как в боевой ежедневной странице, поэтому навык переносится.
+    const BEST_KEY = "aba_training_best"; // единственная запись: лучший результат
+
+    // Типы заданий:
+    //  press  — нажать нужную кнопку (+ / − / P коротким тапом)
+    //  prompt — долгое нажатие P и выбор типа подсказки (G/V/E/PF/FF)
+    //  undo   — воспользоваться отменой
+    //  quiz   — вопрос с вариантами ответа
+    const TASKS = [
+      {
+        type: "press",
+        scene: "Занятие началось.",
+        text: "Вы показали хлопок. Ребёнок <b>сам</b> хлопнул в ладоши. Как записать?",
+        expect: "+",
+        why: "Самостоятельная реакция — это «+», кнопка справа."
+      },
+      {
+        type: "press",
+        scene: "Следующая проба.",
+        text: "Вы показали хлопок. Ребёнок <b>не отреагировал</b> и отвернулся. Как записать?",
+        expect: "−",
+        why: "Отсутствие реакции или ошибка — это «−», кнопка слева."
+      },
+      {
+        type: "press",
+        scene: "Следующая проба.",
+        text: "Ребёнок не начинал, вы слегка <b>помогли</b> — и он хлопнул. Тип помощи фиксировать не нужно. Как записать?",
+        expect: "P",
+        why: "Любая помощь — «P» (подсказка), кнопка в центре. Короткий тап = подсказка без уточнения типа."
+      },
+      {
+        type: "quiz",
+        scene: "Разберёмся с процентом.",
+        text: "Сейчас записано: <b>+ = 2</b>, <b>P = 1</b>, <b>− = 1</b>. Какой процент покажет приложение?",
+        choices: ["50%", "67%", "100%"],
+        expect: "50%",
+        why: "Процент = самостоятельные ÷ все реакции: 2 ÷ (2+1+1) = 50%. Подсказки и ошибки одинаково идут в знаменатель."
+      },
+      {
+        type: "prompt",
+        scene: "Теперь точнее о помощи.",
+        text: "Ребёнок замешкался, вы <b>показали жестом</b> на ладони — он хлопнул. Нужно записать <b>тип</b> подсказки.<br><br>Нажмите и <b>удерживайте</b> кнопку «P», затем выберите нужный тип.",
+        expect: "G",
+        why: "Долгое нажатие «P» открывает список типов. Жестовая подсказка — G."
+      },
+      {
+        type: "prompt",
+        scene: "Ещё одна проба.",
+        text: "Вы <b>сказали словами</b>: «Хлопни» — и ребёнок хлопнул. Запишите тип подсказки (удержание «P»).",
+        expect: "V",
+        why: "Словесная инструкция или подсказка голосом — вербальная, V."
+      },
+      {
+        type: "prompt",
+        scene: "И ещё.",
+        text: "Вы <b>взяли руки ребёнка и полностью выполнили</b> хлопок вместе с ним. Запишите тип подсказки.",
+        expect: "FF",
+        why: "Полная физическая помощь «рука в руке» — FF. Если бы только подтолкнули локоть — это PF (частичная)."
+      },
+      {
+        type: "undo",
+        scene: "Бывает и такое.",
+        text: "Вы случайно нажали не ту кнопку. Исправьте это.",
+        why: "Кнопка «Отменить действие» убирает последнюю запись. Не бойтесь ошибиться — отмена всегда рядом."
+      },
+      {
+        type: "quiz",
+        scene: "Про то, куда что записывать.",
+        text: "Ребёнок за занятие <b>7 раз</b> бросил игрушку. Вам нужно посчитать, <b>сколько раз</b> это случилось. Куда идти?",
+        choices: ["Вкладка «Сбор»", "Вкладка «Частота»", "Вкладка «ABC»"],
+        expect: "Вкладка «Частота»",
+        why: "«Частота» — счётчик проявлений поведения. Запустите таймер наблюдения, и приложение само посчитает, сколько раз в час."
+      },
+      {
+        type: "quiz",
+        scene: "Ещё про выбор вкладки.",
+        text: "Ребёнок закричал и упал на пол после того, как вы попросили убрать игрушки. Вы хотите зафиксировать <b>что было до и что после</b>. Куда идти?",
+        choices: ["Вкладка «ABC»", "Вкладка «Сбор»", "Вкладка «Частота»"],
+        expect: "Вкладка «ABC»",
+        why: "ABC — это запись эпизода: A (что предшествовало), B (поведение), C (что последовало). Так ищут причину поведения."
+      },
+      {
+        type: "quiz",
+        scene: "Последнее — про конец занятия.",
+        text: "Занятие закончилось, все пробы записаны. Что сделать, чтобы данные попали к супервизору?",
+        choices: [
+          "Нажать «Отправить данные» на вкладке «Сбор»",
+          "Ничего, всё уходит само",
+          "Закрыть приложение"
+        ],
+        expect: "Нажать «Отправить данные» на вкладке «Сбор»",
+        why: "Итоги уходят только по кнопке «Отправить данные». Если интернета нет — данные встанут в очередь и уйдут сами, когда сеть появится."
+      }
+    ];
+
+    const state = { idx: 0, score: 0, answered: false, counts: { "+": 0, P: 0, "−": 0 }, undoStack: [] };
+    let longPressTimer = null;
+    let suppressClick = false;
+    let awaitingPromptType = false;
+
+    const $ = (id) => document.getElementById(id);
+
+    function showToast(msg, ms = 2500) {
+      const t = $("toast");
+      t.textContent = msg;
+      t.style.display = "block";
+      clearTimeout(window.tt);
+      window.tt = setTimeout(() => { t.style.display = "none"; }, ms);
+    }
+
+    function renderCounts() {
+      $("cPlus").textContent = state.counts["+"];
+      $("cPrompt").textContent = state.counts.P;
+      $("cMinus").textContent = state.counts["−"];
+      const total = state.counts["+"] + state.counts.P + state.counts["−"];
+      const el = $("percent");
+      if (!total) {
+        el.textContent = "—";
+        el.className = "percent";
+        return;
+      }
+      const pct = Math.round((state.counts["+"] / total) * 100);
+      el.textContent = `${pct}%`;
+      el.className = `percent ${pct >= 80 ? "green" : pct >= 50 ? "orange" : "red"}`;
+    }
+
+    function renderTask() {
+      const task = TASKS[state.idx];
+      state.answered = false;
+      $("feedback").hidden = true;
+      $("nextBtn").hidden = true;
+      $("progressText").textContent = `Задание ${state.idx + 1} из ${TASKS.length}`;
+      $("scoreText").textContent = `Очки: ${state.score}`;
+      $("progressFill").style.width = `${(state.idx / TASKS.length) * 100}%`;
+      $("taskText").innerHTML =
+        (task.scene ? `<span class="task-scene">${task.scene}</span>` : "") + task.text;
+
+      // Для задания на проценты выставляем нужные счётчики заранее.
+      if (task.type === "quiz" && state.idx === 3) {
+        state.counts = { "+": 2, P: 1, "−": 1 };
+        renderCounts();
+      }
+
+      const choices = $("choices");
+      if (task.type === "quiz") {
+        choices.hidden = false;
+        choices.innerHTML = "";
+        task.choices.forEach((c) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "choice";
+          b.textContent = c;
+          b.onclick = () => answerQuiz(c);
+          choices.append(b);
+        });
+        $("practice").style.opacity = "0.5";
+        $("practice").style.pointerEvents = "none";
+      } else {
+        choices.hidden = true;
+        choices.innerHTML = "";
+        $("practice").style.opacity = "1";
+        $("practice").style.pointerEvents = "auto";
+      }
+    }
+
+    function judge(ok, task, extra) {
+      if (state.answered) return;
+      state.answered = true;
+      if (ok) state.score += 1;
+      $("scoreText").textContent = `Очки: ${state.score}`;
+      const fb = $("feedback");
+      fb.hidden = false;
+      fb.className = `feedback ${ok ? "good" : "bad"}`;
+      fb.innerHTML = (ok ? "<b>Верно!</b> " : "<b>Не совсем.</b> ") + (extra ? extra + " " : "") + task.why;
+      $("nextBtn").hidden = false;
+      $("nextBtn").textContent = state.idx + 1 >= TASKS.length ? "Показать результат →" : "Дальше →";
+    }
+
+    function answerQuiz(choice) {
+      const task = TASKS[state.idx];
+      judge(choice === task.expect, task, choice === task.expect ? "" : `Вы выбрали «${choice}».`);
+    }
+
+    // Нажатие кнопки в учебной карточке.
+    function pressButton(code) {
+      const task = TASKS[state.idx];
+      state.counts[code] += 1;
+      state.undoStack.push(code);
+      renderCounts();
+
+      if (state.answered) return;
+      if (task.type === "press") {
+        judge(code === task.expect, task, code === task.expect ? "" : `Вы нажали «${code}».`);
+      } else if (task.type === "prompt") {
+        // Короткий тап вместо удержания — подсказываем.
+        if (code === "P") {
+          showToast("Это короткий тап. Нужно нажать и удержать «P».");
+        } else {
+          judge(false, task, `Вы нажали «${code}».`);
+        }
+      } else if (task.type === "undo") {
+        showToast("Сейчас нужна отмена, а не новая запись.");
+      }
+    }
+
+    function undoAction() {
+      const last = state.undoStack.pop();
+      if (last) {
+        state.counts[last] = Math.max(0, state.counts[last] - 1);
+        renderCounts();
+      }
+      const task = TASKS[state.idx];
+      if (task.type === "undo" && !state.answered) {
+        judge(true, task);
+      } else if (!last) {
+        showToast("Отменять нечего.");
+      }
+    }
+
+    function openPromptModal() {
+      awaitingPromptType = true;
+      $("prompt-modal").style.display = "flex";
+    }
+
+    function choosePromptType(code) {
+      $("prompt-modal").style.display = "none";
+      awaitingPromptType = false;
+      if (!code) return; // отмена
+      const task = TASKS[state.idx];
+      state.counts.P += 1;
+      state.undoStack.push("P");
+      renderCounts();
+      if (task.type === "prompt") {
+        judge(code === task.expect, task, code === task.expect ? "" : `Вы выбрали «${code}».`);
+      }
+    }
+
+    function wirePractice() {
+      $("btnPlus").onclick = () => pressButton("+");
+      $("btnMinus").onclick = () => pressButton("−");
+      $("btnUndo").onclick = undoAction;
+
+      const p = $("btnPrompt");
+      const start = () => {
+        suppressClick = false;
+        longPressTimer = setTimeout(() => {
+          suppressClick = true;
+          openPromptModal();
+        }, 450);
+      };
+      const end = () => {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      };
+      p.addEventListener("pointerdown", start);
+      p.addEventListener("pointerup", end);
+      p.addEventListener("pointerleave", end);
+      p.addEventListener("pointercancel", end);
+      p.addEventListener("click", () => {
+        if (suppressClick) {
+          suppressClick = false;
+          return;
+        }
+        pressButton("P");
+      });
+
+      $("prompt-modal").querySelectorAll("button").forEach((b) => {
+        b.onclick = () => choosePromptType(b.dataset.code);
+      });
+    }
+
+    function nextTask() {
+      state.idx += 1;
+      if (state.idx >= TASKS.length) {
+        finish();
+        return;
+      }
+      renderTask();
+    }
+
+    function finish() {
+      $("trainer").hidden = true;
+      const res = $("result");
+      res.hidden = false;
+      const total = TASKS.length;
+      $("resultScore").textContent = `${state.score} / ${total}`;
+      const pct = Math.round((state.score / total) * 100);
+      $("resultTitle").textContent =
+        pct === 100 ? "Отлично!" : pct >= 70 ? "Хорошо!" : "Ещё потренируемся";
+      $("resultLine").textContent =
+        pct === 100
+          ? "Все задания верно. Можно приступать к работе с настоящим ребёнком."
+          : pct >= 70
+            ? "Основное усвоено. Слабые места стоит перечитать и пройти ещё раз."
+            : "Стоит пройти тренажёр ещё раз — и попросить супервизора посмотреть первое занятие.";
+
+      const best = Number(localStorage.getItem(BEST_KEY) || 0);
+      if (state.score > best) {
+        localStorage.setItem(BEST_KEY, String(state.score));
+        $("resultBest").textContent = "Это ваш лучший результат!";
+      } else {
+        $("resultBest").textContent = `Лучший результат: ${best} из ${total}.`;
+      }
+    }
+
+    function restart() {
+      state.idx = 0;
+      state.score = 0;
+      state.counts = { "+": 0, P: 0, "−": 0 };
+      state.undoStack = [];
+      $("result").hidden = true;
+      $("trainer").hidden = false;
+      renderCounts();
+      renderTask();
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      wirePractice();
+      $("nextBtn").onclick = nextTask;
+      $("restartBtn").onclick = restart;
+      renderCounts();
+      renderTask();
+    });
+
+    // Регистрация service worker для офлайн-работы (PWA).
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(console.error);
+      });
+    }
+  </script>
+  <script src="timer.js"></script>
+  <script src="tabbar.js"></script>
+</body>
+</html>
