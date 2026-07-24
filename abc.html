@@ -292,13 +292,13 @@
         <button class="btn" type="button" id="nowBtn">сейчас</button>
       </div>
 
-      <div class="section-label">Поведение (B) — обязательно</div>
+      <div class="section-label">Поведение (B) — обязательно, можно несколько</div>
       <div class="chips" id="chipsB"></div>
 
-      <div class="section-label">Что предшествовало (A)</div>
+      <div class="section-label">Что предшествовало (A) — можно несколько</div>
       <div class="chips" id="chipsA"></div>
 
-      <div class="section-label">Что последовало (C)</div>
+      <div class="section-label">Что последовало (C) — можно несколько</div>
       <div class="chips" id="chipsC"></div>
 
       <div class="section-label">Длительность</div>
@@ -613,14 +613,21 @@
     }
 
     // === Чипы эпизода ===
-    // selected: значение группы или null. Кастомный чип «✎ другое» хранит
-    // введённый текст прямо в подписи.
-    const selected = { A: null, B: null, C: null, D: null, I: null };
+    // A/B/C — множественный выбор (в эпизоде бывает несколько поведений,
+    // причин или последствий), значение группы = массив.
+    // Длительность и интенсивность — шкалы, выбор одиночный (строка/null).
+    // Кастомный чип «✎ вписать» хранит введённый текст прямо в подписи.
+    const selected = { A: [], B: [], C: [], D: null, I: null };
 
-    function renderChipGroup(containerId, values, group, allowCustom) {
+    function renderChipGroup(containerId, values, group, allowCustom, multi) {
       const box = document.getElementById(containerId);
       box.innerHTML = "";
-      selected[group] = null;
+      selected[group] = multi ? [] : null;
+
+      // Порядок значений — как на экране (вписанный вариант первым).
+      const syncMulti = () => {
+        selected[group] = Array.from(box.querySelectorAll(".chip.sel")).map((c) => c.textContent);
+      };
 
       const make = (text, isCustom) => {
         const chip = document.createElement("button");
@@ -628,12 +635,20 @@
         chip.className = "chip" + (isCustom ? " custom" : "");
         chip.textContent = text;
         chip.onclick = () => {
-          if (isCustom && !chip.classList.contains("sel")) {
+          const wasSelected = chip.classList.contains("sel");
+          if (isCustom && !wasSelected) {
             const val = (window.prompt("Свой вариант:") || "").trim();
             if (!val) return;
             chip.textContent = val;
           }
-          const wasSelected = chip.classList.contains("sel");
+
+          if (multi) {
+            chip.classList.toggle("sel", !wasSelected);
+            if (wasSelected && isCustom) chip.textContent = "✎ вписать";
+            syncMulti();
+            return;
+          }
+
           box.querySelectorAll(".chip").forEach((c) => c.classList.remove("sel"));
           if (wasSelected) {
             selected[group] = null;
@@ -652,11 +667,11 @@
     }
 
     function renderAllChips() {
-      renderChipGroup("chipsB", getList(KEY_B, DEFAULT_B), "B", true);
-      renderChipGroup("chipsA", getList(KEY_A, DEFAULT_A), "A", true);
-      renderChipGroup("chipsC", getList(KEY_C, DEFAULT_C), "C", true);
-      renderChipGroup("chipsD", DURATIONS, "D", false);
-      renderChipGroup("chipsI", INTENSITIES, "I", false);
+      renderChipGroup("chipsB", getList(KEY_B, DEFAULT_B), "B", true, true);
+      renderChipGroup("chipsA", getList(KEY_A, DEFAULT_A), "A", true, true);
+      renderChipGroup("chipsC", getList(KEY_C, DEFAULT_C), "C", true, true);
+      renderChipGroup("chipsD", DURATIONS, "D", false, false);
+      renderChipGroup("chipsI", INTENSITIES, "I", false, false);
     }
 
     function setTimeNow() {
@@ -735,10 +750,12 @@
 
     // === Запись эпизода ===
     function saveEpisode() {
-      if (!selected.B) {
+      if (!selected.B.length) {
         showToast("Выберите поведение (B) — без него эпизод не записывается.");
         return;
       }
+      // Несколько выбранных вариантов пишем через запятую в одну ячейку.
+      const join = (list) => (list && list.length ? list.join(", ") : "—");
       const timeInput = document.getElementById("epTime");
       if (!timeInput.value) setTimeNow();
       const now = new Date();
@@ -746,9 +763,9 @@
         id: "e" + Date.now().toString(36),
         date: now.toLocaleDateString("ru-RU"),
         time: timeInput.value,
-        behavior: selected.B,
-        antecedent: selected.A || "—",
-        consequence: selected.C || "—",
+        behavior: join(selected.B),
+        antecedent: join(selected.A),
+        consequence: join(selected.C),
         duration: selected.D || "—",
         intensity: selected.I || "—"
       };

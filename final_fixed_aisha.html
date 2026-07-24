@@ -134,6 +134,13 @@
       touch-action: manipulation;
     }
 
+    /* Пометка снятой с работы цели в таблице истории. */
+    .goal-inactive {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: normal;
+    }
+
     .goal-chart {
       background: var(--card);
       border-radius: 12px;
@@ -1197,29 +1204,21 @@
       const inProgress = snapshotInProgressData();
 
       const protocolKey = `protocol${idx}_selectedGoals`;
-      const previousGoalIds = JSON.parse(localStorage.getItem(protocolKey) || "[]");
-      const previousGoalNames = previousGoalIds.map((goalId) => {
-        return localStorage.getItem(`protocol${idx}_goal${goalId}`) || `Цель ${goalId}`;
-      });
-
       const selected = Array.from(document.querySelectorAll("#goal-options input:checked")).map((cb) => Number(cb.value));
       localStorage.setItem(protocolKey, JSON.stringify(selected));
 
-      const nextGoalNames = selected.map((goalId) => {
-        return localStorage.getItem(`protocol${idx}_goal${goalId}`) || `Цель ${goalId}`;
-      });
-
-      migrateSessionDataForProtocol(idx, previousGoalNames, nextGoalNames).then(() => {
-        closeGoalSelector();
-        renderDaily();
-        restoreInProgressData(inProgress);
-        // Undo-стек ссылается на кнопки старой разметки — после перестройки
-        // он невалиден, очищаем.
-        undoStack = [];
-        undoBanner.style.display = "none";
-        loadProgress();
-        renderHistory();
-      });
+      // История НЕ трогается при смене набора: каждая сессия помнит свои цели
+      // (goalNames), снятые цели остаются в истории. Меняем только текущий
+      // рабочий экран.
+      closeGoalSelector();
+      renderDaily();
+      restoreInProgressData(inProgress);
+      // Undo-стек ссылается на кнопки старой разметки — после перестройки
+      // он невалиден, очищаем.
+      undoStack = [];
+      undoBanner.style.display = "none";
+      loadProgress();
+      renderHistory();
     }
 
     // === Миграция текущих (несданных) данных при смене списка целей ===
@@ -1262,28 +1261,6 @@
       setSavedResponseLog(log);
     }
 
-    async function migrateSessionDataForProtocol(protocolIndex, previousGoalNames, nextGoalNames) {
-      const history = getHistory().map((session) => {
-        const previousData = session.data[protocolIndex - 1] || [];
-        const previousPromptDetails = session.promptDetails?.[protocolIndex - 1] || [];
-        const nextData = nextGoalNames.map((goalName) => {
-          const prevIndex = previousGoalNames.indexOf(goalName);
-          return prevIndex === -1 ? null : previousData[prevIndex];
-        });
-        const nextPromptData = nextGoalNames.map((goalName) => {
-          const prevIndex = previousGoalNames.indexOf(goalName);
-          return prevIndex === -1 ? "" : previousPromptDetails[prevIndex] || "";
-        });
-
-        session.data[protocolIndex - 1] = nextData;
-        session.promptDetails = session.promptDetails || [];
-        session.promptDetails[protocolIndex - 1] = nextPromptData;
-        return session;
-      });
-
-      await setHistory(history);
-    }
-
     function checkMastery(goalHistory) {
       const lastThree = goalHistory.slice(-3).filter((value) => value != null);
       return lastThree.length === 3 && lastThree.every((value) => value >= 80);
@@ -1295,6 +1272,69 @@
         .filter((j) => existing.includes(j)); // удалённые на сводной цели выпадают
       // Без явного выбора показываем все существующие цели протокола.
       return selected.length ? selected : existing;
+    }
+
+    // === История по ИМЕНИ цели (а не по позиции) ===
+    // Каждая сессия хранит goalNames — поэтому старые цели остаются в истории
+    // даже после смены набора. Для сессий до этого обновления (без goalNames)
+    // используем позиционный фолбэк по текущему выбору целей.
+    function goalValueAt(session, protocolIndex, goalName) {
+      const data = session.data?.[protocolIndex - 1] || [];
+      const names = session.goalNames?.[protocolIndex - 1];
+      if (Array.isArray(names)) {
+        const idx = names.indexOf(goalName);
+        return idx === -1 ? null : (data[idx] ?? null);
+      }
+      const pos = getSelectedGoalIds(protocolIndex).findIndex(
+        (gid) => (localStorage.getItem(`protocol${protocolIndex}_goal${gid}`) || `Цель ${gid}`) === goalName
+      );
+      return pos === -1 ? null : (data[pos] ?? null);
+    }
+
+    function goalPromptAt(session, protocolIndex, goalName) {
+      const pd = session.promptDetails?.[protocolIndex - 1] || [];
+      const names = session.goalNames?.[protocolIndex - 1];
+      if (Array.isArray(names)) {
+        const idx = names.indexOf(goalName);
+        return idx === -1 ? "" : (pd[idx] || "");
+      }
+      const pos = getSelectedGoalIds(protocolIndex).findIndex(
+        (gid) => (localStorage.getItem(`protocol${protocolIndex}_goal${gid}`) || `Цель ${gid}`) === goalName
+      );
+      return pos === -1 ? "" : (pd[pos] || "");
+    }
+
+    function goalSeries(protocolIndex, goalName, sessions) {
+      return (sessions || getHistory()).map((s) => goalValueAt(s, protocolIndex, goalName));
+    }
+
+    // Все цели протокола для истории: текущие выбранные (по порядку) плюс
+    // встречавшиеся в истории (освоенные/снятые), без дублей.
+    function protocolGoalNames(protocolIndex) {
+      const names = getSelectedGoalIds(protocolIndex).map(
+        (gid) => localStorage.getItem(`protocol${protocolIndex}_goal${gid}`) || `Цель ${gid}`
+      );
+      const seen = new Set(names);
+      getHistory().forEach((s) => {
+        const gn = s.goalNames?.[protocolIndex - 1];
+        if (Array.isArray(gn)) {
+          gn.forEach((name) => {
+            if (name && !seen.has(name)) {
+              seen.add(name);
+              names.push(name);
+            }
+          });
+        }
+      });
+      return names;
+    }
+
+    // Активна ли цель сейчас (есть в выбранных/существующих) — для пометки
+    // «снятых» целей в таблице истории.
+    function isActiveGoalName(protocolIndex, goalName) {
+      return getSelectedGoalIds(protocolIndex).some(
+        (gid) => (localStorage.getItem(`protocol${protocolIndex}_goal${gid}`) || `Цель ${gid}`) === goalName
+      );
     }
 
     // Спарклайн прогресса: SVG-линия по процентам последних сессий.
@@ -1398,12 +1438,11 @@
           })
           .catch(() => {});
 
-        selectedGoals.forEach((goalId, rowPos) => {
+        selectedGoals.forEach((goalId) => {
           const goalName = localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`;
-          const goalHistory = lastThreeSessions.map((session) => session.data[i - 1]?.[rowPos] ?? null);
-          const trendValues = trendSessions
-            .map((session) => session.data[i - 1]?.[rowPos] ?? null)
-            .filter((value) => value != null);
+          // Данные ищем по ИМЕНИ цели (устойчиво к смене набора целей).
+          const goalHistory = goalSeries(i, goalName, lastThreeSessions);
+          const trendValues = goalSeries(i, goalName, trendSessions).filter((value) => value != null);
           const previousPercents = goalHistory.map((value) => (value == null ? "—" : `${value}%`)).join(" | ");
           const mastered = checkMastery(goalHistory);
 
@@ -1491,7 +1530,10 @@
 
       for (let i = 1; i <= protocolsCount; i += 1) {
         const title = localStorage.getItem(`protocol${i}_title`) || `Протокол ${i}`;
-        const selectedGoals = getSelectedGoalIds(i);
+        // Все цели с историей: текущие + снятые (по имени), ничего не теряется.
+        const goalNames = protocolGoalNames(i);
+        if (!goalNames.length) continue;
+
         const section = document.createElement("div");
         section.className = "history-session";
 
@@ -1515,15 +1557,22 @@
         });
 
         const tbody = table.createTBody();
-        selectedGoals.forEach((goalId, rowIndex) => {
+        goalNames.forEach((goalName) => {
           const row = tbody.insertRow();
           const titleCell = row.insertCell();
-          titleCell.textContent = localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`;
+          titleCell.textContent = goalName;
+          // Снятые с текущей работы цели помечаем, но НЕ прячем.
+          if (!isActiveGoalName(i, goalName)) {
+            titleCell.append(Object.assign(document.createElement("span"), {
+              className: "goal-inactive",
+              textContent: " (снята)"
+            }));
+          }
 
           visibleHistory.forEach((session) => {
             const cell = row.insertCell();
-            const percent = session.data[i - 1]?.[rowIndex];
-            const promptDetail = session.promptDetails?.[i - 1]?.[rowIndex];
+            const percent = goalValueAt(session, i, goalName);
+            const promptDetail = goalPromptAt(session, i, goalName);
             let text = percent == null ? "—" : `${percent}%`;
             if (promptDetail) {
               text += ` [${promptDetail}]`;
@@ -1539,8 +1588,7 @@
 
     // === Экспорт истории замеров в CSV ===
     // Длинный формат (строка = цель в сессии) — удобно для сводных таблиц.
-    // Имена целей берутся из текущих настроек, как и в renderHistory:
-    // позиции в истории мигрируют при смене целей, поэтому совпадают.
+    // По именам целей: включает и снятые с работы цели (ничего не теряется).
     function buildHistoryCsv() {
       const history = getHistory();
       const protocolsCount = getProtocolsCount();
@@ -1549,13 +1597,12 @@
       history.forEach((session) => {
         for (let i = 1; i <= protocolsCount; i += 1) {
           const title = localStorage.getItem(`protocol${i}_title`) || `Протокол ${i}`;
-          getSelectedGoalIds(i).forEach((goalId, rowIndex) => {
-            const percent = session.data[i - 1]?.[rowIndex];
+          protocolGoalNames(i).forEach((goalName) => {
+            const percent = goalValueAt(session, i, goalName);
             // Пустые замеры (в сессии по этой цели не работали) не выгружаем.
             if (percent == null) return;
-            const goal = localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`;
-            const prompts = session.promptDetails?.[i - 1]?.[rowIndex] || "";
-            rows.push([session.date, title, goal, `${percent}%`, prompts]);
+            const prompts = goalPromptAt(session, i, goalName);
+            rows.push([session.date, title, goalName, `${percent}%`, prompts]);
           });
         }
       });
@@ -1567,22 +1614,22 @@
 
     // === Графики динамики ===
     // Общие данные для раздела «Графики» и HTML-отчёта: по каждому протоколу —
-    // цели с точками {date, value} по всем сессиям истории (null-замеры
-    // пропущены). Имена целей — из текущих настроек, позиции мигрируют.
+    // цели с точками {date, value} по всем сессиям (null-замеры пропущены).
+    // По именам целей — включает и снятые с работы цели.
     function collectChartData() {
       const history = getHistory();
       const protocols = [];
       const count = getProtocolsCount();
       for (let i = 1; i <= count; i += 1) {
         const goals = [];
-        getSelectedGoalIds(i).forEach((goalId, rowIndex) => {
+        protocolGoalNames(i).forEach((goalName) => {
           const points = [];
           history.forEach((session) => {
-            const value = session.data[i - 1]?.[rowIndex];
+            const value = goalValueAt(session, i, goalName);
             if (value != null) points.push({ date: session.date, value });
           });
           if (points.length) {
-            goals.push({ name: localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`, points });
+            goals.push({ name: goalName, points });
           }
         });
         if (goals.length) {
@@ -1959,7 +2006,9 @@ ${body || "<p>Нет данных за период.</p>"}
       const historyDate = getSessionDateForHistory();
       const serverDate = getSessionDateForServer();
       const child = localStorage.getItem("child_name") || "";
-      const session = { date: historyDate, data: [], promptDetails: [] };
+      // goalNames: имя каждой цели прямо в сессии — чтобы история «помнила»
+      // свои цели и старые цели не терялись при смене набора.
+      const session = { date: historyDate, data: [], promptDetails: [], goalNames: [] };
       const allBlocks = Array.from(document.querySelectorAll(".block"));
       const promptDetails = getSavedPromptDetails();
       const responseLog = getSavedResponseLog();
@@ -1970,6 +2019,7 @@ ${body || "<p>Нет данных за период.</p>"}
         const goalsForServer = [];
         const protocolData = [];
         const protocolPromptDetails = [];
+        const protocolGoalNamesArr = [];
 
         Array.from(protocolContainer.querySelectorAll(".block")).forEach((block) => {
           const name = block.dataset.goalName || block.querySelector(".goal-label").textContent.trim();
@@ -1982,6 +2032,7 @@ ${body || "<p>Нет данных за период.</p>"}
 
           protocolData.push(percent);
           protocolPromptDetails.push(promptText);
+          protocolGoalNamesArr.push(name);
 
           goalsForServer.push({
             name,
@@ -1993,6 +2044,7 @@ ${body || "<p>Нет данных за период.</p>"}
 
         session.data.push(protocolData);
         session.promptDetails.push(protocolPromptDetails);
+        session.goalNames.push(protocolGoalNamesArr);
         sendPromises.push(sendSessionResults({ protocol, date: serverDate, child, goals: goalsForServer }));
       });
 
