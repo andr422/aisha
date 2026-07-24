@@ -529,9 +529,32 @@
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
     }
 
+    #note-modal textarea {
+      width: 100%;
+      min-height: 120px;
+      margin: 10px 0 4px;
+      font-size: 15px;
+      font-family: var(--font-body);
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .note-recent {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .note-recent div {
+      padding: 6px 0;
+      border-top: 1px solid var(--line);
+    }
+
     #goal-selector-modal,
     #prompt-modal,
-    #confirm-modal {
+    #confirm-modal,
+    #note-modal {
       display: none;
       position: fixed;
       inset: 0;
@@ -631,6 +654,7 @@
         <div class="menu-wrap">
           <button id="menuBtn" class="btn btn-secondary" type="button" aria-label="Меню" aria-expanded="false">⋮</button>
           <div id="menuDrop" class="menu-drop" hidden>
+            <button id="noteBtn" type="button">📝 Заметка</button>
             <button id="viewModeBtn" type="button">Вид: список</button>
             <button id="menuCharts" type="button">📊 Графики</button>
             <button id="menuCsv" type="button">⬇ Экспорт (CSV)</button>
@@ -668,6 +692,20 @@
         <p style="font-size:13px;color:var(--low-ink);">После отправки счётчики обнулятся. Убедитесь, что есть интернет.</p>
         <button class="btn btn-danger" type="button" onclick="confirmFinalize()">Отправить</button>
         <button class="btn btn-secondary" type="button" onclick="closeConfirmModal()">Отмена</button>
+      </div>
+    </div>
+
+    <div id="note-modal">
+      <div class="modal-content">
+        <h3>Заметка</h3>
+        <p style="font-size:13px;color:var(--muted);">
+          Что важно об этой сессии: состояние ребёнка, события дня, изменения в программе.
+          Заметка уйдёт в таблицу ребёнка.
+        </p>
+        <textarea id="noteText" placeholder="Например: не выспался, много протестов на переходах"></textarea>
+        <button class="btn btn-primary" type="button" id="noteSave">Сохранить и отправить</button>
+        <button class="btn btn-secondary" type="button" id="noteCancel">Отмена</button>
+        <div id="noteRecent" class="note-recent"></div>
       </div>
     </div>
 
@@ -910,11 +948,19 @@
       }
     }
 
+    // Уникальный номер пакета. Присваивается ОДИН раз при постановке в
+    // очередь и не меняется при повторах — скрипт пропускает уже принятые
+    // номера, поэтому потерянный ответ сервера не создаёт дубликат строки.
+    function packetUid() {
+      return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
+
     function queueAdd(item) {
+      const withUid = { ...item, payload: { uid: packetUid(), ...item.payload } };
       // Если IndexedDB недоступна — очередь невозможна. Шлём напрямую
       // (как в исходной версии), чтобы не потерять попытку отправки.
       if (window.__abaIdbFailed) {
-        return sendPacket(item.endpoint, item.payload).catch((err) => {
+        return sendPacket(withUid.endpoint, withUid.payload).catch((err) => {
           console.error("Прямая отправка не удалась:", err);
         });
       }
@@ -923,7 +969,7 @@
           new Promise((resolve, reject) => {
             const tx = db.transaction(IDB_QUEUE, "readwrite");
             // item: { endpoint, payload, createdAt }
-            tx.objectStore(IDB_QUEUE).add({ ...item, createdAt: Date.now() });
+            tx.objectStore(IDB_QUEUE).add({ ...withUid, createdAt: Date.now() });
             tx.oncomplete = () => resolve();
             tx.onerror = () => reject(tx.error);
           })
@@ -2222,6 +2268,97 @@ ${body || "<p>Нет данных за период.</p>"}
       renderSingleUI();
     }
 
+    // === Заметки о сессии ===
+    // Общий журнал заметок ребёнка (пополняется со «Сбора», ABC и «Частоты»).
+    // Каждая заметка сразу уходит на сервер отдельным пакетом (лист «Заметки»).
+    const KEY_NOTES = "aba_notes";
+    const NOTES_LIMIT = 200;
+    const NOTE_SOURCE = "Сбор";
+
+    function getNotes() {
+      try {
+        const list = JSON.parse(localStorage.getItem(KEY_NOTES) || "[]");
+        return Array.isArray(list) ? list : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function setNotes(list) {
+      localStorage.setItem(KEY_NOTES, JSON.stringify(list.slice(-NOTES_LIMIT)));
+    }
+
+    function renderRecentNotes() {
+      const box = document.getElementById("noteRecent");
+      const list = getNotes().slice(-5).reverse();
+      box.innerHTML = "";
+      if (!list.length) return;
+      const head = document.createElement("div");
+      head.style.borderTop = "none";
+      head.textContent = "Последние заметки:";
+      box.append(head);
+      list.forEach((n) => {
+        const row = document.createElement("div");
+        row.textContent = `${n.date} ${n.time} · ${n.source}: ${n.text}`;
+        box.append(row);
+      });
+    }
+
+    function openNoteModal() {
+      renderRecentNotes();
+      document.getElementById("note-modal").style.display = "flex";
+      document.getElementById("noteText").focus();
+    }
+
+    function closeNoteModal() {
+      document.getElementById("note-modal").style.display = "none";
+    }
+
+    function saveNote() {
+      const field = document.getElementById("noteText");
+      const text = field.value.trim();
+      if (!text) {
+        showToast("Заметка пустая — напишите текст или закройте окно.");
+        return;
+      }
+      const now = new Date();
+      const note = {
+        id: "n" + Date.now().toString(36),
+        date: getSessionDateForHistory(),
+        time: now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+        source: NOTE_SOURCE,
+        text
+      };
+      const list = getNotes();
+      list.push(note);
+      setNotes(list);
+
+      queueAdd({
+        endpoint: SESSION_ENDPOINT,
+        payload: {
+          type: "note",
+          child: getActiveChildLabel() || (localStorage.getItem("child_name") || ""),
+          date: note.date,
+          time: note.time,
+          source: note.source,
+          text: note.text
+        }
+      }).then(() => {
+        updateQueueIndicator();
+        flushQueue();
+      });
+
+      field.value = "";
+      closeNoteModal();
+      showToast("Заметка сохранена и отправлена.");
+    }
+
+    function wireNote() {
+      document.getElementById("noteBtn").onclick = openNoteModal;
+      document.getElementById("noteSave").onclick = saveNote;
+      document.getElementById("noteCancel").onclick = closeNoteModal;
+    }
+
     // === Меню «⋮» в шапке ===
     function closeMenu() {
       const drop = document.getElementById("menuDrop");
@@ -2276,7 +2413,10 @@ ${body || "<p>Нет данных за период.</p>"}
         if (!drop.hidden && !e.target.closest(".menu-wrap")) closeMenu();
       });
       document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") closeMenu();
+        if (e.key === "Escape") {
+          closeMenu();
+          closeNoteModal();
+        }
       });
     }
 
@@ -2289,6 +2429,7 @@ ${body || "<p>Нет данных за период.</p>"}
       document.getElementById("undoBtn").onclick = undoLastAction;
       document.getElementById("viewModeBtn").onclick = toggleViewMode;
       wireMenu();
+      wireNote();
       document.getElementById("prevGoalBtn").onclick = () => moveGoal(-1);
       document.getElementById("nextGoalBtn").onclick = () => moveGoal(1);
       sendBtn.onclick = openConfirmModal;

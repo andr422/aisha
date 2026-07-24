@@ -104,6 +104,110 @@
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
     }
 
+    /* Меню «⋮» — как на сводной и ежедневной. */
+    .menu-wrap {
+      position: relative;
+    }
+
+    .menu-drop {
+      /* Координаты выставляет wireMenu() с прижимом к краям экрана. */
+      position: fixed;
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+      min-width: 230px;
+      max-width: calc(100vw - 16px);
+      padding: 6px;
+      z-index: 1200;
+    }
+
+    .menu-drop[hidden] {
+      display: none;
+    }
+
+    .menu-drop button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 12px 14px;
+      border: none;
+      background: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: var(--font-body);
+      color: var(--text);
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .menu-drop button:active {
+      background: #eef1f4;
+    }
+
+    /* Модалка заметки. */
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 1300;
+    }
+
+    .modal.open {
+      display: flex;
+    }
+
+    .modal-card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 18px;
+      width: 100%;
+      max-width: 460px;
+      max-height: 85vh;
+      overflow: auto;
+    }
+
+    .modal-card h3 {
+      margin: 0 0 8px;
+      font-family: var(--font-display);
+    }
+
+    #noteText {
+      width: 100%;
+      min-height: 120px;
+      margin-top: 10px;
+      font-size: 15px;
+      font-family: var(--font-body);
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .btn-accent {
+      background: var(--accent);
+    }
+
+    .note-recent {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .note-recent div {
+      padding: 6px 0;
+      border-top: 1px solid var(--line);
+    }
+
     /* Панель наблюдения. */
     .obs {
       text-align: center;
@@ -310,8 +414,27 @@
 
     <div class="topbar">
       <span id="queueStatus" style="display:none;"></span>
-      <button id="settingsBtn" class="btn" type="button">⚙ Списки</button>
-      <button id="csvBtn" class="btn" type="button">⬇ Экспорт (CSV)</button>
+      <div class="menu-wrap">
+        <button id="menuBtn" class="btn" type="button" aria-label="Меню" aria-expanded="false">⋮ Меню</button>
+        <div id="menuDrop" class="menu-drop" hidden>
+          <button type="button" id="noteBtn">📝 Заметка</button>
+          <button type="button" id="settingsBtn">⚙ Списки</button>
+          <button type="button" id="csvBtn">⬇ Экспорт (CSV)</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="note-modal" class="modal">
+      <div class="modal-card">
+        <h3>Заметка</h3>
+        <p class="hint">Что важно об этой сессии: состояние ребёнка, события дня, изменения в программе. Заметка уйдёт в таблицу ребёнка.</p>
+        <textarea id="noteText" placeholder="Например: не выспался, много протестов на переходах"></textarea>
+        <div class="modal-actions">
+          <button class="btn btn-accent" type="button" id="noteSave">Сохранить и отправить</button>
+          <button class="btn" type="button" id="noteCancel">Отмена</button>
+        </div>
+        <div id="noteRecent" class="note-recent"></div>
+      </div>
     </div>
 
     <div id="settingsBox" class="card" hidden>
@@ -453,9 +576,17 @@
       }
     }
 
+    // Уникальный номер пакета. Присваивается ОДИН раз при постановке в
+    // очередь и не меняется при повторах — скрипт пропускает уже принятые
+    // номера, поэтому потерянный ответ сервера не создаёт дубликат строки.
+    function packetUid() {
+      return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
+
     function queueAdd(item) {
+      const withUid = { ...item, payload: { uid: packetUid(), ...item.payload } };
       if (window.__abaIdbFailed) {
-        return sendPacket(item.endpoint, item.payload)
+        return sendPacket(withUid.endpoint, withUid.payload)
           .catch((err) => console.error("Прямая отправка не удалась:", err));
       }
       return openDB()
@@ -463,7 +594,7 @@
           (db) =>
             new Promise((resolve, reject) => {
               const tx = db.transaction(IDB_QUEUE, "readwrite");
-              tx.objectStore(IDB_QUEUE).add({ ...item, createdAt: Date.now() });
+              tx.objectStore(IDB_QUEUE).add({ ...withUid, createdAt: Date.now() });
               tx.oncomplete = () => resolve();
               tx.onerror = () => reject(tx.error);
             })
@@ -471,7 +602,8 @@
         .catch((err) => {
           window.__abaIdbFailed = true;
           console.error("Очередь недоступна, шлю напрямую:", err);
-          return queueAdd(item);
+          return sendPacket(withUid.endpoint, withUid.payload)
+            .catch((e) => console.error("Прямая отправка не удалась:", e));
         });
     }
 
@@ -905,6 +1037,134 @@
       showToast(`Выгружено наблюдений: ${log.length}.`);
     }
 
+    // === Заметки о сессии ===
+    // Общий журнал заметок ребёнка (пополняется со «Сбора», ABC и «Частоты»).
+    // Каждая заметка сразу уходит на сервер отдельным пакетом (лист «Заметки»).
+    const KEY_NOTES = "aba_notes";
+    const NOTES_LIMIT = 200;
+    const NOTE_SOURCE = "Частота";
+
+    function getNotes() {
+      try {
+        const list = JSON.parse(localStorage.getItem(KEY_NOTES) || "[]");
+        return Array.isArray(list) ? list : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function setNotes(list) {
+      localStorage.setItem(KEY_NOTES, JSON.stringify(list.slice(-NOTES_LIMIT)));
+    }
+
+    function renderRecentNotes() {
+      const box = document.getElementById("noteRecent");
+      const list = getNotes().slice(-5).reverse();
+      box.innerHTML = "";
+      if (!list.length) return;
+      const head = document.createElement("div");
+      head.style.borderTop = "none";
+      head.textContent = "Последние заметки:";
+      box.append(head);
+      list.forEach((n) => {
+        const row = document.createElement("div");
+        row.textContent = `${n.date} ${n.time} · ${n.source}: ${n.text}`;
+        box.append(row);
+      });
+    }
+
+    function openNoteModal() {
+      renderRecentNotes();
+      document.getElementById("note-modal").classList.add("open");
+      document.getElementById("noteText").focus();
+    }
+
+    function closeNoteModal() {
+      document.getElementById("note-modal").classList.remove("open");
+    }
+
+    function saveNote() {
+      const field = document.getElementById("noteText");
+      const text = field.value.trim();
+      if (!text) {
+        showToast("Заметка пустая — напишите текст или закройте окно.");
+        return;
+      }
+      const now = new Date();
+      const note = {
+        id: "n" + Date.now().toString(36),
+        date: now.toLocaleDateString("ru-RU"),
+        time: now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+        source: NOTE_SOURCE,
+        text
+      };
+      const list = getNotes();
+      list.push(note);
+      setNotes(list);
+
+      queueAdd({
+        endpoint: SESSION_ENDPOINT,
+        payload: {
+          type: "note",
+          child: getActiveChildLabel() || (localStorage.getItem("child_name") || ""),
+          date: note.date,
+          time: note.time,
+          source: note.source,
+          text: note.text
+        }
+      }).then(() => {
+        updateQueueIndicator();
+        flushQueue();
+      });
+
+      field.value = "";
+      closeNoteModal();
+      showToast("Заметка сохранена и отправлена.");
+    }
+
+    function wireNote() {
+      document.getElementById("noteBtn").onclick = openNoteModal;
+      document.getElementById("noteSave").onclick = saveNote;
+      document.getElementById("noteCancel").onclick = closeNoteModal;
+      document.getElementById("note-modal").addEventListener("click", (e) => {
+        if (e.target.id === "note-modal") closeNoteModal();
+      });
+    }
+
+    // Меню «⋮»: открытие/закрытие; пункты привязаны отдельно по id.
+    function wireMenu() {
+      const btn = document.getElementById("menuBtn");
+      const drop = document.getElementById("menuDrop");
+      const closeMenu = () => {
+        drop.hidden = true;
+        btn.setAttribute("aria-expanded", "false");
+      };
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        if (drop.hidden) {
+          drop.hidden = false;
+          const r = btn.getBoundingClientRect();
+          const w = drop.offsetWidth;
+          const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+          drop.style.left = `${left}px`;
+          drop.style.top = `${r.bottom + 6}px`;
+        } else {
+          drop.hidden = true;
+        }
+        btn.setAttribute("aria-expanded", String(!drop.hidden));
+      };
+      drop.addEventListener("click", () => closeMenu());
+      document.addEventListener("click", (e) => {
+        if (!drop.hidden && !e.target.closest(".menu-wrap")) closeMenu();
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          closeMenu();
+          closeNoteModal();
+        }
+      });
+    }
+
     function wireSettings() {
       const box = document.getElementById("settingsBox");
       document.getElementById("settingsBtn").onclick = () => {
@@ -926,6 +1186,8 @@
       renderBehaviors();
       renderLog();
       wireSettings();
+      wireMenu();
+      wireNote();
       document.getElementById("obsBtn").onclick = toggleObs;
       document.getElementById("saveBtn").onclick = finishObservation;
       document.getElementById("csvBtn").onclick = exportCsv;
