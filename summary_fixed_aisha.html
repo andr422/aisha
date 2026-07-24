@@ -553,6 +553,7 @@
         return (
           /^protocol\d+_/.test(key) ||
           /^abc_/.test(key) ||
+          /^freq_/.test(key) ||
           key === "aba_archive" ||
           key === "aba_counts" ||
           key === "aba_counts_v2" ||
@@ -776,6 +777,7 @@
         return (
           /^protocol\d+_/.test(key) ||
           /^abc_/.test(key) ||
+          /^freq_/.test(key) ||
           key === "aba_archive" ||
           key === sessionKey ||
           key === nameKey

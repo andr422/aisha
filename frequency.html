@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Частота поведения</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0d6efd" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <style>
+    @font-face {
+      font-family: "Unbounded";
+      src: url("fonts/Unbounded.woff2") format("woff2");
+      font-weight: 400 900;
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: "Onest";
+      src: url("fonts/Onest.woff2") format("woff2");
+      font-weight: 300 800;
+      font-display: swap;
+    }
+
+    :root {
+      --bg: #f3f2ed;
+      --card: #ffffff;
+      --text: #1f2933;
+      --muted: #667085;
+      --accent: #0e7490;
+      --accent-edge: #0a5566;
+      --line: #e5e2d9;
+      --font-display: "Unbounded", system-ui, sans-serif;
+      --font-body: "Onest", -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: var(--font-body);
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    h2 {
+      text-align: center;
+      font-family: var(--font-display);
+      font-weight: 700;
+    }
+
+    .active-child {
+      text-align: center;
+      font-weight: bold;
+      color: var(--accent);
+      margin-bottom: 12px;
+      min-height: 20px;
+    }
+
+    .active-child:empty {
+      display: none;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    #queueStatus {
+      font-size: 13px;
+      color: #8a6a14;
+      font-weight: bold;
+    }
+
+    .btn {
+      padding: 8px 14px;
+      font-size: 14px;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      touch-action: manipulation;
+      background: #6c757d;
+      font-family: var(--font-body);
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+    }
+
+    /* Панель наблюдения. */
+    .obs {
+      text-align: center;
+    }
+
+    .obs-clock {
+      font-family: var(--font-display);
+      font-size: 40px;
+      font-weight: 900;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .obs-clock.idle {
+      color: var(--muted);
+    }
+
+    .obs-note {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .obs-btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      font-family: var(--font-body);
+      border: none;
+      border-radius: 12px;
+      color: #fff;
+      background: var(--accent);
+      box-shadow: 0 3px 0 var(--accent-edge);
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .obs-btn:active {
+      transform: translateY(3px);
+      box-shadow: none;
+    }
+
+    .obs-btn.stop {
+      background: #b4552d;
+      box-shadow: 0 3px 0 #8c4022;
+    }
+
+    /* Карточка поведения со счётчиком. */
+    .beh {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--card);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    }
+
+    .beh-name {
+      flex: 1;
+      font-size: 16px;
+      font-weight: 600;
+      word-break: break-word;
+    }
+
+    .beh-rate {
+      display: block;
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .beh-count {
+      font-family: var(--font-display);
+      font-size: 30px;
+      font-weight: 900;
+      min-width: 48px;
+      text-align: center;
+    }
+
+    .beh-plus {
+      width: 76px;
+      height: 62px;
+      font-size: 30px;
+      font-family: var(--font-display);
+      font-weight: 900;
+      border: none;
+      border-radius: 14px;
+      background: #dbeef3;
+      color: var(--accent);
+      box-shadow: 0 3px 0 #b4d7de;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-touch-callout: none;
+    }
+
+    .beh-plus:active {
+      transform: translateY(3px);
+      box-shadow: none;
+    }
+
+    .beh-minus {
+      border: none;
+      background: none;
+      color: var(--muted);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 6px 8px;
+      touch-action: manipulation;
+    }
+
+    .flash {
+      animation: flash 0.25s ease;
+    }
+
+    @keyframes flash {
+      0% { background: #a5d8e4; }
+      100% { background: #dbeef3; }
+    }
+
+    /* Настройка списка. */
+    #settingsBox label {
+      display: block;
+      font-weight: 600;
+      margin: 4px 0;
+    }
+
+    #settingsBox textarea {
+      width: 100%;
+      min-height: 110px;
+      font-size: 15px;
+      font-family: var(--font-body);
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 10px;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* Журнал. */
+    .log-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      background: var(--card);
+      border-radius: 12px;
+      padding: 10px 14px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .log-item .when {
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .log-item .del {
+      border: none;
+      background: none;
+      color: var(--muted);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 2px 6px;
+      touch-action: manipulation;
+    }
+
+    .empty-note {
+      text-align: center;
+      color: var(--muted);
+    }
+
+    #toast {
+      position: fixed;
+      bottom: 96px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1f2933;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      z-index: 1100;
+      max-width: 90%;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h2>Частота поведения</h2>
+    <div id="activeChild" class="active-child"></div>
+
+    <div class="topbar">
+      <span id="queueStatus" style="display:none;"></span>
+      <button id="settingsBtn" class="btn" type="button">⚙ Списки</button>
+      <button id="csvBtn" class="btn" type="button">⬇ Экспорт (CSV)</button>
+    </div>
+
+    <div id="settingsBox" class="card" hidden>
+      <div class="hint">Список поведений — общий с вкладкой ABC (по одному на строку). У каждого ребёнка свой.</div>
+      <label for="setB">Поведения</label>
+      <textarea id="setB"></textarea>
+    </div>
+
+    <div class="card obs">
+      <div id="obsClock" class="obs-clock idle">00:00</div>
+      <div id="obsNote" class="obs-note">Наблюдение не начато — счётчики работают, но частота в час не посчитается.</div>
+      <button id="obsBtn" class="obs-btn" type="button">▶ Начать наблюдение</button>
+    </div>
+
+    <div id="behList"></div>
+
+    <button id="saveBtn" class="obs-btn stop" type="button" style="margin-bottom:24px;">■ Завершить и записать</button>
+
+    <h2>Журнал наблюдений</h2>
+    <div id="logList"></div>
+
+    <div id="toast"></div>
+  </div>
+
+  <script>
+    // Тот же приёмник, что у итогов сессий и ABC: скрипт различает пакеты
+    // по полю type ("freq" → лист «Частота» в таблице ребёнка).
+    const SESSION_ENDPOINT = "https://script.google.com/macros/s/AKfycbyb6efAwZyi1qLvFr4AeOZhXYvdM70xICSXdRI2eAeK7vdqdpa0jHEK4g7EGxJQhfD4cw/exec";
+
+    // Список поведений общий с ABC (одни и те же поведения ребёнка).
+    const KEY_B = "abc_behaviors";
+    // Данные частоты — свои ключи (входят в рабочий набор ребёнка).
+    const KEY_COUNTS = "freq_counts";   // {поведение: число} текущего наблюдения
+    const KEY_START = "freq_start";     // метка времени старта (ms) или пусто
+    const KEY_LOG = "freq_log";         // завершённые наблюдения
+    const LOG_LIMIT = 300;
+
+    const DEFAULT_B = [
+      "Крик",
+      "Плач",
+      "Падение на пол",
+      "Агрессия к другим",
+      "Самоагрессия",
+      "Бросание предметов"
+    ];
+
+    const toast = document.getElementById("toast");
+
+    // === Профили детей (как на других страницах) ===
+    const CHILDREN_KEY = "aba_children";
+    const ACTIVE_CHILD_KEY = "aba_active_child";
+
+    function getChildren() {
+      try {
+        const list = JSON.parse(localStorage.getItem(CHILDREN_KEY) || "[]");
+        return Array.isArray(list) ? list : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function getActiveChildId() {
+      return localStorage.getItem(ACTIVE_CHILD_KEY) || "";
+    }
+
+    function getActiveChildLabel() {
+      const found = getChildren().find((c) => c.id === getActiveChildId());
+      return found ? found.label : "";
+    }
+
+    function ensureActiveChild() {
+      let children = getChildren();
+      if (!children.length) {
+        const label = (localStorage.getItem("child_name") || "").trim() || "Ребёнок 1";
+        const id = "c" + Date.now().toString(36);
+        children = [{ id, label }];
+        localStorage.setItem(CHILDREN_KEY, JSON.stringify(children));
+        localStorage.setItem(ACTIVE_CHILD_KEY, id);
+        localStorage.setItem("child_name", label);
+        return;
+      }
+      if (!children.some((c) => c.id === getActiveChildId())) {
+        localStorage.setItem(ACTIVE_CHILD_KEY, children[0].id);
+        localStorage.setItem("child_name", children[0].label);
+      }
+    }
+
+    function renderActiveChild() {
+      const el = document.getElementById("activeChild");
+      const label = getActiveChildLabel();
+      el.textContent = label ? `Ребёнок: ${label}` : "";
+    }
+
+    // === Очередь отправки (общая IndexedDB aba_db/send_queue) ===
+    const IDB_NAME = "aba_db";
+    const IDB_STORE = "history";
+    const IDB_QUEUE = "send_queue";
+    const STUCK_ATTEMPTS = 30;
+    let dbPromise = null;
+    let flushing = false;
+
+    function openDB() {
+      if (dbPromise) return dbPromise;
+      dbPromise = new Promise((resolve, reject) => {
+        if (!("indexedDB" in window)) {
+          reject(new Error("IndexedDB не поддерживается"));
+          return;
+        }
+        const req = indexedDB.open(IDB_NAME, 2);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+          if (!db.objectStoreNames.contains(IDB_QUEUE)) {
+            db.createObjectStore(IDB_QUEUE, { keyPath: "id", autoIncrement: true });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      return dbPromise;
+    }
+
+    // Честная отправка: обычный запрос, ответ читается (см. CONTEXT).
+    async function sendPacket(endpoint, payload) {
+      const resp = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload),
+        redirect: "follow"
+      });
+      if (!resp.ok) return false;
+      const text = (await resp.text()).trim();
+      if (text === "OK") return true;
+      try {
+        const parsed = JSON.parse(text);
+        return Boolean(parsed && parsed.ok === true);
+      } catch {
+        return false;
+      }
+    }
+
+    function queueAdd(item) {
+      if (window.__abaIdbFailed) {
+        return sendPacket(item.endpoint, item.payload)
+          .catch((err) => console.error("Прямая отправка не удалась:", err));
+      }
+      return openDB()
+        .then(
+          (db) =>
+            new Promise((resolve, reject) => {
+              const tx = db.transaction(IDB_QUEUE, "readwrite");
+              tx.objectStore(IDB_QUEUE).add({ ...item, createdAt: Date.now() });
+              tx.oncomplete = () => resolve();
+              tx.onerror = () => reject(tx.error);
+            })
+        )
+        .catch((err) => {
+          window.__abaIdbFailed = true;
+          console.error("Очередь недоступна, шлю напрямую:", err);
+          return queueAdd(item);
+        });
+    }
+
+    function queueGetAll() {
+      return openDB().then(
+        (db) =>
+          new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_QUEUE, "readonly");
+            const req = tx.objectStore(IDB_QUEUE).getAll();
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => reject(req.error);
+          })
+      );
+    }
+
+    function queueDelete(id) {
+      return openDB().then(
+        (db) =>
+          new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_QUEUE, "readwrite");
+            tx.objectStore(IDB_QUEUE).delete(id);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          })
+      );
+    }
+
+    function queuePut(item) {
+      return openDB().then(
+        (db) =>
+          new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_QUEUE, "readwrite");
+            tx.objectStore(IDB_QUEUE).put(item);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          })
+      );
+    }
+
+    async function flushQueue() {
+      if (flushing || window.__abaIdbFailed) return;
+      flushing = true;
+      try {
+        const items = await queueGetAll();
+        for (const item of items) {
+          if ((item.attempts || 0) >= STUCK_ATTEMPTS) continue;
+          let delivered;
+          try {
+            delivered = await sendPacket(item.endpoint, item.payload);
+          } catch (err) {
+            console.warn("Отправка не удалась, элемент остаётся в очереди:", err);
+            break;
+          }
+          if (delivered) {
+            await queueDelete(item.id);
+          } else {
+            item.attempts = (item.attempts || 0) + 1;
+            await queuePut(item);
+          }
+        }
+      } catch (err) {
+        console.warn("Очередь отправки недоступна:", err);
+      } finally {
+        flushing = false;
+        updateQueueIndicator();
+      }
+    }
+
+    async function updateQueueIndicator() {
+      let items = [];
+      try {
+        items = await queueGetAll();
+      } catch {}
+      const el = document.getElementById("queueStatus");
+      const stuck = items.filter((i) => (i.attempts || 0) >= STUCK_ATTEMPTS).length;
+      if (stuck > 0) {
+        el.style.display = "inline";
+        el.style.color = "#b4552d";
+        el.style.cursor = "pointer";
+        el.textContent = `⚠ Не доставлено: ${stuck}. Нажмите — повторить`;
+        el.onclick = async () => {
+          for (const item of items) {
+            if ((item.attempts || 0) >= STUCK_ATTEMPTS) {
+              item.attempts = 0;
+              await queuePut(item);
+            }
+          }
+          showToast("Повторяю отправку…");
+          flushQueue();
+        };
+      } else if (items.length > 0) {
+        el.style.display = "inline";
+        el.style.color = "";
+        el.style.cursor = "";
+        el.onclick = null;
+        el.textContent = `⏳ Ожидают отправки: ${items.length}`;
+      } else {
+        el.style.display = "none";
+        el.onclick = null;
+      }
+    }
+
+    function showToast(message, ms = 3000) {
+      toast.textContent = message;
+      toast.style.display = "block";
+      clearTimeout(window.toastTimeout);
+      window.toastTimeout = setTimeout(() => {
+        toast.style.display = "none";
+      }, ms);
+    }
+
+    // === Список поведений ===
+    function getBehaviors() {
+      try {
+        const list = JSON.parse(localStorage.getItem(KEY_B) || "null");
+        return Array.isArray(list) && list.length ? list : DEFAULT_B;
+      } catch {
+        return DEFAULT_B;
+      }
+    }
+
+    function setBehaviors(lines) {
+      const list = lines.split("\n").map((s) => s.trim()).filter(Boolean);
+      if (list.length) {
+        localStorage.setItem(KEY_B, JSON.stringify(list));
+      } else {
+        localStorage.removeItem(KEY_B);
+      }
+    }
+
+    // === Счётчики текущего наблюдения ===
+    function getCounts() {
+      try {
+        const obj = JSON.parse(localStorage.getItem(KEY_COUNTS) || "{}");
+        return obj && typeof obj === "object" ? obj : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function setCounts(counts) {
+      localStorage.setItem(KEY_COUNTS, JSON.stringify(counts));
+    }
+
+    function bump(behavior, delta) {
+      const counts = getCounts();
+      const next = Math.max(0, (Number(counts[behavior]) || 0) + delta);
+      counts[behavior] = next;
+      setCounts(counts);
+      return next;
+    }
+
+    // === Таймер наблюдения (по метке времени — переживает перезагрузку) ===
+    function getStart() {
+      const v = Number(localStorage.getItem(KEY_START) || 0);
+      return v > 0 ? v : 0;
+    }
+
+    function elapsedMs() {
+      const start = getStart();
+      return start ? Date.now() - start : 0;
+    }
+
+    function fmtClock(ms) {
+      const total = Math.floor(ms / 1000);
+      const m = Math.floor(total / 60);
+      const s = total % 60;
+      return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    }
+
+    // Частота в час: count / минуты * 60. Без таймера — пусто.
+    function ratePerHour(count, minutes) {
+      if (!minutes || minutes <= 0) return "";
+      const r = (count / minutes) * 60;
+      return r >= 10 ? String(Math.round(r)) : String(Math.round(r * 10) / 10);
+    }
+
+    function renderObs() {
+      const clock = document.getElementById("obsClock");
+      const note = document.getElementById("obsNote");
+      const btn = document.getElementById("obsBtn");
+      const start = getStart();
+      if (start) {
+        clock.textContent = fmtClock(elapsedMs());
+        clock.classList.remove("idle");
+        note.textContent = "Наблюдение идёт — считайте каждое проявление кнопкой «+».";
+        btn.textContent = "⏹ Остановить таймер";
+        btn.classList.add("stop");
+      } else {
+        clock.textContent = fmtClock(0);
+        clock.classList.add("idle");
+        note.textContent = "Наблюдение не начато — счётчики работают, но частота в час не посчитается.";
+        btn.textContent = "▶ Начать наблюдение";
+        btn.classList.remove("stop");
+      }
+    }
+
+    function toggleObs() {
+      if (getStart()) {
+        localStorage.removeItem(KEY_START);
+        showToast("Таймер остановлен. Счётчики сохранены.");
+      } else {
+        localStorage.setItem(KEY_START, String(Date.now()));
+        showToast("Наблюдение начато.");
+      }
+      renderObs();
+      renderBehaviors();
+    }
+
+    // === Карточки поведений ===
+    function renderBehaviors() {
+      const box = document.getElementById("behList");
+      box.innerHTML = "";
+      const counts = getCounts();
+      const minutes = elapsedMs() / 60000;
+
+      getBehaviors().forEach((behavior) => {
+        const count = Number(counts[behavior]) || 0;
+
+        const row = document.createElement("div");
+        row.className = "beh";
+
+        const name = document.createElement("div");
+        name.className = "beh-name";
+        name.textContent = behavior;
+        const rate = document.createElement("span");
+        rate.className = "beh-rate";
+        const rph = ratePerHour(count, minutes);
+        rate.textContent = rph ? `${rph} раз/час` : "";
+        name.append(rate);
+
+        const minus = document.createElement("button");
+        minus.className = "beh-minus";
+        minus.type = "button";
+        minus.textContent = "−";
+        minus.title = "Убрать одно";
+
+        const countEl = document.createElement("div");
+        countEl.className = "beh-count";
+        countEl.textContent = String(count);
+
+        const plus = document.createElement("button");
+        plus.className = "beh-plus";
+        plus.type = "button";
+        plus.textContent = "+";
+
+        plus.onclick = () => {
+          const next = bump(behavior, 1);
+          countEl.textContent = String(next);
+          rate.textContent = (() => {
+            const r = ratePerHour(next, elapsedMs() / 60000);
+            return r ? `${r} раз/час` : "";
+          })();
+          plus.classList.remove("flash");
+          void plus.offsetWidth;
+          plus.classList.add("flash");
+          if (navigator.vibrate) navigator.vibrate(20);
+        };
+
+        minus.onclick = () => {
+          const next = bump(behavior, -1);
+          countEl.textContent = String(next);
+          rate.textContent = (() => {
+            const r = ratePerHour(next, elapsedMs() / 60000);
+            return r ? `${r} раз/час` : "";
+          })();
+        };
+
+        row.append(name, minus, countEl, plus);
+        box.append(row);
+      });
+    }
+
+    // === Журнал наблюдений ===
+    function getLog() {
+      try {
+        const log = JSON.parse(localStorage.getItem(KEY_LOG) || "[]");
+        return Array.isArray(log) ? log : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function setLog(log) {
+      localStorage.setItem(KEY_LOG, JSON.stringify(log.slice(-LOG_LIMIT)));
+    }
+
+    function renderLog() {
+      const box = document.getElementById("logList");
+      box.innerHTML = "";
+      const log = getLog();
+      if (!log.length) {
+        box.innerHTML = '<p class="empty-note">Наблюдений пока нет.</p>';
+        return;
+      }
+
+      const recent = log.slice(-20).reverse();
+      recent.forEach((obs) => {
+        const item = document.createElement("div");
+        item.className = "log-item";
+
+        const text = document.createElement("div");
+        const when = document.createElement("span");
+        when.className = "when";
+        when.textContent = `${obs.date} ${obs.time}`;
+        const details = document.createElement("span");
+        const parts = obs.items
+          .filter((it) => it.count > 0)
+          .map((it) => `${it.behavior}: ${it.count}${it.rate ? ` (${it.rate}/ч)` : ""}`);
+        details.textContent =
+          (obs.minutes ? ` · ${obs.minutes} мин · ` : " · ") +
+          (parts.length ? parts.join(", ") : "без проявлений");
+        text.append(when, details);
+
+        const del = document.createElement("button");
+        del.className = "del";
+        del.type = "button";
+        del.textContent = "✕";
+        del.onclick = () => {
+          const ok = window.confirm(
+            "Удалить наблюдение из журнала на этом устройстве? " +
+              "Из таблицы Google уже отправленная запись не удалится."
+          );
+          if (!ok) return;
+          setLog(getLog().filter((o) => o.id !== obs.id));
+          renderLog();
+        };
+
+        item.append(text, del);
+        box.append(item);
+      });
+
+      if (log.length > recent.length) {
+        const note = document.createElement("p");
+        note.className = "empty-note";
+        note.style.fontSize = "13px";
+        note.textContent = `Показаны последние ${recent.length} из ${log.length}. Полный список — в экспорте.`;
+        box.append(note);
+      }
+    }
+
+    // === Завершение наблюдения ===
+    function finishObservation() {
+      const counts = getCounts();
+      const behaviors = getBehaviors();
+      const total = behaviors.reduce((sum, b) => sum + (Number(counts[b]) || 0), 0);
+      const start = getStart();
+      const minutes = start ? Math.max(1, Math.round(elapsedMs() / 60000)) : 0;
+
+      if (!total && !start) {
+        showToast("Нечего записывать: ни одного проявления и таймер не запускался.");
+        return;
+      }
+
+      const ok = window.confirm(
+        `Записать наблюдение?\n\nПроявлений всего: ${total}` +
+          (minutes ? `, длительность: ${minutes} мин.` : ", без таймера.") +
+          `\nСчётчики обнулятся.`
+      );
+      if (!ok) return;
+
+      const now = new Date();
+      const obs = {
+        id: "f" + Date.now().toString(36),
+        date: now.toLocaleDateString("ru-RU"),
+        time: start
+          ? new Date(start).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+          : now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+        minutes,
+        items: behaviors.map((b) => {
+          const count = Number(counts[b]) || 0;
+          return { behavior: b, count, rate: ratePerHour(count, minutes) };
+        })
+      };
+
+      const log = getLog();
+      log.push(obs);
+      setLog(log);
+
+      // На сервер — по одной строке на поведение (только с проявлениями,
+      // либо все, если наблюдение прошло «вчистую» без проявлений).
+      queueAdd({
+        endpoint: SESSION_ENDPOINT,
+        payload: {
+          type: "freq",
+          child: getActiveChildLabel() || (localStorage.getItem("child_name") || ""),
+          date: obs.date,
+          time: obs.time,
+          minutes: obs.minutes,
+          items: obs.items
+        }
+      }).then(() => {
+        updateQueueIndicator();
+        flushQueue();
+      });
+
+      localStorage.removeItem(KEY_COUNTS);
+      localStorage.removeItem(KEY_START);
+      renderObs();
+      renderBehaviors();
+      renderLog();
+      showToast(`Наблюдение записано: ${total} проявлений${minutes ? `, ${minutes} мин` : ""}.`);
+    }
+
+    // === Экспорт журнала в CSV ===
+    function exportCsv() {
+      const log = getLog();
+      if (!log.length) {
+        showToast("Журнал пуст — нечего выгружать.");
+        return;
+      }
+      const rows = [["Дата", "Начало", "Длительность (мин)", "Поведение", "Количество", "Раз в час"]];
+      log.forEach((obs) => {
+        obs.items.forEach((it) => {
+          rows.push([obs.date, obs.time, obs.minutes || "", it.behavior, it.count, it.rate || ""]);
+        });
+      });
+      const escapeCell = (v) => `"${String(v).replace(/"/g, '""')}"`;
+      const csv = rows.map((r) => r.map(escapeCell).join(";")).join("\r\n");
+      const label = (getActiveChildLabel() || "ребёнок").replace(/[^\wа-яА-ЯёЁ.-]+/g, "_");
+      const stamp = new Date().toISOString().split("T")[0];
+      const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `частота_${label}_${stamp}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`Выгружено наблюдений: ${log.length}.`);
+    }
+
+    function wireSettings() {
+      const box = document.getElementById("settingsBox");
+      document.getElementById("settingsBtn").onclick = () => {
+        box.hidden = !box.hidden;
+        if (!box.hidden) {
+          document.getElementById("setB").value = getBehaviors().join("\n");
+        }
+      };
+      document.getElementById("setB").onchange = (e) => {
+        setBehaviors(e.target.value);
+        renderBehaviors();
+      };
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      ensureActiveChild();
+      renderActiveChild();
+      renderObs();
+      renderBehaviors();
+      renderLog();
+      wireSettings();
+      document.getElementById("obsBtn").onclick = toggleObs;
+      document.getElementById("saveBtn").onclick = finishObservation;
+      document.getElementById("csvBtn").onclick = exportCsv;
+
+      // Живые часы наблюдения.
+      setInterval(() => {
+        if (getStart()) renderObs();
+      }, 1000);
+
+      updateQueueIndicator();
+      flushQueue();
+      window.addEventListener("online", () => flushQueue());
+      setInterval(() => {
+        if (navigator.onLine) flushQueue();
+      }, 60000);
+    });
+
+    // Регистрация service worker для офлайн-работы (PWA).
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(console.error);
+      });
+    }
+  </script>
+  <script src="timer.js"></script>
+  <script src="tabbar.js"></script>
+</body>
+</html>

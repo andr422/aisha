@@ -17,6 +17,12 @@
         '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="3"/><text x="12" y="15.5" text-anchor="middle" font-size="8" font-weight="800" fill="currentColor" stroke="none" font-family="inherit">ABC</text></svg>'
     },
     {
+      href: "frequency.html",
+      label: "Частота",
+      icon:
+        '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10"/><path d="M12 20V4"/><path d="M19 20v-7"/></svg>'
+    },
+    {
       // Вкладка-действие: не ссылка, а вызов функции (визуальный таймер).
       action: () => window.abaTimer && window.abaTimer.open(),
       label: "Таймер",
