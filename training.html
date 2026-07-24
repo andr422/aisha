@@ -216,6 +216,59 @@
 
     .btn-primary { background: var(--accent); }
 
+    /* Демо-панель настройки. */
+    .setup-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin: 16px 0 6px;
+    }
+
+    .setup-label:first-child {
+      margin-top: 0;
+    }
+
+    .setup-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .setup-row input {
+      flex: 1;
+      min-width: 150px;
+      padding: 10px;
+      font-size: 15px;
+      font-family: var(--font-body);
+      border: 1.5px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .setup-hint {
+      font-size: 12px;
+      color: var(--bad);
+      margin-top: 4px;
+    }
+
+    .add-btn {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      margin-top: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: var(--font-body);
+      border: 2px dashed #93a7e4;
+      background: #f6f8ff;
+      color: #1a3ea9;
+      border-radius: 8px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
     /* Варианты ответа для вопросов. */
     .choices {
       display: flex;
@@ -343,6 +396,39 @@
         <div id="choices" class="choices" hidden></div>
       </div>
 
+      <!-- Демо-настройка: повторяет порядок действий на вкладке «Настройка». -->
+      <div id="practiceSetup" class="card" hidden>
+        <div class="setup-label">Ребёнок (профиль)</div>
+        <div class="setup-row">
+          <input type="text" id="tChild" placeholder="Напр. И.П. или 042" />
+          <button type="button" class="btn btn-primary" id="tChildAdd">＋ Добавить</button>
+        </div>
+        <div class="setup-hint">Только инициалы или ID. Полное имя вводить нельзя.</div>
+
+        <div class="setup-label">Дата сессии</div>
+        <div class="setup-row">
+          <input type="date" id="tDate" />
+          <button type="button" class="btn" id="tDateOk">Сохранить</button>
+        </div>
+
+        <div class="setup-label">Протоколы</div>
+        <button type="button" class="add-btn" id="tAddProto">＋ Добавить протокол</button>
+
+        <div id="tProtoBox" hidden>
+          <div class="setup-row">
+            <input type="text" id="tProtoTitle" placeholder="Название протокола" />
+            <button type="button" class="btn" id="tProtoOk">Сохранить</button>
+          </div>
+          <button type="button" class="add-btn" id="tAddGoal">＋ Добавить цель</button>
+          <div id="tGoalBox" hidden>
+            <div class="setup-row">
+              <input type="text" id="tGoal" placeholder="Название цели" />
+              <button type="button" class="btn" id="tGoalOk">Сохранить</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="practice" class="card">
         <div class="block-head">
           <div class="goal-label">Хлопает в ладоши по образцу</div>
@@ -393,13 +479,123 @@
     const BEST_KEY = "aba_training_best"; // единственная запись: лучший результат
 
     // Типы заданий:
+    //  input  — вписать значение в демо-поле и нажать его кнопку (проверка check)
+    //  click  — нажать нужный элемент демо-настройки
     //  press  — нажать нужную кнопку (+ / − / P коротким тапом)
     //  prompt — долгое нажатие P и выбор типа подсказки (G/V/E/PF/FF)
     //  undo   — воспользоваться отменой
     //  quiz   — вопрос с вариантами ответа
+    // panel: "setup" | "collect" | "none" — какая демо-панель показывается.
+
+    // Похоже ли на полное имя: два и более «словарных» слова длиной от 3 букв.
+    function looksLikeFullName(v) {
+      const words = String(v).trim().split(/\s+/).filter((w) => /[а-яёa-z]/i.test(w));
+      return words.filter((w) => w.replace(/\./g, "").length >= 3).length >= 2;
+    }
+
     const TASKS = [
+      // ——— Раздел 1: настройка ———
+      {
+        type: "input",
+        panel: "setup",
+        field: "tChild",
+        section: "Настройка",
+        scene: "Начинаем с нуля: новый ребёнок.",
+        text:
+          "Заведите профиль ребёнка. <b>Важное правило: только инициалы или ID</b> — " +
+          "полное имя вводить нельзя, это персональные данные ребёнка с диагнозом.<br><br>" +
+          "Впишите метку и нажмите «＋ Добавить».",
+        check: (v) => v.trim().length > 0 && !looksLikeFullName(v),
+        errorFor: (v) =>
+          !v.trim()
+            ? "Поле пустое."
+            : "Это похоже на полное имя.",
+        why:
+          "Подойдёт «И.П.», «042», «Реб-3». Полное имя в приложение не вносим никогда: " +
+          "планшет может потеряться, а данные детей с диагнозом — особо чувствительные."
+      },
+      {
+        type: "input",
+        panel: "setup",
+        field: "tDate",
+        section: "Настройка",
+        scene: "Профиль создан.",
+        text: "Поставьте <b>дату занятия</b> и сохраните.",
+        check: (v) => v.trim().length > 0,
+        errorFor: () => "Дата не выбрана.",
+        why:
+          "Дата подставляется в историю и в таблицу. Проверяйте её каждое занятие: " +
+          "она не сбрасывается сама, и вчерашняя дата уедет на сервер молча."
+      },
+      {
+        type: "click",
+        panel: "setup",
+        control: "tAddProto",
+        section: "Настройка",
+        scene: "Теперь протоколы.",
+        text: "Добавьте первый протокол — нажмите нужную кнопку.",
+        why: "Протоколы и цели добавляются по мере надобности, заранее пустых бланков нет."
+      },
+      {
+        type: "input",
+        panel: "setup",
+        field: "tProtoTitle",
+        section: "Настройка",
+        scene: "Карточка протокола появилась.",
+        text: "Впишите <b>название протокола</b> — например «Имитация» или «Матчинг» — и сохраните.",
+        check: (v) => v.trim().length > 0,
+        errorFor: () => "Название пустое.",
+        why:
+          "Название протокола становится листом в таблице ребёнка. Если сотрёте название — " +
+          "протокол исчезнет из ежедневной страницы."
+      },
+      {
+        type: "click",
+        panel: "setup",
+        control: "tAddGoal",
+        section: "Настройка",
+        scene: "Название есть.",
+        text: "Добавьте цель в этот протокол.",
+        why: "Целей можно добавить сколько нужно — кнопка остаётся на месте."
+      },
+      {
+        type: "input",
+        panel: "setup",
+        field: "tGoal",
+        section: "Настройка",
+        scene: "Формулируем цель.",
+        text:
+          "Впишите цель <b>конкретно и наблюдаемо</b>: не «моторика», а «Хлопает в ладоши по образцу».<br><br>" +
+          "Впишите такую цель и сохраните.",
+        check: (v) => v.trim().split(/\s+/).filter(Boolean).length >= 2,
+        errorFor: (v) =>
+          !v.trim() ? "Поле пустое." : "Слишком коротко — из одного слова непонятно, что считать успехом.",
+        why:
+          "По формулировке цели любой терапист должен одинаково понимать, что засчитать за «+». " +
+          "Имя цели попадает в историю и таблицу — потом его лучше не переименовывать."
+      },
+      {
+        type: "quiz",
+        panel: "none",
+        section: "Настройка",
+        scene: "Протокол настроен, в нём 8 целей.",
+        text: "Сегодня вы работаете только с тремя из них. Что сделать?",
+        choices: [
+          "На вкладке «Сбор» нажать «Выбрать цели» и отметить нужные три",
+          "Удалить лишние пять целей",
+          "Работать со всеми восемью"
+        ],
+        expect: "На вкладке «Сбор» нажать «Выбрать цели» и отметить нужные три",
+        why:
+          "«Выбрать цели» показывает на занятии только нужные. Остальные цели никуда не деваются, " +
+          "их история сохраняется — можно вернуть в работу в любой момент."
+      },
+
+      // ——— Раздел 2: сбор данных ———
       {
         type: "press",
+        panel: "collect",
+        section: "Сбор данных",
         scene: "Занятие началось.",
         text: "Вы показали хлопок. Ребёнок <b>сам</b> хлопнул в ладоши. Как записать?",
         expect: "+",
@@ -407,6 +603,8 @@
       },
       {
         type: "press",
+        panel: "collect",
+        section: "Сбор данных",
         scene: "Следующая проба.",
         text: "Вы показали хлопок. Ребёнок <b>не отреагировал</b> и отвернулся. Как записать?",
         expect: "−",
@@ -414,6 +612,8 @@
       },
       {
         type: "press",
+        panel: "collect",
+        section: "Сбор данных",
         scene: "Следующая проба.",
         text: "Ребёнок не начинал, вы слегка <b>помогли</b> — и он хлопнул. Тип помощи фиксировать не нужно. Как записать?",
         expect: "P",
@@ -421,6 +621,9 @@
       },
       {
         type: "quiz",
+        panel: "collect",
+        section: "Сбор данных",
+        presetCounts: { s: 2, p: 1, e: 1 },
         scene: "Разберёмся с процентом.",
         text: "Сейчас записано: <b>+ = 2</b>, <b>P = 1</b>, <b>− = 1</b>. Какой процент покажет приложение?",
         choices: ["50%", "67%", "100%"],
@@ -429,6 +632,8 @@
       },
       {
         type: "prompt",
+        panel: "collect",
+        section: "Сбор данных",
         scene: "Теперь точнее о помощи.",
         text: "Ребёнок замешкался, вы <b>показали жестом</b> на ладони — он хлопнул. Нужно записать <b>тип</b> подсказки.<br><br>Нажмите и <b>удерживайте</b> кнопку «P», затем выберите нужный тип.",
         expect: "G",
@@ -436,6 +641,8 @@
       },
       {
         type: "prompt",
+        panel: "collect",
+        section: "Сбор данных",
         scene: "Ещё одна проба.",
         text: "Вы <b>сказали словами</b>: «Хлопни» — и ребёнок хлопнул. Запишите тип подсказки (удержание «P»).",
         expect: "V",
@@ -443,6 +650,8 @@
       },
       {
         type: "prompt",
+        panel: "collect",
+        section: "Сбор данных",
         scene: "И ещё.",
         text: "Вы <b>взяли руки ребёнка и полностью выполнили</b> хлопок вместе с ним. Запишите тип подсказки.",
         expect: "FF",
@@ -450,12 +659,16 @@
       },
       {
         type: "undo",
+        panel: "collect",
+        section: "Сбор данных",
         scene: "Бывает и такое.",
         text: "Вы случайно нажали не ту кнопку. Исправьте это.",
         why: "Кнопка «Отменить действие» убирает последнюю запись. Не бойтесь ошибиться — отмена всегда рядом."
       },
       {
         type: "quiz",
+        panel: "none",
+        section: "Что куда",
         scene: "Про то, куда что записывать.",
         text: "Ребёнок за занятие <b>7 раз</b> бросил игрушку. Вам нужно посчитать, <b>сколько раз</b> это случилось. Куда идти?",
         choices: ["Вкладка «Сбор»", "Вкладка «Частота»", "Вкладка «ABC»"],
@@ -464,6 +677,8 @@
       },
       {
         type: "quiz",
+        panel: "none",
+        section: "Что куда",
         scene: "Ещё про выбор вкладки.",
         text: "Ребёнок закричал и упал на пол после того, как вы попросили убрать игрушки. Вы хотите зафиксировать <b>что было до и что после</b>. Куда идти?",
         choices: ["Вкладка «ABC»", "Вкладка «Сбор»", "Вкладка «Частота»"],
@@ -472,6 +687,8 @@
       },
       {
         type: "quiz",
+        panel: "none",
+        section: "Что куда",
         scene: "Последнее — про конец занятия.",
         text: "Занятие закончилось, все пробы записаны. Что сделать, чтобы данные попали к супервизору?",
         choices: [
@@ -524,11 +741,17 @@
       $("scoreText").textContent = `Очки: ${state.score}`;
       $("progressFill").style.width = `${(state.idx / TASKS.length) * 100}%`;
       $("taskText").innerHTML =
+        (task.section ? `<span class="task-scene">${task.section}. </span>` : "") +
         (task.scene ? `<span class="task-scene">${task.scene}</span>` : "") + task.text;
 
+      // Какая демо-панель нужна этому заданию.
+      const panel = task.panel || "collect";
+      $("practiceSetup").hidden = panel !== "setup";
+      $("practice").hidden = panel === "setup";
+
       // Для задания на проценты выставляем нужные счётчики заранее.
-      if (task.type === "quiz" && state.idx === 3) {
-        state.counts = { "+": 2, P: 1, "−": 1 };
+      if (task.presetCounts) {
+        state.counts = { "+": task.presetCounts.s, P: task.presetCounts.p, "−": task.presetCounts.e };
         renderCounts();
       }
 
@@ -552,6 +775,57 @@
         $("practice").style.opacity = "1";
         $("practice").style.pointerEvents = "auto";
       }
+    }
+
+    // === Демо-настройка: ввод значений и нажатия ===
+    // Поля и кнопки повторяют порядок действий на вкладке «Настройка».
+    function submitSetupField(fieldId) {
+      const task = TASKS[state.idx];
+      const value = $(fieldId).value;
+
+      // Прогресс демо-панели раскрываем независимо от того, то ли это задание.
+      if (fieldId === "tProtoTitle" && value.trim()) $("tAddGoal").hidden = false;
+
+      if (state.answered) return;
+      if (task.type !== "input" || task.field !== fieldId) {
+        showToast("Сейчас нужно другое действие — смотрите задание выше.");
+        return;
+      }
+      const ok = task.check(value);
+      judge(ok, task, ok ? "" : task.errorFor(value));
+    }
+
+    function clickSetupControl(controlId) {
+      const task = TASKS[state.idx];
+
+      // Раскрытие блоков демо-настройки (как в реальном приложении).
+      if (controlId === "tAddProto") $("tProtoBox").hidden = false;
+      if (controlId === "tAddGoal") $("tGoalBox").hidden = false;
+
+      if (state.answered) return;
+      if (task.type !== "click" || task.control !== controlId) {
+        showToast("Сейчас нужно другое действие — смотрите задание выше.");
+        return;
+      }
+      judge(true, task, "");
+    }
+
+    function wireSetupPanel() {
+      $("tChildAdd").onclick = () => submitSetupField("tChild");
+      $("tDateOk").onclick = () => submitSetupField("tDate");
+      $("tProtoOk").onclick = () => submitSetupField("tProtoTitle");
+      $("tGoalOk").onclick = () => submitSetupField("tGoal");
+      $("tAddProto").onclick = () => clickSetupControl("tAddProto");
+      $("tAddGoal").onclick = () => clickSetupControl("tAddGoal");
+      // Enter в поле = нажатие его кнопки.
+      [["tChild", "tChildAdd"], ["tProtoTitle", "tProtoOk"], ["tGoal", "tGoalOk"]].forEach(([f, b]) => {
+        $(f).addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            $(b).click();
+          }
+        });
+      });
     }
 
     function judge(ok, task, extra) {
@@ -696,6 +970,13 @@
       }
     }
 
+    // Сброс демо-панели настройки в исходное состояние.
+    function resetSetupPanel() {
+      ["tChild", "tDate", "tProtoTitle", "tGoal"].forEach((id) => { $(id).value = ""; });
+      $("tProtoBox").hidden = true;
+      $("tGoalBox").hidden = true;
+    }
+
     function restart() {
       state.idx = 0;
       state.score = 0;
@@ -703,12 +984,14 @@
       state.undoStack = [];
       $("result").hidden = true;
       $("trainer").hidden = false;
+      resetSetupPanel();
       renderCounts();
       renderTask();
     }
 
     document.addEventListener("DOMContentLoaded", () => {
       wirePractice();
+      wireSetupPanel();
       $("nextBtn").onclick = nextTask;
       $("restartBtn").onclick = restart;
       renderCounts();
