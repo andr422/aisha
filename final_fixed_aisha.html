@@ -656,6 +656,7 @@
           <div id="menuDrop" class="menu-drop" hidden>
             <button id="noteBtn" type="button">📝 Заметка</button>
             <button id="viewModeBtn" type="button">Вид: список</button>
+            <button id="menuHistory" type="button">📋 История сессий</button>
             <button id="menuCharts" type="button">📊 Графики</button>
             <button id="menuCsv" type="button">⬇ Экспорт (CSV)</button>
             <button id="menuReport" type="button">⬇ Отчёт с графиками</button>
@@ -716,7 +717,7 @@
     </div>
     <div id="toast"></div>
     <div id="undo-banner">Отменить действие</div>
-    <div id="historyContainer"><h2>История сессий</h2></div>
+    <div id="historyContainer" hidden><h2>История сессий</h2></div>
 
   </div>
 
@@ -1725,6 +1726,8 @@
 
     // Раздел «Графики» в приложении (рисуется по требованию).
     let chartsVisible = false;
+    // История сессий скрыта по умолчанию, открывается из меню «⋮».
+    let historyVisible = false;
 
     function renderCharts(container) {
       container.innerHTML = "";
@@ -2366,6 +2369,24 @@ ${body || "<p>Нет данных за период.</p>"}
       document.getElementById("menuBtn").setAttribute("aria-expanded", "false");
     }
 
+    // Показать/скрыть раздел истории (и обновить подпись пункта меню).
+    function setHistoryVisible(visible) {
+      historyVisible = visible;
+      historyContainer.hidden = !visible;
+      document.getElementById("menuHistory").textContent = visible ? "📋 Скрыть историю" : "📋 История сессий";
+    }
+
+    function toggleHistoryFromMenu() {
+      if (!getHistory().length) {
+        showToast("Пока нет сохранённых сессий.");
+        return;
+      }
+      setHistoryVisible(!historyVisible);
+      if (historyVisible) {
+        historyContainer.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
     function toggleChartsFromMenu() {
       if (!getHistory().length) {
         showToast("Пока нет замеров для графиков.");
@@ -2373,6 +2394,8 @@ ${body || "<p>Нет данных за период.</p>"}
       }
       chartsVisible = !chartsVisible;
       document.getElementById("menuCharts").textContent = chartsVisible ? "📊 Скрыть графики" : "📊 Графики";
+      // Графики живут внутри раздела истории — при включении раскрываем и его.
+      if (chartsVisible && !historyVisible) setHistoryVisible(true);
       renderHistory();
       if (chartsVisible) {
         const box = document.querySelector(".charts-box");
@@ -2403,6 +2426,7 @@ ${body || "<p>Нет данных за период.</p>"}
 
       // Любой пункт меню закрывает его после действия.
       drop.addEventListener("click", () => closeMenu());
+      document.getElementById("menuHistory").addEventListener("click", toggleHistoryFromMenu);
       document.getElementById("menuCharts").addEventListener("click", toggleChartsFromMenu);
       document.getElementById("menuCsv").addEventListener("click", exportHistoryCsv);
       document.getElementById("menuReport").addEventListener("click", exportHistoryReport);
