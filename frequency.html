@@ -104,6 +104,80 @@
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
     }
 
+    /* === График по журналу наблюдений === */
+    .chart-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .chart-head h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .chart-modes {
+      display: flex;
+      gap: 6px;
+    }
+
+    .mode-btn {
+      border: 1.5px solid var(--line, #d9d5c9);
+      background: #fff;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-family: inherit;
+      font-size: 13px;
+      color: #596270;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .mode-btn.on {
+      background: #0e7490;
+      border-color: #0e7490;
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    /* Нажатие на поведение прячет его линию — когда поведений много,
+       иначе график превращается в клубок. */
+    .legend-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1.5px solid var(--line, #d9d5c9);
+      background: #fff;
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .legend-chip.off {
+      opacity: 0.45;
+      text-decoration: line-through;
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex: 0 0 auto;
+    }
+
     /* Меню «⋮» — как на сводной и ежедневной. */
     .menu-wrap {
       position: relative;
@@ -419,6 +493,7 @@
         <div id="menuDrop" class="menu-drop" hidden>
           <button type="button" id="tourBtn">💡 Подсказки на экране</button>
           <button type="button" id="noteBtn">📝 Заметка</button>
+          <button type="button" id="chartBtn">📊 График</button>
           <button type="button" id="settingsBtn">⚙ Списки</button>
           <button type="button" id="csvBtn">⬇ Экспорт (CSV)</button>
         </div>
@@ -453,6 +528,20 @@
     <div id="behList"></div>
 
     <button id="saveBtn" class="obs-btn stop" type="button" style="margin-bottom:24px;">■ Завершить и записать</button>
+
+    <!-- График по журналу: линия на каждое поведение. Скрыт по умолчанию. -->
+    <div id="chartBox" class="card" hidden>
+      <div class="chart-head">
+        <h3>Динамика по наблюдениям</h3>
+        <div class="chart-modes">
+          <button type="button" class="mode-btn" data-mode="rate">раз в час</button>
+          <button type="button" class="mode-btn" data-mode="count">количество</button>
+        </div>
+      </div>
+      <div id="chartLegend" class="chart-legend"></div>
+      <div id="chartArea"></div>
+      <div id="chartNote" class="hint"></div>
+    </div>
 
     <h2>Журнал наблюдений</h2>
     <div id="logList"></div>
@@ -931,6 +1020,7 @@
           if (!ok) return;
           setLog(getLog().filter((o) => o.id !== obs.id));
           renderLog();
+          renderChart();
         };
 
         item.append(text, del);
@@ -1006,7 +1096,213 @@
       renderObs();
       renderBehaviors();
       renderLog();
+      renderChart();
       showToast(`Наблюдение записано: ${total} проявлений${minutes ? `, ${minutes} мин` : ""}.`);
+    }
+
+    // === График по журналу: линия на каждое поведение ===
+    // По оси X — наблюдения по порядку (последние 15), по Y — либо «раз в час»
+    // (сопоставимо между наблюдениями разной длины), либо просто количество.
+    const CHART_KEY = "freq_chart_open";   // раскрыт ли график
+    const CHART_MODE_KEY = "freq_chart_mode"; // "rate" | "count"
+    const CHART_OFF_KEY = "freq_chart_off";   // скрытые вручную поведения
+    const CHART_POINTS = 15;
+    // Цвета линий: контрастные и различимые, в том числе на печати.
+    const LINE_COLORS = [
+      "#0e7490", "#b4552d", "#5b21b6", "#166534",
+      "#8a6a14", "#9d174d", "#1e40af", "#3f6212"
+    ];
+
+    function chartMode() {
+      return localStorage.getItem(CHART_MODE_KEY) === "count" ? "count" : "rate";
+    }
+
+    function hiddenBehaviors() {
+      try {
+        const list = JSON.parse(localStorage.getItem(CHART_OFF_KEY) || "[]");
+        return Array.isArray(list) ? list : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function toggleBehavior(name) {
+      const list = hiddenBehaviors();
+      const next = list.includes(name) ? list.filter((n) => n !== name) : [...list, name];
+      localStorage.setItem(CHART_OFF_KEY, JSON.stringify(next));
+      renderChart();
+    }
+
+    // Ряды по поведениям: значение на каждое наблюдение, null — нет данных
+    // (например, наблюдение шло без таймера, а смотрим «раз в час»).
+    function chartSeries(log, mode) {
+      const names = [];
+      log.forEach((obs) => {
+        (obs.items || []).forEach((it) => {
+          if (it.behavior && !names.includes(it.behavior)) names.push(it.behavior);
+        });
+      });
+      return names.map((name, i) => ({
+        name,
+        color: LINE_COLORS[i % LINE_COLORS.length],
+        values: log.map((obs) => {
+          const item = (obs.items || []).find((it) => it.behavior === name);
+          if (!item) return null;
+          if (mode === "count") return Number(item.count) || 0;
+          const rate = parseFloat(String(item.rate).replace(",", "."));
+          return Number.isFinite(rate) ? rate : null;
+        })
+      }));
+    }
+
+    function buildFreqChart(log, series, mode) {
+      const W = 640;
+      const H = 260;
+      const padL = 40;
+      const padR = 12;
+      const padT = 12;
+      const padB = 30;
+      const plotW = W - padL - padR;
+      const plotH = H - padT - padB;
+      const n = log.length;
+
+      const all = series.flatMap((s) => s.values).filter((v) => v != null);
+      const maxRaw = Math.max(1, ...all);
+      // Округляем «потолок» вверх, чтобы подписи были круглыми.
+      const step = maxRaw <= 5 ? 1 : maxRaw <= 20 ? 5 : maxRaw <= 60 ? 10 : 20;
+      const max = Math.ceil(maxRaw / step) * step;
+
+      const x = (i) => padL + (n === 1 ? plotW / 2 : (i * plotW) / (n - 1));
+      const y = (v) => padT + ((max - v) * plotH) / max;
+
+      let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block">`;
+
+      // Сетка с подписями значений.
+      for (let v = 0; v <= max; v += step) {
+        const yy = y(v).toFixed(1);
+        svg += `<line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}" stroke="#d9d5c9" stroke-width="1" opacity="0.6"/>`;
+        svg += `<text x="${padL - 6}" y="${Number(yy) + 3.5}" text-anchor="end" font-size="11" fill="#667085">${v}</text>`;
+      }
+
+      series.forEach((s) => {
+        // Разрывы: рисуем отрезками только между соседними точками с данными.
+        let path = "";
+        let open = false;
+        s.values.forEach((v, i) => {
+          if (v == null) {
+            open = false;
+            return;
+          }
+          path += `${open ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)} `;
+          open = true;
+        });
+        if (path) {
+          svg += `<path d="${path.trim()}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+        }
+        s.values.forEach((v, i) => {
+          if (v == null) return;
+          svg += `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="4" fill="${s.color}"/>`;
+        });
+      });
+
+      // Подписи дат: первая, средняя и последняя — иначе не читаются.
+      const idxs = [...new Set(n < 3 ? [0, n - 1] : [0, Math.floor((n - 1) / 2), n - 1])];
+      idxs.forEach((i) => {
+        if (i < 0) return;
+        const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
+        const ax = i === 0 ? padL : i === n - 1 ? W - padR : x(i).toFixed(1);
+        svg += `<text x="${ax}" y="${H - 8}" text-anchor="${anchor}" font-size="11" fill="#667085">${log[i].date}</text>`;
+      });
+
+      svg += "</svg>";
+      return svg;
+    }
+
+    function renderChart() {
+      const box = document.getElementById("chartBox");
+      if (!box) return;
+      const opened = localStorage.getItem(CHART_KEY) === "1";
+      box.hidden = !opened;
+      if (!opened) return;
+
+      const mode = chartMode();
+      box.querySelectorAll(".mode-btn").forEach((btn) => {
+        btn.classList.toggle("on", btn.dataset.mode === mode);
+      });
+
+      const area = document.getElementById("chartArea");
+      const legend = document.getElementById("chartLegend");
+      const note = document.getElementById("chartNote");
+      const log = getLog().slice(-CHART_POINTS);
+      legend.innerHTML = "";
+      area.innerHTML = "";
+
+      if (log.length < 2) {
+        note.textContent = "Нужно хотя бы два наблюдения — тогда появится линия.";
+        return;
+      }
+
+      const off = hiddenBehaviors();
+      const series = chartSeries(log, mode);
+      // В наблюдение записываются ВСЕ поведения из списка, в том числе с
+      // нулями. Показывать шесть линий по нулю бессмысленно — берём только те,
+      // что хоть раз проявились.
+      const all = series.filter((s) => s.values.some((v) => v != null && v > 0));
+      const silent = series.length - all.length;
+      if (!all.length) {
+        note.textContent = "Ни одно поведение пока не проявлялось — линию строить не из чего.";
+        return;
+      }
+
+      // Легенда показывает ВСЕ поведения, на графике — только включённые.
+      all.forEach((s) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = `legend-chip${off.includes(s.name) ? " off" : ""}`;
+        const dot = document.createElement("span");
+        dot.className = "legend-dot";
+        dot.style.background = s.color;
+        chip.append(dot, document.createTextNode(s.name));
+        chip.title = off.includes(s.name) ? "Показать линию" : "Скрыть линию";
+        chip.onclick = () => toggleBehavior(s.name);
+        legend.append(chip);
+      });
+
+      const shown = all.filter((s) => !off.includes(s.name) && s.values.some((v) => v != null));
+      if (!shown.length) {
+        note.textContent =
+          mode === "rate"
+            ? "Нет данных: «раз в час» считается только для наблюдений с таймером. Переключитесь на «количество»."
+            : "Все линии скрыты — нажмите на поведение, чтобы вернуть.";
+        return;
+      }
+
+      area.innerHTML = buildFreqChart(log, shown, mode);
+      const withoutTimer = log.filter((obs) => !obs.minutes).length;
+      note.textContent =
+        (mode === "rate" ? "Проявлений в час" : "Проявлений за наблюдение") +
+        `, последние ${log.length} наблюдений.` +
+        (mode === "rate" && withoutTimer
+          ? ` Наблюдений без таймера: ${withoutTimer} — на графике они пропущены.`
+          : "") +
+        (silent ? ` Поведений без единого проявления: ${silent} — не показаны.` : "");
+    }
+
+    function wireChart() {
+      document.getElementById("chartBtn").onclick = () => {
+        const opened = localStorage.getItem(CHART_KEY) === "1";
+        localStorage.setItem(CHART_KEY, opened ? "0" : "1");
+        renderChart();
+        if (!opened) {
+          document.getElementById("chartBox").scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      };
+      document.querySelectorAll("#chartBox .mode-btn").forEach((btn) => {
+        btn.onclick = () => {
+          localStorage.setItem(CHART_MODE_KEY, btn.dataset.mode);
+          renderChart();
+        };
+      });
     }
 
     // === Экспорт журнала в CSV ===
@@ -1186,9 +1482,11 @@
       renderObs();
       renderBehaviors();
       renderLog();
+      renderChart();
       wireSettings();
       wireMenu();
       wireNote();
+      wireChart();
       document.getElementById("obsBtn").onclick = toggleObs;
       document.getElementById("saveBtn").onclick = finishObservation;
       document.getElementById("csvBtn").onclick = exportCsv;

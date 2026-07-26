@@ -1,11 +1,307 @@
 <!DOCTYPE html>
 <html lang="ru">
-<head><meta charset="UTF-8"/><title>ABA Чеклисты</title></head>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ABA Чек-листы — с чего начать</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0d6efd" />
+  <link rel="icon" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta name="description" content="Приложение для сбора данных на ABA-занятиях: с чего начать новому тераписту." />
+  <style>
+    @font-face {
+      font-family: "Unbounded";
+      src: url("fonts/Unbounded.woff2") format("woff2");
+      font-weight: 400 900;
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: "Onest";
+      src: url("fonts/Onest.woff2") format("woff2");
+      font-weight: 300 800;
+      font-display: swap;
+    }
+
+    :root {
+      --bg: #f4f1ea;
+      --card: #ffffff;
+      --ink: #1f2933;
+      --muted: #6b7280;
+      --line: #d9d5c9;
+      --accent: #0e7490;
+      --font-display: "Unbounded", -apple-system, "Segoe UI", sans-serif;
+      --font-body: "Onest", -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.55;
+    }
+
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 28px 16px 56px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 26px;
+    }
+
+    header img {
+      width: 72px;
+      height: 72px;
+      border-radius: 18px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    }
+
+    h1 {
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-size: 30px;
+      line-height: 1.15;
+      margin: 14px 0 6px;
+    }
+
+    .lead {
+      color: var(--muted);
+      margin: 0 auto;
+      max-width: 480px;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+    }
+
+    h2 {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 19px;
+      margin: 0 0 10px;
+    }
+
+    h3 {
+      font-size: 16px;
+      margin: 16px 0 6px;
+    }
+
+    p {
+      margin: 0 0 10px;
+    }
+
+    .open-btn {
+      display: block;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      text-align: center;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 19px;
+      padding: 18px;
+      border-radius: 14px;
+      box-shadow: 0 4px 0 #0b5e75;
+      margin-bottom: 8px;
+    }
+
+    .open-btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 2px 0 #0b5e75;
+    }
+
+    .under-btn {
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      margin: 0;
+    }
+
+    ol.steps {
+      margin: 0;
+      padding-left: 22px;
+    }
+
+    ol.steps li {
+      margin-bottom: 10px;
+    }
+
+    ul.plain {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    ul.plain li {
+      margin-bottom: 8px;
+    }
+
+    .tiles {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .tile {
+      display: block;
+      border: 1.5px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      text-decoration: none;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    .tile b {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 2px;
+    }
+
+    .tile span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 15px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 8px 6px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .key {
+      display: inline-block;
+      background: #eef1f4;
+      border-radius: 6px;
+      padding: 1px 7px;
+      font-weight: 700;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .warn {
+      background: #fff4e5;
+      border-left: 4px solid #b45309;
+      border-radius: 0 10px 10px 0;
+      padding: 12px 14px;
+    }
+
+    .warn b {
+      color: #92400e;
+    }
+
+    .danger {
+      background: #fdecea;
+      border-left: 4px solid #b4552d;
+      border-radius: 0 10px 10px 0;
+      padding: 12px 14px;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 28px;
+    }
+  </style>
+</head>
 <body>
-  <h1>ABA Чек-листы</h1>
-  <ul>
-    <li><a href="summary_fixed_aisha.html">Сводный чек-лист</a></li>
-    <li><a href="final_fixed_aisha.html">Ежедневный чек-лист</a></li>
-  </ul>
+  <div class="page">
+    <header>
+      <img src="icon-192.png" alt="" />
+      <h1>ABA Чек-листы</h1>
+      <p class="lead">Приложение для сбора данных на занятии: пробы, эпизоды поведения, частота, таймер. Работает на планшете и без интернета.</p>
+    </header>
+
+    <a class="open-btn" href="final_fixed_aisha.html">Открыть приложение</a>
+    <p class="under-btn">Ничего устанавливать не нужно — открывается в браузере.</p>
+
+    <div class="card" style="margin-top:22px;">
+      <h2>Первый день: три шага</h2>
+      <ol class="steps">
+        <li><b>Заведите ребёнка.</b> Вкладка <span class="key">Настройка</span> внизу → <span class="key">＋</span> рядом со списком детей.</li>
+        <li><b>Добавьте протокол и цели.</b> Протокол — направление работы («Имитация»), цель — конкретный навык («хлопает в ладоши по образцу»). Есть готовые шаблоны: впишите название протокола, и приложение предложит подставить цели.</li>
+        <li><b>Собирайте данные на вкладке</b> <span class="key">Сбор</span>: <span class="key">−</span> ошибка, <span class="key">P</span> была помощь, <span class="key">+</span> сделал сам. В конце занятия — <span class="key">Отправить данные</span>.</li>
+      </ol>
+      <p style="margin-top:12px;">При первом открытии каждой страницы приложение само подсветит кнопки и объяснит, что делать.</p>
+    </div>
+
+    <div class="card danger">
+      <h2 style="margin-top:0;">Два правила, без которых данные теряются</h2>
+      <ul class="plain">
+        <li><b>Пока не нажали «Отправить данные» — занятие не ушло в таблицу.</b> Нажимайте в конце каждого занятия. Без интернета данные подождут в планшете и уйдут сами, когда связь появится.</li>
+        <li><b>В имени ребёнка — только инициалы или номер.</b> Например «М.К.» или «Реб-7». Полное имя вводить нельзя: это данные о здоровье ребёнка, они защищены законом.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Как научиться за полчаса</h2>
+      <div class="tiles">
+        <a class="tile" href="training.html">
+          <b>🎓 Тренажёр</b>
+          <span>17 заданий на выдуманном ребёнке. Ничего не испортите — данные не сохраняются.</span>
+        </a>
+        <a class="tile" href="guide.html">
+          <b>📖 Памятка</b>
+          <span>Инструкция от простого к сложному. Можно распечатать.</span>
+        </a>
+      </div>
+      <p style="margin-top:12px;">Подсказки прямо на экране повторяются в любой момент: меню <span class="key">⋮</span> → <b>💡 Подсказки на экране</b>.</p>
+    </div>
+
+    <div class="card">
+      <h2>Поставьте на главный экран планшета</h2>
+      <p>Тогда приложение открывается как обычное, без адресной строки, и работает офлайн.</p>
+      <h3>Android (Chrome)</h3>
+      <p>Меню браузера <span class="key">⋮</span> → <b>Установить приложение</b> или <b>Добавить на главный экран</b>.</p>
+      <h3>iPad (Safari)</h3>
+      <p>Кнопка <b>Поделиться</b> <span class="key">⬆</span> → <b>На экран «Домой»</b>.</p>
+      <div class="warn" style="margin-top:12px;"><b>Обновления приходят сами.</b> Если кажется, что чего-то не хватает, — закройте приложение и откройте снова при интернете.</div>
+    </div>
+
+    <div class="card">
+      <h2>Что где</h2>
+      <table>
+        <tr><th>Сбор</th><td>Занятие: кнопки по каждой цели, проценты, история, графики, отчёт для родителей</td></tr>
+        <tr><th>ABC</th><td>Эпизод поведения: что было до, что случилось, что после</td></tr>
+        <tr><th>Частота</th><td>Сколько раз случилось поведение, «раз в час», график динамики</td></tr>
+        <tr><th>Таймер</th><td>Наглядный таймер для ребёнка: красный круг уменьшается</td></tr>
+        <tr><th>Настройка</th><td>Дети, протоколы и цели, шаблоны, памятка, резервная копия</td></tr>
+      </table>
+      <div class="tiles">
+        <a class="tile" href="final_fixed_aisha.html"><b>Открыть «Сбор»</b><span>обычное начало дня</span></a>
+        <a class="tile" href="summary_fixed_aisha.html"><b>Открыть «Настройку»</b><span>дети, протоколы, цели</span></a>
+      </div>
+    </div>
+
+    <footer>Вопросы и доступ к таблицам — у супервизора.</footer>
+  </div>
 </body>
 </html>

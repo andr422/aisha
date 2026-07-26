@@ -410,16 +410,14 @@
       font-weight: 700;
     }
 
+    /* Цветом выделен только критерий освоения (≥80%). Всё ниже — нейтрально
+       серым: промежуточные проценты не должны читаться как «плохо». */
     .percent.green {
       color: var(--ok-ink);
     }
 
-    .percent.orange {
-      color: var(--prompt-ink);
-    }
-
-    .percent.red {
-      color: var(--low-ink);
+    .percent.grey {
+      color: var(--muted);
     }
 
     .sparkline {
@@ -1560,7 +1558,8 @@
       }
 
       const last = values[values.length - 1];
-      const color = last >= 80 ? "#0e7490" : last >= 50 ? "#8a6a14" : "#b4552d";
+      // Та же шкала, что и у крупного процента: цветом только освоение.
+      const color = last >= 80 ? "#0e7490" : "#6b7280";
 
       const lastLabel = document.createElement("span");
       lastLabel.className = "sparkline-last";
@@ -1876,13 +1875,15 @@
       const n = points.length;
       const x = (i) => padL + (n === 1 ? plotW / 2 : (i * plotW) / (n - 1));
       const y = (v) => padT + ((100 - v) * plotH) / 100;
-      const dotColor = (v) => (v >= 80 ? "#0e7490" : v >= 50 ? "#8a6a14" : "#b4552d");
+      // Цветом отмечено только достижение критерия (≥80%), остальное серым.
+      const dotColor = (v) => (v >= 80 ? "#0e7490" : "#6b7280");
 
       let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block">`;
       [0, 50, 80, 100].forEach((v) => {
         const yy = y(v).toFixed(1);
         const dash = v === 50 || v === 80 ? ' stroke-dasharray="4 4"' : "";
-        const col = v === 80 ? "#0e7490" : v === 50 ? "#8a6a14" : "#d9d5c9";
+        // Выделен только порог освоения; линия 50% — просто ориентир.
+        const col = v === 80 ? "#0e7490" : v === 50 ? "#9aa2ad" : "#d9d5c9";
         svg += `<line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}" stroke="${col}" stroke-width="1"${dash} opacity="0.6"/>`;
         svg += `<text x="${padL - 6}" y="${Number(yy) + 3.5}" text-anchor="end" font-size="11" fill="#667085">${v}</text>`;
       });
@@ -2623,7 +2624,7 @@ ${extra}
         // Процент самостоятельных реакций: + / (+ P −).
         const percent = Math.round((success / total) * 100);
         percentEl.innerHTML = `${percent}<span class="pct-sign">%</span>`;
-        percentEl.className = `percent ${percent >= 80 ? "green" : percent >= 50 ? "orange" : "red"}`;
+        percentEl.className = `percent ${percent >= 80 ? "green" : "grey"}`;
       });
     }
 

@@ -6,10 +6,24 @@
 // («прожектор» — прозрачное окно с огромной тенью вокруг), рядом карточка
 // с пояснением и кнопками. Шаги свои для каждой страницы.
 //
-// Запуск: автоматически при ПЕРВОМ открытии страницы (флаг в localStorage)
-// и вручную — пунктом меню «💡 Подсказки» (кнопка с id="tourBtn").
+// Запуск: автоматически при ПЕРВОМ открытии страницы и ещё раз, когда
+// подсказки этой страницы обновились (см. VERSIONS ниже); вручную — пунктом
+// меню «💡 Подсказки» (кнопка с id="tourBtn").
 (function () {
-  const SEEN_KEY = "aba_tour_seen"; // { "final": true, "abc": true, ... }
+  // { "final": 2, "abc": 1, ... } — какую ВЕРСИЮ подсказок здесь уже видели.
+  // Старый формат (true) считаем первой версией.
+  const SEEN_KEY = "aba_tour_seen";
+
+  // ВАЖНО: меняете шаги страницы — поднимите её номер здесь. Тогда подсказки
+  // один раз покажутся заново всем, кто их уже видел (иначе новое пройдёт
+  // мимо тех, у кого приложение стоит давно). Номер чужой страницы не трогать —
+  // иначе людям заново покажут то, что не менялось.
+  const VERSIONS = {
+    final: 2,     // 2 — добавлен шаг про блок «Генерализация»
+    summary: 2,   // 2 — шаги-мастера: ждут реального нажатия на пустом планшете
+    abc: 1,
+    frequency: 2 // 2 — добавлен шаг про график по журналу наблюдений
+  };
 
   // Текущая страница по имени файла.
   function pageId() {
@@ -191,6 +205,13 @@
         sel: "#saveBtn",
         title: "Завершить и записать",
         text: "Наблюдение попадёт в журнал и в таблицу ребёнка, счётчики обнулятся."
+      },
+      {
+        sel: "#menuDrop",
+        title: "График по наблюдениям",
+        text: "Меню «⋮» → «📊 График»: линия на каждое поведение, видно, растёт оно или уходит. Нужно хотя бы два наблюдения.",
+        before: openMenu,
+        after: closeMenu
       }
     ]
   };
@@ -236,6 +257,15 @@
       color: #0e7490;
     }
     #aba-tour-card .aba-tour-do[hidden] { display: none; }
+    /* Показывается один раз, когда подсказки страницы обновились: человек уже
+       знает приложение и должен понять, почему они всплыли снова. */
+    #aba-tour-card .aba-tour-new {
+      margin: -2px 0 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #b45309;
+    }
+    #aba-tour-card .aba-tour-new[hidden] { display: none; }
     .aba-tour-row {
       display: flex;
       align-items: center;
@@ -264,6 +294,7 @@
   let card = null;
   let currentAfter = null;
   let stopWatching = null; // снять слежение за результатом шага
+  let isUpdate = false;    // тур всплыл из-за обновления, а не в первый раз
 
   // Ждём, пока на странице появится результат шага (нажали кнопку — возник
   // блок протокола или цели). Следим и мутациями, и таймером: разметку рисуют
@@ -299,9 +330,17 @@
     }
   }
 
+  // Какую версию подсказок на этой странице уже видели.
+  // 0 — не видели вовсе; true из старого формата — первая версия.
+  function seenVersion(page) {
+    const value = seen()[page];
+    if (value === true) return 1;
+    return Number(value) || 0;
+  }
+
   function markSeen(page) {
     const s = seen();
-    s[page] = true;
+    s[page] = VERSIONS[page] || 1;
     localStorage.setItem(SEEN_KEY, JSON.stringify(s));
   }
 
@@ -319,7 +358,8 @@
     card.hidden = true;
     card.innerHTML = `
       <h4></h4>
-      <p></p>
+      <p class="aba-tour-new" hidden>Подсказки обновились — появилось новое.</p>
+      <p class="aba-tour-text"></p>
       <p class="aba-tour-do" hidden></p>
       <div class="aba-tour-row">
         <span class="aba-tour-count"></span>
@@ -335,11 +375,19 @@
 
     // Кнопка в меню страницы (если она там есть).
     const btn = document.getElementById("tourBtn");
-    if (btn) btn.onclick = () => setTimeout(start, 150); // дать меню закрыться
+    if (btn) {
+      btn.onclick = () => {
+        isUpdate = false; // запустили руками — про обновление сообщать незачем
+        setTimeout(start, 150); // дать меню закрыться
+      };
+    }
 
-    // Первое открытие страницы — показываем подсказки сами.
+    // Показываем сами: при первом открытии страницы и один раз после того,
+    // как подсказки этой страницы обновились.
     const page = pageId();
-    if (page && SCRIPTS[page] && !seen()[page]) {
+    if (page && SCRIPTS[page] && seenVersion(page) < (VERSIONS[page] || 1)) {
+      // Человек уже видел прошлую версию — предупреждаем, почему всплыло снова.
+      isUpdate = seenVersion(page) > 0;
       setTimeout(() => {
         // Пустой планшет — как раз тот случай, когда подсказки нужнее всего:
         // запускаем и если показать пока нечего, кроме заглушек и заданий.
@@ -392,8 +440,11 @@
   // Общая часть карточки: заголовок, текст, счётчик, подписи кнопок.
   function fillCard(title, text, doText) {
     card.hidden = false;
+    // Пометка об обновлении — только на первой карточке прохода.
+    card.querySelector(".aba-tour-new").hidden = !(isUpdate && idx === 0);
     card.querySelector("h4").textContent = title;
-    card.querySelector("p").innerHTML = text;
+    // По классу, а не по первому <p>: выше него лежит пометка об обновлении.
+    card.querySelector(".aba-tour-text").innerHTML = text;
     const doLine = card.querySelector(".aba-tour-do");
     doLine.hidden = !doText;
     if (doText) doLine.textContent = doText;
