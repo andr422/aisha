@@ -659,7 +659,7 @@
             <button id="menuHistory" type="button">📋 История сессий</button>
             <button id="menuCharts" type="button">📊 Графики</button>
             <button id="menuCsv" type="button">⬇ Экспорт (CSV)</button>
-            <button id="menuReport" type="button">⬇ Отчёт с графиками</button>
+            <button id="menuReport" type="button">📄 Отчёт для родителей (PDF)</button>
           </div>
         </div>
       </div>
@@ -1109,22 +1109,19 @@
       }, ms);
     }
 
+    // Дата занятия берётся из системных часов планшета в момент отправки —
+    // вручную её больше нигде не задают (поле на «Настройке» убрано).
+    // Формат для истории/таблицы: дд.мм.гггг; для полей даты: гггг-мм-дд.
+    // Считаем по ЛОКАЛЬНОМУ времени: toISOString() дал бы вчерашний день
+    // при работе поздно вечером.
     function getSessionDateForHistory() {
-      const savedDate = localStorage.getItem("session_date");
-      if (!savedDate) {
-        return new Date().toLocaleDateString("ru-RU");
-      }
-
-      const [year, month, day] = savedDate.split("-");
-      if (!year || !month || !day) {
-        return savedDate;
-      }
-
-      return `${day}.${month}.${year}`;
+      return new Date().toLocaleDateString("ru-RU");
     }
 
     function getSessionDateForServer() {
-      return localStorage.getItem("session_date") || new Date().toISOString().split("T")[0];
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     }
 
     function toggleMode() {
@@ -1306,6 +1303,32 @@
       localStorage.setItem("aba_counts_v2", JSON.stringify(perBlock));
       setSavedPromptDetails(details);
       setSavedResponseLog(log);
+    }
+
+    // Автоотметка освоения: когда цель стала «освоенной» (те же 3 последние
+    // сессии ≥80%, что и бейдж на карточке), проставляем дату освоения —
+    // второе поле даты у цели на «Настройке». Уже заполненную дату НЕ трогаем:
+    // терапист мог поставить свою. Дата = дата этого занятия, а не «сегодня».
+    // Возвращает имена целей, которые отметили только что.
+    function markMasteredGoals() {
+      const dateValue = getSessionDateForServer(); // YYYY-MM-DD, как в поле даты
+      const lastThree = getHistory().slice(-3);
+      const marked = [];
+      const count = getProtocolsCount();
+
+      for (let i = 1; i <= count; i += 1) {
+        existingGoalIds(i).forEach((goalId) => {
+          const key = `protocol${i}_goal${goalId}_masteryDate`;
+          if ((localStorage.getItem(key) || "").trim()) return; // дата уже стоит
+          const goalName = localStorage.getItem(`protocol${i}_goal${goalId}`);
+          if (!goalName) return;
+          if (checkMastery(goalSeries(i, goalName, lastThree))) {
+            localStorage.setItem(key, dateValue);
+            marked.push(goalName);
+          }
+        });
+      }
+      return marked;
     }
 
     function checkMastery(goalHistory) {
@@ -1759,15 +1782,56 @@
       return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     }
 
+    // Полный отчёт для родителей: сводка + графики + вся история.
+    // Открывается как готовая страница с кнопкой «Сохранить в PDF»
+    // (печать браузера — векторный PDF без сторонних библиотек).
     function buildReportHtml() {
       const data = collectChartData();
       const history = getHistory();
       const child = getActiveChildLabel() || "—";
       const period = history.length ? `${history[0].date} — ${history[history.length - 1].date}` : "—";
       const today = new Date().toLocaleDateString("ru-RU");
+      const protocolsCount = getProtocolsCount();
+
+      // Номер протокола по названию — чтобы понять, снята ли цель с работы.
+      const protoIndexByTitle = {};
+      for (let i = 1; i <= protocolsCount; i += 1) {
+        protoIndexByTitle[localStorage.getItem(`protocol${i}_title`) || `Протокол ${i}`] = i;
+      }
+
       let body = "";
       data.forEach((proto) => {
-        body += `<h2>${escapeHtml(proto.title)}</h2>`;
+        const pIdx = protoIndexByTitle[proto.title];
+        body += `<section class="proto"><h2>${escapeHtml(proto.title)}</h2>`;
+
+        // Сводка по целям протокола: динамика первого и последнего замера.
+        body += `<table class="sum"><thead><tr>
+          <th>Цель</th><th>Замеров</th><th>Первый</th><th>Последний</th><th>Изменение</th><th>Статус</th>
+        </tr></thead><tbody>`;
+        proto.goals.forEach((goal) => {
+          const first = goal.points[0].value;
+          const last = goal.points[goal.points.length - 1].value;
+          const diff = last - first;
+          const arrow = diff > 0 ? `▲ +${diff}` : diff < 0 ? `▼ ${diff}` : "— 0";
+          const cls = diff > 0 ? "up" : diff < 0 ? "down" : "flat";
+          const lastThree = goal.points.slice(-3).map((p) => p.value);
+          const mastered = lastThree.length === 3 && lastThree.every((v) => v >= 80);
+          // Цель, снятая с текущей работы, так и помечается — иначе родитель
+          // решит, что над ней ещё работают.
+          const active = pIdx ? isActiveGoalName(pIdx, goal.name) : true;
+          const status = !active ? "снята с работы" : mastered ? "освоено" : "в работе";
+          body += `<tr>
+            <td>${escapeHtml(goal.name)}</td>
+            <td class="num">${goal.points.length}</td>
+            <td class="num">${first}%</td>
+            <td class="num"><b>${last}%</b></td>
+            <td class="num ${cls}">${arrow}</td>
+            <td>${status}</td>
+          </tr>`;
+        });
+        body += `</tbody></table>`;
+
+        // Графики по каждой цели.
         proto.goals.forEach((goal) => {
           const last = goal.points[goal.points.length - 1].value;
           body +=
@@ -1775,21 +1839,175 @@
             `<span class="goal-meta">замеров: ${goal.points.length}, последний: ${last}%</span></div>` +
             buildChartSvg(goal.points) + `</div>`;
         });
+        body += `</section>`;
       });
-      return `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ABA-отчёт: ${escapeHtml(child)}</title><style>
-  body{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;max-width:760px;margin:0 auto;padding:24px 16px;color:#1f2933;background:#faf9f5}
-  h1{font-size:22px;margin:0 0 4px}
-  .sub{color:#667085;font-size:14px;margin-bottom:16px}
-  .legend{font-size:12px;color:#667085;margin-bottom:20px}
-  h2{font-size:18px;margin:28px 0 8px;border-bottom:2px solid #e5e2d9;padding-bottom:4px}
+
+      // Полная таблица истории по всем протоколам (все сессии, не только 10).
+      let tables = "";
+      for (let i = 1; i <= protocolsCount; i += 1) {
+        const goalNames = protocolGoalNames(i);
+        if (!goalNames.length) continue;
+        const title = localStorage.getItem(`protocol${i}_title`) || `Протокол ${i}`;
+        let head = `<th>Цель</th>`;
+        history.forEach((s) => { head += `<th>${escapeHtml(s.date)}</th>`; });
+        let rows = "";
+        goalNames.forEach((goalName) => {
+          const active = isActiveGoalName(i, goalName);
+          let cells = "";
+          let hasAny = false;
+          history.forEach((s) => {
+            const v = goalValueAt(s, i, goalName);
+            if (v != null) hasAny = true;
+            cells += `<td class="num">${v == null ? "—" : v + "%"}</td>`;
+          });
+          if (!hasAny) return; // цели без единого замера в таблицу не берём
+          rows += `<tr><td>${escapeHtml(goalName)}${active ? "" : ' <span class="off">(снята)</span>'}</td>${cells}</tr>`;
+        });
+        if (rows) {
+          tables += `<section class="proto"><h3>${escapeHtml(title)} — все замеры</h3>
+            <div class="scroll"><table class="hist"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>
+          </section>`;
+        }
+      }
+
+      // === Остальные разделы: ABC, частота, заметки ===
+      // Данные активного ребёнка лежат в localStorage (рабочий набор).
+      const readList = (key) => {
+        try {
+          const v = JSON.parse(localStorage.getItem(key) || "[]");
+          return Array.isArray(v) ? v : [];
+        } catch {
+          return [];
+        }
+      };
+      const abcLog = readList("abc_log");
+      const freqLog = readList("freq_log");
+      const notes = readList("aba_notes");
+
+      let extra = "";
+
+      // ABC: по эпизоду на строку, от новых к старым.
+      if (abcLog.length) {
+        let rows = "";
+        abcLog.slice().reverse().forEach((ep) => {
+          rows += `<tr>
+            <td class="num">${escapeHtml(ep.date || "")}</td>
+            <td class="num">${escapeHtml(ep.time || "")}</td>
+            <td>${escapeHtml(ep.behavior || "")}</td>
+            <td>${escapeHtml(ep.antecedent || "—")}</td>
+            <td>${escapeHtml(ep.consequence || "—")}</td>
+            <td class="num">${escapeHtml(ep.duration || "—")}</td>
+            <td class="num">${escapeHtml(ep.intensity || "—")}</td>
+          </tr>`;
+        });
+        extra += `<section class="proto"><h2>Эпизоды поведения (ABC)</h2>
+          <div class="legend2">Что происходило до поведения (A), само поведение (B) и что было после (C).
+          Это помогает понять, что запускает поведение и что его поддерживает.</div>
+          <div class="scroll"><table><thead><tr>
+            <th>Дата</th><th>Время</th><th>Поведение</th><th>До (A)</th><th>После (C)</th><th>Длит.</th><th>Интенс.</th>
+          </tr></thead><tbody>${rows}</tbody></table></div></section>`;
+      }
+
+      // Частота: наблюдение = блок строк по поведениям (пустые пропускаем).
+      if (freqLog.length) {
+        let rows = "";
+        freqLog.slice().reverse().forEach((obs) => {
+          const items = (obs.items || []).filter((it) => Number(it.count) > 0);
+          if (!items.length) {
+            rows += `<tr><td class="num">${escapeHtml(obs.date || "")}</td>
+              <td class="num">${escapeHtml(obs.time || "")}</td>
+              <td class="num">${obs.minutes || "—"}</td>
+              <td colspan="3">проявлений не было</td></tr>`;
+            return;
+          }
+          items.forEach((it, idx) => {
+            rows += `<tr>
+              <td class="num">${idx === 0 ? escapeHtml(obs.date || "") : ""}</td>
+              <td class="num">${idx === 0 ? escapeHtml(obs.time || "") : ""}</td>
+              <td class="num">${idx === 0 ? (obs.minutes || "—") : ""}</td>
+              <td>${escapeHtml(it.behavior || "")}</td>
+              <td class="num"><b>${it.count}</b></td>
+              <td class="num">${it.rate ? it.rate : "—"}</td>
+            </tr>`;
+          });
+        });
+        extra += `<section class="proto"><h2>Подсчёт поведения</h2>
+          <div class="legend2">Сколько раз поведение случилось за время наблюдения. Колонка «в час» приводит
+          разные по длительности наблюдения к общей мерке.</div>
+          <div class="scroll"><table><thead><tr>
+            <th>Дата</th><th>Начало</th><th>Минут</th><th>Поведение</th><th>Раз</th><th>В час</th>
+          </tr></thead><tbody>${rows}</tbody></table></div></section>`;
+      }
+
+      // Заметки терапистов.
+      if (notes.length) {
+        let rows = "";
+        notes.slice().reverse().forEach((n) => {
+          rows += `<tr>
+            <td class="num">${escapeHtml(n.date || "")}</td>
+            <td class="num">${escapeHtml(n.time || "")}</td>
+            <td>${escapeHtml(n.text || "")}</td>
+          </tr>`;
+        });
+        extra += `<section class="proto"><h2>Заметки с занятий</h2>
+          <div class="scroll"><table><thead><tr>
+            <th>Дата</th><th>Время</th><th>Заметка</th>
+          </tr></thead><tbody>${rows}</tbody></table></div></section>`;
+      }
+
+      // Счётчики для шапки — сразу видно объём отчёта.
+      const counters = [`Занятий: ${history.length}`];
+      if (abcLog.length) counters.push(`эпизодов ABC: ${abcLog.length}`);
+      if (freqLog.length) counters.push(`наблюдений: ${freqLog.length}`);
+      if (notes.length) counters.push(`заметок: ${notes.length}`);
+
+      return `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Отчёт о занятиях: ${escapeHtml(child)}</title><style>
+  body{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;max-width:820px;margin:0 auto;padding:24px 16px 60px;color:#1f2933;background:#faf9f5}
+  h1{font-size:23px;margin:0 0 4px}
+  .sub{color:#667085;font-size:14px;margin-bottom:14px}
+  .legend{font-size:13px;color:#4b5563;background:#fff;border:1px solid #e5e2d9;border-radius:10px;padding:10px 14px;margin-bottom:22px;line-height:1.55}
+  h2{font-size:18px;margin:26px 0 10px;border-bottom:2px solid #e5e2d9;padding-bottom:4px}
+  h3{font-size:16px;margin:22px 0 8px}
   .goal{background:#fff;border:1px solid #e5e2d9;border-radius:10px;padding:12px 14px;margin-bottom:14px}
   .goal-name{font-weight:600;margin-bottom:8px}
   .goal-meta{color:#667085;font-weight:400;font-size:13px}
+  table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+  th,td{border:1px solid #e5e2d9;padding:6px 8px;text-align:left}
+  th{background:#f4f2ec;font-weight:600}
+  td.num{text-align:center;white-space:nowrap}
+  .sum{margin-bottom:16px}
+  .legend2{font-size:12px;color:#667085;margin-bottom:8px;line-height:1.5}
+  .up{color:#0e7490;font-weight:600}
+  .down{color:#b4552d;font-weight:600}
+  .flat{color:#667085}
+  .off{color:#667085;font-size:11px;font-weight:400}
+  .scroll{overflow-x:auto}
+  .foot{margin-top:28px;font-size:12px;color:#8a9099;text-align:center}
+  .bar{position:sticky;top:0;background:#faf9f5;padding:10px 0 12px;margin-bottom:6px;display:flex;gap:10px;justify-content:center}
+  .bar button{border:none;border-radius:10px;padding:11px 18px;font-size:15px;font-weight:700;cursor:pointer}
+  .pdf{background:#0e7490;color:#fff}
+  .hint{font-size:12px;color:#8a9099;text-align:center;margin-bottom:18px}
+  @media print{
+    body{background:#fff;padding:0;max-width:none;font-size:11pt}
+    .bar,.hint{display:none}
+    .goal,.sum,.proto{break-inside:avoid}
+    section.proto{break-inside:auto}
+    h2{break-after:avoid}
+    @page{margin:14mm}
+  }
 </style></head><body>
-<h1>ABA-отчёт: ${escapeHtml(child)}</h1>
-<div class="sub">Период: ${period} · Сформирован: ${today}</div>
-<div class="legend">Процент самостоятельных реакций по сессиям. Пунктирные линии — пороги 80% (критерий освоения) и 50%.</div>
+<div class="bar"><button class="pdf" type="button" onclick="window.print()">🖨 Сохранить в PDF</button></div>
+<div class="hint">В окне печати выберите «Сохранить в PDF» (на телефоне — «Поделиться» → «Печать»).</div>
+<h1>Отчёт о занятиях: ${escapeHtml(child)}</h1>
+<div class="sub">Период: ${period} · ${counters.join(" · ")} · Сформирован: ${today}</div>
+<div class="legend"><b>Как читать отчёт.</b> Цифра в процентах — доля заданий, которые ребёнок выполнил
+<b>полностью самостоятельно</b>, без подсказки и без ошибки. Например, 60% означает: из 10 попыток
+6 раз получилось самому. На графиках пунктиром отмечены ориентиры 50% и 80%: 80% три занятия подряд —
+принятый критерий того, что навык освоен и можно двигаться дальше.</div>
 ${body || "<p>Нет данных за период.</p>"}
+${tables}
+${extra}
+<div class="foot">Данные собраны на занятиях с помощью приложения ABA-чек-лист.</div>
 </body></html>`;
     }
 
@@ -1810,14 +2028,25 @@ ${body || "<p>Нет данных за период.</p>"}
       return (getActiveChildLabel() || "ребёнок").replace(/[^\wа-яА-ЯёЁ.-]+/g, "_");
     }
 
+    // Открываем отчёт готовой страницей — там кнопка «Сохранить в PDF».
+    // Если браузер заблокировал новую вкладку, отдаём файлом (fallback).
     function exportHistoryReport() {
       if (!getHistory().length) {
         showToast("История пуста — нечего выгружать.");
         return;
       }
+      const html = buildReportHtml();
       const stamp = new Date().toISOString().split("T")[0];
-      downloadFile(buildReportHtml(), "text/html;charset=utf-8", `aba_отчёт_${safeChildLabel()}_${stamp}.html`);
-      showToast("Отчёт с графиками выгружен.");
+      const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+      const win = window.open(url, "_blank");
+      if (win) {
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        showToast("Отчёт открыт — нажмите «Сохранить в PDF».", 5000);
+      } else {
+        URL.revokeObjectURL(url);
+        downloadFile(html, "text/html;charset=utf-8", `aba_отчёт_${safeChildLabel()}_${stamp}.html`);
+        showToast("Отчёт скачан файлом — откройте его и нажмите «Сохранить в PDF».", 6000);
+      }
     }
 
     function exportHistoryCsv() {
@@ -2016,12 +2245,12 @@ ${body || "<p>Нет данных за период.</p>"}
           .reduce((sum, item) => sum + (Number(item.textContent) || 0), 0);
         if (total > 0) withData += 1;
       });
-      // Показываем ребёнка и дату, чтобы поймать «вчерашнюю» дату или чужого
-      // ребёнка ДО отправки (session_date сам не сбрасывается).
+      // Показываем ребёнка и дату, чтобы поймать чужого ребёнка ДО отправки.
+      // Дата — сегодняшняя, ставится автоматически.
       const child = getActiveChildLabel() || (localStorage.getItem("child_name") || "").trim() || "не указан";
       const summary = document.getElementById("confirm-summary");
       summary.textContent =
-        `Ребёнок: ${child}. Дата сессии: ${getSessionDateForHistory()}. ` +
+        `Ребёнок: ${child}. Дата: ${getSessionDateForHistory()}. ` +
         `Целей с данными: ${withData} из ${blocks}.`;
       confirmModal.style.display = "flex";
     }
@@ -2035,13 +2264,23 @@ ${body || "<p>Нет данных за период.</p>"}
       sendBtn.disabled = true;
       showToast("Сохранение…", 60000);
       try {
-        await finalizeSession();
+        const mastered = await finalizeSession();
         // Данные уже надёжно в очереди/истории. Сообщаем по факту доставки.
         const remaining = await queueCount();
         if (remaining > 0) {
           showToast(`Сохранено. Ожидают отправки: ${remaining}. Уйдут при появлении сети.`, 6000);
         } else {
           showToast("Готово. Сессия сохранена и отправлена.");
+        }
+        // Об освоении сообщаем отдельно, чтобы не потерялось в общем тосте.
+        if (mastered && mastered.length) {
+          setTimeout(() => {
+            showToast(
+              `🎉 Критерий освоения достигнут: ${mastered.join(", ")}. ` +
+                `Дата освоения проставлена — обсудите с супервизором смену цели.`,
+              9000
+            );
+          }, 3200);
         }
       } catch (err) {
         console.error(err);
@@ -2110,6 +2349,9 @@ ${body || "<p>Нет данных за период.</p>"}
       }
       await setHistory(history);
 
+      // История обновилась — проверяем, не достигнут ли критерий освоения.
+      const mastered = markMasteredGoals();
+
       // Пытаемся разослать очередь (не блокируем сброс — это фоновая попытка).
       flushQueue();
 
@@ -2126,6 +2368,7 @@ ${body || "<p>Нет данных за период.</p>"}
       renderHistory();
       renderDaily();
       loadProgress();
+      return mastered;
     }
 
     function wirePromptButtons() {

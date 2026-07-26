@@ -405,12 +405,6 @@
         </div>
         <div class="setup-hint">Только инициалы или ID. Полное имя вводить нельзя.</div>
 
-        <div class="setup-label">Дата сессии</div>
-        <div class="setup-row">
-          <input type="date" id="tDate" />
-          <button type="button" class="btn" id="tDateOk">Сохранить</button>
-        </div>
-
         <div class="setup-label">Протоколы</div>
         <button type="button" class="add-btn" id="tAddProto">＋ Добавить протокол</button>
 
@@ -515,24 +509,11 @@
           "планшет может потеряться, а данные детей с диагнозом — особо чувствительные."
       },
       {
-        type: "input",
-        panel: "setup",
-        field: "tDate",
-        section: "Настройка",
-        scene: "Профиль создан.",
-        text: "Поставьте <b>дату занятия</b> и сохраните.",
-        check: (v) => v.trim().length > 0,
-        errorFor: () => "Дата не выбрана.",
-        why:
-          "Дата подставляется в историю и в таблицу. Проверяйте её каждое занятие: " +
-          "она не сбрасывается сама, и вчерашняя дата уедет на сервер молча."
-      },
-      {
         type: "click",
         panel: "setup",
         control: "tAddProto",
         section: "Настройка",
-        scene: "Теперь протоколы.",
+        scene: "Профиль создан. Теперь протоколы.",
         text: "Добавьте первый протокол — нажмите нужную кнопку.",
         why: "Протоколы и цели добавляются по мере надобности, заранее пустых бланков нет."
       },
@@ -812,7 +793,6 @@
 
     function wireSetupPanel() {
       $("tChildAdd").onclick = () => submitSetupField("tChild");
-      $("tDateOk").onclick = () => submitSetupField("tDate");
       $("tProtoOk").onclick = () => submitSetupField("tProtoTitle");
       $("tGoalOk").onclick = () => submitSetupField("tGoal");
       $("tAddProto").onclick = () => clickSetupControl("tAddProto");
@@ -972,7 +952,7 @@
 
     // Сброс демо-панели настройки в исходное состояние.
     function resetSetupPanel() {
-      ["tChild", "tDate", "tProtoTitle", "tGoal"].forEach((id) => { $(id).value = ""; });
+      ["tChild", "tProtoTitle", "tGoal"].forEach((id) => { $(id).value = ""; });
       $("tProtoBox").hidden = true;
       $("tGoalBox").hidden = true;
     }

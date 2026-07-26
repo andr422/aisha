@@ -521,10 +521,6 @@
       </div>
       <div class="field-hint">У каждого ребёнка свои протоколы, цели и история. Метка — только инициалы или ID, не полное имя.</div>
     </div>
-    <div>
-      <label for="sessionDate">Дата сессии</label>
-      <input type="date" id="sessionDate" />
-    </div>
   </div>
 
   <div id="activeNotice" class="active-notice"></div>
@@ -535,10 +531,12 @@
 
   <script>
     (function () {
+      // session_date больше не заполняется (дата занятия ставится автоматически),
+      // но ключ остаётся в списках ниже — чтобы старые значения корректно
+      // сворачивались/удалялись вместе с остальными данными ребёнка.
       const sessionKey = "session_date";
       const nameKey = "child_name";
       const container = document.getElementById("protocolsContainer");
-      const dateInput = document.getElementById("sessionDate");
       const childSelect = document.getElementById("childSelect");
       const toast = document.getElementById("toast");
 
@@ -1060,15 +1058,9 @@
         );
       }
 
+      // Поля сессии: дату вручную больше не задают — она ставится
+      // автоматически (системная дата планшета) в момент отправки занятия.
       function initSessionFields() {
-        const savedDate = localStorage.getItem(sessionKey);
-        dateInput.value = savedDate || "";
-        dateInput.onchange = () => {
-          localStorage.setItem(sessionKey, dateInput.value);
-        };
-
-        // Дата и метки протоколов теперь принадлежат активному ребёнку —
-        // селектор профилей рисуем заново на случай смены/переименования.
         renderChildSelector();
       }
 
