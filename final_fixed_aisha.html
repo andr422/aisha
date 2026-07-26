@@ -529,6 +529,143 @@
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
     }
 
+    /* === Генерализация освоенных целей === */
+    /* Свёрнут по умолчанию: на главном экране это одна строка. */
+    #genBox {
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+
+    .gen-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      padding: 14px 16px;
+      border: none;
+      background: none;
+      font-family: var(--font-body);
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--ink);
+      text-align: left;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .gen-head .gen-total {
+      font-weight: 600;
+      color: var(--muted);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .gen-body {
+      padding: 0 16px 14px;
+    }
+
+    .gen-body .gen-hint {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+
+    .gen-goal {
+      border-top: 1px solid var(--line);
+      padding: 12px 0 4px;
+    }
+
+    .gen-goal-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .gen-goal-name {
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    .gen-goal-protocol {
+      display: block;
+      font-weight: 400;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .gen-score {
+      font-weight: 800;
+      font-size: 15px;
+      white-space: nowrap;
+      color: var(--muted);
+    }
+
+    .gen-score.done {
+      color: #1a7f37;
+    }
+
+    .gen-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .gen-row-label {
+      flex: 0 0 66px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .gen-chip {
+      flex: 1;
+      min-width: 0;
+      padding: 9px 6px;
+      border: 1.5px solid var(--line);
+      border-radius: 9px;
+      background: #fff;
+      font-family: var(--font-body);
+      font-size: 13px;
+      color: var(--ink);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .gen-chip.done {
+      background: #dcfce7;
+      border-color: #4ade80;
+      color: #14532d;
+      font-weight: 700;
+    }
+
+    .gen-actions {
+      display: flex;
+      gap: 8px;
+      margin: 8px 0 4px;
+    }
+
+    .gen-actions button {
+      border: none;
+      background: #eef1f4;
+      color: #596270;
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-family: var(--font-body);
+      font-size: 13px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
     #note-modal textarea {
       width: 100%;
       min-height: 120px;
@@ -712,6 +849,8 @@
     </div>
 
     <div id="dailyContainer"></div>
+    <!-- Освоенные цели: девять проб на обобщение (3 стимула · 3 места · 3 человека). -->
+    <div id="genBox" hidden></div>
     <div class="single-nav">
       <button id="prevGoalBtn" type="button">‹ Предыдущая</button>
       <button id="nextGoalBtn" type="button">Следующая ›</button>
@@ -1465,7 +1604,8 @@
       dailyContainer.innerHTML = "";
 
       if (!count) {
-        dailyContainer.innerHTML = '<div class="empty-state">Нет настроенных протоколов в localStorage.</div>';
+        dailyContainer.innerHTML =
+          '<div class="empty-state">Пока нет ни одного протокола.<br>Откройте вкладку «Настройка» внизу и добавьте протокол и цели — здесь появятся кнопки оценки.</div>';
         return;
       }
 
@@ -1475,7 +1615,10 @@
         wrapper.dataset.index = String(i);
 
         const title = localStorage.getItem(`protocol${i}_title`) || `Протокол ${i}`;
-        const selectedGoals = getSelectedGoalIds(i);
+        // Освоенные цели уходят из ежедневного сбора в блок генерализации —
+        // экран занятия остаётся коротким. Вернуть можно кнопкой в этом блоке.
+        const selectedGoals = getSelectedGoalIds(i).filter((goalId) => !isGeneralizing(i, goalId));
+        if (!selectedGoals.length) continue;
 
         const header = document.createElement("div");
         header.className = "protocol-header";
@@ -1522,6 +1665,10 @@
           // Имя цели храним отдельно от отображения, чтобы бейдж «освоено»
           // не попадал в имя при отправке данных.
           block.dataset.goalName = goalName;
+          // Номера протокола и цели — по ним ставится дата введения при
+          // первом же нажатии (ключи те же, что на «Настройке»).
+          block.dataset.protocolIndex = String(i);
+          block.dataset.goalId = String(goalId);
 
           const goalLabel = document.createElement("div");
           goalLabel.className = "goal-label";
@@ -1566,11 +1713,20 @@
         dailyContainer.append(wrapper);
       }
 
+      // Все цели освоены и ушли на генерализацию — экран сбора пуст, но это
+      // не ошибка: объясняем, что делать дальше.
+      if (!dailyContainer.children.length) {
+        dailyContainer.innerHTML = generalizingGoals().length
+          ? '<div class="empty-state">Все цели освоены и перешли на генерализацию — блок ниже.<br>Чтобы продолжить обычный сбор, добавьте новые цели на вкладке «Настройка».</div>'
+          : '<div class="empty-state">На это занятие не выбрано ни одной цели.<br>Нажмите «Выбрать цели» или добавьте цели на вкладке «Настройка».</div>';
+      }
+
       normalizePromptDetailsLength();
       normalizeResponseLogLength();
       wirePromptButtons();
       updatePromptDetailsUI();
       applyViewMode();
+      renderGeneralization();
     }
 
     function renderHistory() {
@@ -1871,6 +2027,25 @@
         }
       }
 
+      // Генерализация освоенных навыков: где навык уже проверен.
+      const genGoals = generalizingGoals();
+      if (genGoals.length) {
+        let genRows = "";
+        genGoals.forEach((goal) => {
+          const done = genDoneCount(goal.log);
+          const parts = GEN_CATS.map(
+            (cat) => `${cat.label.toLowerCase()} ${goal.log[cat.key].filter(Boolean).length}/${GEN_SLOTS}`
+          ).join(", ");
+          const status = done >= GEN_TOTAL ? "навык обобщён" : "проверка продолжается";
+          genRows += `<tr><td>${escapeHtml(goal.goalName)}<br><span class="off">${escapeHtml(goal.protocolTitle)}</span></td>` +
+            `<td class="num">${done} из ${GEN_TOTAL}</td><td>${parts}</td><td>${status}</td></tr>`;
+        });
+        tables += `<section class="proto"><h3>Перенос навыков в жизнь</h3>
+          <p>Освоенный навык проверяют в разных условиях: с тремя разными материалами, в трёх местах и с тремя людьми — всего девять проверок. Так видно, что ребёнок умеет пользоваться навыком не только за столом с одним человеком.</p>
+          <div class="scroll"><table class="hist"><thead><tr><th>Навык</th><th>Проверено</th><th>По условиям</th><th>Статус</th></tr></thead><tbody>${genRows}</tbody></table></div>
+        </section>`;
+      }
+
       // === Остальные разделы: ABC, частота, заметки ===
       // Данные активного ребёнка лежат в localStorage (рабочий набор).
       const readList = (key) => {
@@ -2098,6 +2273,307 @@ ${extra}
       return btn ? Number(btn.nextElementSibling.textContent) || 0 : 0;
     }
 
+    // === Генерализация освоенных целей ===
+    // Освоенный навык проверяют в девяти условиях: 3 стимула, 3 места,
+    // 3 человека. Названия условий терапист перечисляет через запятую на
+    // «Настройке» (поля генерализации) — это ПЛАН; здесь отмечается ФАКТ.
+    const GEN_CATS = [
+      { key: "stim", storeKey: "genStim", label: "Стимулы" },
+      { key: "place", storeKey: "genPlace", label: "Места" },
+      { key: "people", storeKey: "genPeople", label: "Люди" }
+    ];
+    const GEN_SLOTS = 3; // условий в каждой категории
+
+    // План: «мяч, кубик, машинка» → подписи чипов. Не заполнен — «1 / 2 / 3».
+    function genPlanLabels(i, goalId, cat) {
+      const raw = localStorage.getItem(`protocol${i}_goal${goalId}_${cat.storeKey}`) || "";
+      const parts = raw.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+      return Array.from({ length: GEN_SLOTS }, (_, n) => parts[n] || String(n + 1));
+    }
+
+    // Факт: {stim:[дата|null ×3], place:[...], people:[...]}.
+    function getGenLog(i, goalId) {
+      const empty = () => Array(GEN_SLOTS).fill(null);
+      const base = { stim: empty(), place: empty(), people: empty() };
+      try {
+        const saved = JSON.parse(localStorage.getItem(`protocol${i}_goal${goalId}_genLog`) || "{}");
+        GEN_CATS.forEach((cat) => {
+          if (Array.isArray(saved[cat.key])) {
+            base[cat.key] = Array.from({ length: GEN_SLOTS }, (_, n) => saved[cat.key][n] || null);
+          }
+        });
+      } catch {
+        /* повреждённая запись — начинаем с пустой */
+      }
+      return base;
+    }
+
+    function setGenLog(i, goalId, log) {
+      localStorage.setItem(`protocol${i}_goal${goalId}_genLog`, JSON.stringify(log));
+    }
+
+    function genDoneCount(log) {
+      return GEN_CATS.reduce(
+        (sum, cat) => sum + log[cat.key].filter(Boolean).length,
+        0
+      );
+    }
+
+    const GEN_TOTAL = GEN_CATS.length * GEN_SLOTS; // 9 проб на цель
+
+    // Цель ушла на генерализацию: есть дата освоения и её не вернули в работу.
+    function isGeneralizing(i, goalId) {
+      const mastery = (localStorage.getItem(`protocol${i}_goal${goalId}_masteryDate`) || "").trim();
+      const keep = localStorage.getItem(`protocol${i}_goal${goalId}_keepDaily`) === "1";
+      return Boolean(mastery) && !keep;
+    }
+
+    // В блок генерализации попадают ВСЕ освоенные цели — включая возвращённые
+    // в ежедневный сбор: пробы на обобщение продолжают отмечаться и для них,
+    // а кнопка в строке работает в обе стороны.
+    function generalizingGoals() {
+      const out = [];
+      for (let i = 1; i <= getProtocolsCount(); i += 1) {
+        const protocolTitle = localStorage.getItem(`protocol${i}_title`) || `Протокол ${i}`;
+        existingGoalIds(i).forEach((goalId) => {
+          const mastery = (localStorage.getItem(`protocol${i}_goal${goalId}_masteryDate`) || "").trim();
+          if (!mastery) return;
+          out.push({
+            protocolIndex: i,
+            protocolTitle,
+            goalId,
+            goalName: localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`,
+            keptDaily: localStorage.getItem(`protocol${i}_goal${goalId}_keepDaily`) === "1",
+            log: getGenLog(i, goalId)
+          });
+        });
+      }
+      return out;
+    }
+
+    function renderGeneralization() {
+      const box = document.getElementById("genBox");
+      if (!box) return;
+      const goals = generalizingGoals();
+      if (!goals.length) {
+        box.hidden = true;
+        box.innerHTML = "";
+        return;
+      }
+
+      const done = goals.reduce((sum, g) => sum + genDoneCount(g.log), 0);
+      const total = goals.length * GEN_TOTAL;
+      const opened = localStorage.getItem("aba_gen_open") === "1";
+
+      box.hidden = false;
+      box.innerHTML = "";
+
+      const head = document.createElement("button");
+      head.type = "button";
+      head.className = "gen-head";
+      const headText = document.createElement("span");
+      headText.textContent = `${opened ? "▾" : "▸"} Генерализация · ${goals.length} ${plural(goals.length, "цель", "цели", "целей")}`;
+      const headCount = document.createElement("span");
+      headCount.className = "gen-total";
+      headCount.textContent = `${done} из ${total}`;
+      head.append(headText, headCount);
+      head.onclick = () => {
+        localStorage.setItem("aba_gen_open", opened ? "0" : "1");
+        renderGeneralization();
+      };
+      box.append(head);
+
+      if (!opened) return;
+
+      const body = document.createElement("div");
+      body.className = "gen-body";
+      const hint = document.createElement("div");
+      hint.className = "gen-hint";
+      hint.textContent =
+        "Навык считается обобщённым, когда получился в девяти условиях: с тремя разными материалами, в трёх местах и с тремя людьми. Отмечайте условие, когда проба прошла успешно; нажать повторно — снять отметку. Что именно использовать, перечислите через запятую в полях генерализации на «Настройке».";
+      body.append(hint);
+
+      goals.forEach((goal) => {
+        const doneCount = genDoneCount(goal.log);
+        const card = document.createElement("div");
+        card.className = "gen-goal";
+
+        const cardHead = document.createElement("div");
+        cardHead.className = "gen-goal-head";
+        const name = document.createElement("div");
+        name.className = "gen-goal-name";
+        name.textContent = goal.goalName;
+        const protocol = document.createElement("span");
+        protocol.className = "gen-goal-protocol";
+        protocol.textContent = goal.protocolTitle;
+        name.append(protocol);
+        const score = document.createElement("div");
+        score.className = `gen-score${doneCount >= GEN_TOTAL ? " done" : ""}`;
+        score.textContent = doneCount >= GEN_TOTAL ? "✓ обобщено" : `${doneCount} / ${GEN_TOTAL}`;
+        cardHead.append(name, score);
+        card.append(cardHead);
+
+        GEN_CATS.forEach((cat) => {
+          const row = document.createElement("div");
+          row.className = "gen-row";
+          const label = document.createElement("div");
+          label.className = "gen-row-label";
+          label.textContent = cat.label;
+          row.append(label);
+
+          const labels = genPlanLabels(goal.protocolIndex, goal.goalId, cat);
+          for (let n = 0; n < GEN_SLOTS; n += 1) {
+            const marked = goal.log[cat.key][n];
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = `gen-chip${marked ? " done" : ""}`;
+            chip.textContent = labels[n];
+            chip.title = marked
+              ? `Проба прошла ${marked} — нажмите, чтобы снять отметку`
+              : "Отметить успешную пробу в этом условии";
+            chip.onclick = () => toggleGenProbe(goal, cat.key, n);
+            row.append(chip);
+          }
+          card.append(row);
+        });
+
+        const actions = document.createElement("div");
+        actions.className = "gen-actions";
+        const back = document.createElement("button");
+        back.type = "button";
+        const key = `protocol${goal.protocolIndex}_goal${goal.goalId}_keepDaily`;
+        back.textContent = goal.keptDaily ? "✕ Убрать из ежедневного сбора" : "↩ Вернуть в ежедневный сбор";
+        back.title = goal.keptDaily
+          ? "Цель останется только здесь, на пробах генерализации"
+          : "Цель снова появится с кнопками − P +; дата освоения сохранится";
+        back.onclick = () => {
+          // Список блоков меняется — сохраняем несданные счётчики по ИМЕНАМ
+          // целей, иначе они съедут на соседние (тот же механизм, что и при
+          // смене набора целей).
+          const inProgress = snapshotInProgressData();
+          if (goal.keptDaily) localStorage.removeItem(key);
+          else localStorage.setItem(key, "1");
+          renderDaily(); // перерисует и этот блок
+          restoreInProgressData(inProgress);
+          undoStack = [];
+          undoBanner.style.display = "none";
+          loadProgress();
+          showToast(
+            goal.keptDaily
+              ? `«${goal.goalName}» убрана из ежедневного сбора.`
+              : `«${goal.goalName}» вернулась в ежедневный сбор.`
+          );
+        };
+        actions.append(back);
+        card.append(actions);
+
+        body.append(card);
+      });
+
+      box.append(body);
+    }
+
+    // === Отправка генерализации в таблицу ===
+    // Уходит вместе с итогами занятия, по кнопке «Отправить данные» — как и
+    // всё остальное. Что уже отправлено, помним в `_genSent` (та же форма, что
+    // и журнал), поэтому повторная отправка не плодит строки, а снятая отметка
+    // уезжает отдельной строкой «снята».
+    function getGenSent(i, goalId) {
+      const empty = () => Array(GEN_SLOTS).fill(null);
+      const base = { stim: empty(), place: empty(), people: empty() };
+      try {
+        const saved = JSON.parse(localStorage.getItem(`protocol${i}_goal${goalId}_genSent`) || "{}");
+        GEN_CATS.forEach((cat) => {
+          if (Array.isArray(saved[cat.key])) {
+            base[cat.key] = Array.from({ length: GEN_SLOTS }, (_, n) => saved[cat.key][n] || null);
+          }
+        });
+      } catch {
+        /* повреждённая запись — считаем, что не отправляли ничего */
+      }
+      return base;
+    }
+
+    // Строки для таблицы: что изменилось с прошлой отправки.
+    function collectGenRows() {
+      const rows = [];
+      generalizingGoals().forEach((goal) => {
+        const sent = getGenSent(goal.protocolIndex, goal.goalId);
+        const done = genDoneCount(goal.log);
+        const status = done >= GEN_TOTAL ? "обобщено" : `${done} из ${GEN_TOTAL}`;
+        GEN_CATS.forEach((cat) => {
+          const labels = genPlanLabels(goal.protocolIndex, goal.goalId, cat);
+          for (let n = 0; n < GEN_SLOTS; n += 1) {
+            const now = goal.log[cat.key][n];
+            const was = sent[cat.key][n];
+            if (now === was) continue;
+            rows.push({
+              protocol: goal.protocolTitle,
+              goal: goal.goalName,
+              category: cat.label,
+              condition: labels[n],
+              mark: now ? "проба пройдена" : "отметка снята",
+              date: now || getSessionDateForServer(),
+              progress: status
+            });
+          }
+        });
+      });
+      return rows;
+    }
+
+    // Отмечаем отправленным ТОЛЬКО после того, как пакет лёг в очередь —
+    // иначе при сбое записи данные потерялись бы молча.
+    function markGenSent() {
+      generalizingGoals().forEach((goal) => {
+        localStorage.setItem(
+          `protocol${goal.protocolIndex}_goal${goal.goalId}_genSent`,
+          JSON.stringify(goal.log)
+        );
+      });
+    }
+
+    // Отметить/снять пробу. Дата — системная, как и везде в приложении.
+    function toggleGenProbe(goal, catKey, slot) {
+      const log = getGenLog(goal.protocolIndex, goal.goalId);
+      const was = log[catKey][slot];
+      log[catKey][slot] = was ? null : getSessionDateForServer();
+      setGenLog(goal.protocolIndex, goal.goalId, log);
+
+      const count = genDoneCount(log);
+      const key = `protocol${goal.protocolIndex}_goal${goal.goalId}_genDoneDate`;
+      if (count >= GEN_TOTAL && !(localStorage.getItem(key) || "").trim()) {
+        localStorage.setItem(key, getSessionDateForServer());
+        showToast(`🎉 «${goal.goalName}» обобщена: навык получился во всех девяти условиях.`, 7000);
+      }
+      // Набор снова неполный — дата обобщения больше не действует.
+      if (count < GEN_TOTAL) localStorage.removeItem(key);
+
+      renderGeneralization();
+    }
+
+    function plural(n, one, few, many) {
+      const mod10 = n % 10;
+      const mod100 = n % 100;
+      if (mod10 === 1 && mod100 !== 11) return one;
+      if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+      return many;
+    }
+
+    // Дата введения цели в работу: ставится сама при ПЕРВОМ нажатии любой
+    // кнопки по этой цели. Уже заполненную (в том числе вписанную вручную на
+    // «Настройке») не трогаем. Возвращает true, если дату поставили именно
+    // сейчас, — тогда её снимет «Отменить действие», если нажатие ошибочное.
+    function markIntroDate(block) {
+      const i = block.dataset.protocolIndex;
+      const goalId = block.dataset.goalId;
+      if (!i || !goalId) return false;
+      const key = `protocol${i}_goal${goalId}_introDate`;
+      if ((localStorage.getItem(key) || "").trim()) return false;
+      localStorage.setItem(key, getSessionDateForServer());
+      return true;
+    }
+
     function increment(btn, type) {
       if (document.body.classList.contains("editing") || btn.disabled) {
         return;
@@ -2120,9 +2596,11 @@ ${extra}
       responseLog[blockIndex].push(responseCode);
       setSavedResponseLog(responseLog);
 
+      const introSet = markIntroDate(block);
+
       updatePercentages();
       saveProgress();
-      undoStack.push({ button: btn, type: responseCode, blockIndex });
+      undoStack.push({ button: btn, type: responseCode, blockIndex, introSet });
       showUndo();
     }
 
@@ -2208,6 +2686,15 @@ ${extra}
       const countEl = last.button.nextElementSibling;
       countEl.textContent = String(Math.max((Number(countEl.textContent) || 0) - 1, 0));
 
+      // Нажатие было ошибочным и оно же завело цель — снимаем дату введения,
+      // иначе она осталась бы от промаха.
+      if (last.introSet) {
+        const block = last.button.closest(".block");
+        localStorage.removeItem(
+          `protocol${block.dataset.protocolIndex}_goal${block.dataset.goalId}_introDate`
+        );
+      }
+
       const responseLog = getSavedResponseLog();
       if (Array.isArray(responseLog[last.blockIndex]) && responseLog[last.blockIndex].length) {
         responseLog[last.blockIndex].pop();
@@ -2250,9 +2737,12 @@ ${extra}
       // Дата — сегодняшняя, ставится автоматически.
       const child = getActiveChildLabel() || (localStorage.getItem("child_name") || "").trim() || "не указан";
       const summary = document.getElementById("confirm-summary");
+      // Пробы генерализации уходят тем же нажатием — показываем, сколько их.
+      const genRows = collectGenRows().length;
       summary.textContent =
         `Ребёнок: ${child}. Дата: ${getSessionDateForHistory()}. ` +
-        `Целей с данными: ${withData} из ${blocks}.`;
+        `Целей с данными: ${withData} из ${blocks}.` +
+        (genRows ? ` Проб генерализации: ${genRows}.` : "");
       confirmModal.style.display = "flex";
     }
 
@@ -2278,7 +2768,8 @@ ${extra}
           setTimeout(() => {
             showToast(
               `🎉 Критерий освоения достигнут: ${mastered.join(", ")}. ` +
-                `Дата освоения проставлена — обсудите с супервизором смену цели.`,
+                `Дата проставлена, цель перешла в блок «Генерализация» внизу — ` +
+                `проверьте навык в девяти условиях. Обсудите с супервизором новую цель.`,
               9000
             );
           }, 3200);
@@ -2337,10 +2828,20 @@ ${extra}
         sendPromises.push(sendSessionResults({ protocol, date: serverDate, child, goals: goalsForServer }));
       });
 
+      // Пробы генерализации — отдельным пакетом на лист «Генерализация».
+      // Отправляем только изменения с прошлого раза (см. collectGenRows).
+      const genRows = collectGenRows();
+      if (genRows.length) {
+        sendPromises.push(
+          sendSessionResults({ type: "gen", child, date: serverDate, items: genRows })
+        );
+      }
+
       // Дожидаемся, пока все итоги НАДЁЖНО записаны в очередь (IndexedDB).
       // Это успешно даже офлайн — данные не потеряются. Сетевую рассылку
       // запускаем следом; что не уйдёт сейчас — досылается автоматически.
       await Promise.all(sendPromises);
+      if (genRows.length) markGenSent();
 
       const history = getHistory().slice();
       history.push(session);

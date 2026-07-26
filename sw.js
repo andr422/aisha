@@ -1,7 +1,7 @@
 // Service worker для офлайн-работы ABA-чек-листа.
 // При изменении файлов приложения поднимите версию в CACHE_NAME (v1 -> v2),
 // чтобы у пользователей обновился кэш.
-const CACHE_NAME = "aba-checklist-v39";
+const CACHE_NAME = "aba-checklist-v41";
 
 // Файлы приложения, которые кэшируем для офлайна.
 // Пути относительные — работают и на GitHub Pages в подкаталоге.
@@ -15,6 +15,7 @@ const APP_SHELL = [
   "./guide.html",
   "./tabbar.js",
   "./tour.js",
+  "./templates.js",
   "./timer.js",
   "./manifest.json",
   "./icon-192.png",

@@ -320,6 +320,38 @@
       color: #a3261b;
     }
 
+    /* Пометка встроенного шаблона (едет в коде, одинаков на всех планшетах). */
+    .tpl-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: #e0f2fe;
+      color: #0e7490;
+      font-size: 11px;
+      font-weight: 700;
+      vertical-align: middle;
+    }
+
+    .tpl-badge.own {
+      background: #eef1f4;
+      color: #596270;
+    }
+
+    .tpl-restore {
+      display: block;
+      width: 100%;
+      margin-top: 10px;
+      border: none;
+      background: #eef1f4;
+      color: #596270;
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
     #tplEditor {
       width: 100%;
       min-height: 110px;
@@ -505,7 +537,7 @@
   </div>
 
   <div id="templatesBox" hidden>
-    <div class="hint">Шаблоны протоколов — общие для всех детей. В редакторе: первая строка — название протокола, дальше цели по строкам. Когда название нового протокола совпадёт с шаблоном, появится кнопка «⚡ Подставить цели».</div>
+    <div class="hint">Шаблоны протоколов — общие для всех детей. Помеченные «встроенный» приезжают вместе с приложением и одинаковы на всех планшетах; сохранённые здесь остаются на этом устройстве и замещают встроенный шаблон с тем же названием. В редакторе: первая строка — название протокола, дальше цели по строкам. Когда название нового протокола совпадёт с шаблоном, появится кнопка «⚡ Подставить цели».</div>
     <div id="templatesList"></div>
     <textarea id="tplEditor" placeholder="Название протокола&#10;Цель 1&#10;Цель 2&#10;Цель 3"></textarea>
     <button type="button" class="btn-export" id="tplSave">Сохранить шаблон</button>
@@ -530,6 +562,9 @@
   <div id="archiveBox"></div>
   <div id="toast"></div>
 
+  <!-- Встроенные шаблоны протоколов. Строго ДО основного скрипта: он читает
+       window.ABA_BUILTIN_TEMPLATES уже при первой отрисовке списка. -->
+  <script src="templates.js"></script>
   <script>
     (function () {
       // session_date больше не заполняется (дата занятия ставится автоматически),
@@ -1125,6 +1160,7 @@
         const intro = document.createElement("input");
         intro.type = "date";
         intro.className = "intro-date";
+        intro.title = "Дата введения: ставится сама при первом нажатии по этой цели на «Сборе»";
         intro.dataset.protocolIndex = i;
         intro.dataset.goalIndex = j;
         intro.value = localStorage.getItem(`protocol${i}_goal${j}_introDate`) || "";
@@ -1133,6 +1169,7 @@
         const mastery = document.createElement("input");
         mastery.type = "date";
         mastery.className = "mastery-date";
+        mastery.title = "Дата освоения: ставится сама после трёх занятий подряд ≥80%";
         mastery.dataset.protocolIndex = i;
         mastery.dataset.goalIndex = j;
         mastery.value = localStorage.getItem(`protocol${i}_goal${j}_masteryDate`) || "";
@@ -1142,14 +1179,22 @@
 
         const rowGen = document.createElement("div");
         rowGen.className = "row";
-        ["Stim", "Place", "People"].forEach((type) => {
+        // План генерализации: по ТРИ условия через запятую. Эти подписи
+        // становятся кнопками проб в блоке «Генерализация» на «Сборе».
+        const GEN_FIELDS = [
+          { type: "Stim", placeholder: "3 материала: мяч, кубик, машинка", title: "Три разных материала или стимула через запятую" },
+          { type: "Place", placeholder: "3 места: класс, коридор, дом", title: "Три разных места через запятую" },
+          { type: "People", placeholder: "3 человека: мама, терапист 2, бабушка", title: "Три разных человека через запятую" }
+        ];
+        GEN_FIELDS.forEach(({ type, placeholder, title }) => {
           const input = document.createElement("input");
           input.type = "text";
           input.className = "gen-input";
           input.dataset.protocolIndex = i;
           input.dataset.goalIndex = j;
           input.dataset.genType = type.toLowerCase();
-          input.placeholder = `Генерализация: ${type.toLowerCase()}`;
+          input.placeholder = placeholder;
+          input.title = title;
           input.value = localStorage.getItem(`protocol${i}_goal${j}_gen${type}`) || "";
           rowGen.appendChild(input);
         });
@@ -1658,15 +1703,54 @@
       // === Библиотека шаблонов протоколов ===
       // ОБЩАЯ для всех детей (в рабочий набор профиля НЕ входит): список
       // {title, goals:[...]}. Совпадение названий — без регистра и пробелов.
-      const TEMPLATES_KEY = "aba_templates";
+      const TEMPLATES_KEY = "aba_templates";        // свои шаблоны устройства
+      const TEMPLATES_HIDDEN_KEY = "aba_templates_hidden"; // скрытые встроенные
 
-      function getTemplates() {
+      // Свои шаблоны — только те, что терапист сохранил на этом планшете.
+      function getOwnTemplates() {
         try {
           const list = JSON.parse(localStorage.getItem(TEMPLATES_KEY) || "[]");
           return Array.isArray(list) ? list : [];
         } catch {
           return [];
         }
+      }
+
+      // Встроенные — из templates.js, едут в коде и есть на всех планшетах.
+      function getBuiltinTemplates() {
+        const list = window.ABA_BUILTIN_TEMPLATES;
+        return Array.isArray(list) ? list : [];
+      }
+
+      function getHiddenTitles() {
+        try {
+          const list = JSON.parse(localStorage.getItem(TEMPLATES_HIDDEN_KEY) || "[]");
+          return Array.isArray(list) ? list.map(normTitle) : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function setHiddenTitles(list) {
+        localStorage.setItem(TEMPLATES_HIDDEN_KEY, JSON.stringify(list));
+      }
+
+      // Общий список: встроенные + свои. Свой шаблон с тем же названием
+      // ЗАМЕЩАЕТ встроенный (практика могла поправить набор целей под себя).
+      function getTemplates() {
+        const own = getOwnTemplates();
+        const ownTitles = own.map((t) => normTitle(t.title));
+        const hidden = getHiddenTitles();
+        const builtin = getBuiltinTemplates()
+          .filter((t) => !ownTitles.includes(normTitle(t.title)))
+          .filter((t) => !hidden.includes(normTitle(t.title)))
+          .map((t) => ({ ...t, builtin: true }));
+        const ownMarked = own.map((t) => ({
+          ...t,
+          // Своя версия встроенного — её можно вернуть к исходной.
+          overrides: getBuiltinTemplates().some((b) => normTitle(b.title) === normTitle(t.title))
+        }));
+        return [...builtin, ...ownMarked];
       }
 
       function setTemplates(list) {
@@ -1681,8 +1765,9 @@
         return getTemplates().find((t) => normTitle(t.title) === normTitle(title)) || null;
       }
 
+      // Сохраняем всегда в СВОИ: правка встроенного = своя версия поверх него.
       function upsertTemplate(title, goals) {
-        const list = getTemplates();
+        const list = getOwnTemplates();
         const idx = list.findIndex((t) => normTitle(t.title) === normTitle(title));
         const tpl = { title: String(title).trim(), goals };
         if (idx >= 0) list[idx] = tpl;
@@ -1735,13 +1820,26 @@
         const templates = getTemplates();
         if (!templates.length) {
           list.innerHTML = '<p class="hint">Шаблонов пока нет. Сохраните готовый протокол кнопкой «💾 В шаблоны» или впишите ниже.</p>';
-          return;
         }
-        templates.forEach((tpl, idx) => {
+        templates.forEach((tpl) => {
           const row = document.createElement("div");
           row.className = "tpl-item";
           const info = document.createElement("span");
           info.textContent = `«${tpl.title}» — целей: ${tpl.goals.length}`;
+          const badge = document.createElement("span");
+          if (tpl.builtin) {
+            badge.className = "tpl-badge";
+            badge.textContent = "встроенный";
+            badge.title = "Едет вместе с приложением, есть на всех планшетах";
+          } else {
+            badge.className = "tpl-badge own";
+            badge.textContent = tpl.overrides ? "своя версия" : "свой";
+            badge.title = tpl.overrides
+              ? "Заменяет встроенный шаблон с тем же названием"
+              : "Сохранён на этом планшете";
+          }
+          info.append(badge);
+
           const btns = document.createElement("span");
           btns.className = "tpl-btns";
           const edit = document.createElement("button");
@@ -1752,23 +1850,59 @@
             document.getElementById("tplEditor").value = [tpl.title, ...tpl.goals].join("\n");
             document.getElementById("tplEditor").focus();
           };
+          btns.append(edit);
+
+          // Своя версия встроенного — можно вернуть исходную.
+          if (tpl.overrides) {
+            const reset = document.createElement("button");
+            reset.type = "button";
+            reset.textContent = "↺";
+            reset.title = "Вернуть встроенный вариант";
+            reset.onclick = () => {
+              if (!window.confirm(`Вернуть встроенный вариант шаблона «${tpl.title}»? Ваша версия будет удалена.`)) return;
+              setTemplates(getOwnTemplates().filter((t) => normTitle(t.title) !== normTitle(tpl.title)));
+              renderTemplates();
+              refreshAllTemplateHints();
+            };
+            btns.append(reset);
+          }
+
           const del = document.createElement("button");
           del.type = "button";
           del.textContent = "✕";
           del.className = "tpl-del";
-          del.title = "Удалить шаблон";
+          // Встроенный не удаляется насовсем — он вернётся с обновлением;
+          // прячем его на этом планшете, вернуть можно кнопкой внизу списка.
+          del.title = tpl.builtin ? "Скрыть на этом планшете" : "Удалить шаблон";
           del.onclick = () => {
-            if (!window.confirm(`Удалить шаблон «${tpl.title}»?`)) return;
-            const all = getTemplates();
-            all.splice(idx, 1);
-            setTemplates(all);
+            if (tpl.builtin) {
+              if (!window.confirm(`Скрыть встроенный шаблон «${tpl.title}» на этом планшете?`)) return;
+              setHiddenTitles([...getHiddenTitles(), normTitle(tpl.title)]);
+            } else {
+              if (!window.confirm(`Удалить шаблон «${tpl.title}»?`)) return;
+              setTemplates(getOwnTemplates().filter((t) => normTitle(t.title) !== normTitle(tpl.title)));
+            }
             renderTemplates();
             refreshAllTemplateHints();
           };
-          btns.append(edit, del);
+          btns.append(del);
           row.append(info, btns);
           list.append(row);
         });
+
+        const hidden = getHiddenTitles();
+        if (hidden.length) {
+          const restore = document.createElement("button");
+          restore.type = "button";
+          restore.className = "tpl-restore";
+          restore.textContent = `↺ Вернуть скрытые встроенные шаблоны (${hidden.length})`;
+          restore.onclick = () => {
+            setHiddenTitles([]);
+            renderTemplates();
+            refreshAllTemplateHints();
+          };
+          list.append(restore);
+        }
       }
 
       function wireTemplates() {

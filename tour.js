@@ -43,8 +43,15 @@
     if (drop && !drop.hidden) document.getElementById("menuBtn").click();
   };
 
-  // Сценарии. sel — что подсветить, before/after — подготовка шага.
-  // Шаг без найденного элемента просто пропускается.
+  // Сценарии. Поля шага:
+  //   sel    — что подсветить;
+  //   until  — селектор «результата»: если такого элемента ещё НЕТ, шаг ждёт,
+  //            пока пользователь сам нажмёт подсвеченную кнопку (режим мастера
+  //            для пустого планшета). Если результат уже есть — обычный шаг;
+  //   doText — строчка-задание, показывается только в режиме ожидания;
+  //   empty  — { title, text }: что показать, если элемента на странице нет
+  //            (карточка по центру, без подсветки). Без empty шаг пропускается;
+  //   before/after — подготовка шага (например, открыть меню).
   const SCRIPTS = {
     final: [
       {
@@ -55,7 +62,12 @@
       {
         sel: ".block .btn-set",
         title: "Три кнопки на каждую пробу",
-        text: "Слева «−» — ошибка или нет реакции. В центре «P» — была помощь. Справа «+» — сделал сам. Нажимайте сразу после каждой пробы."
+        text: "Слева «−» — ошибка или нет реакции. В центре «P» — была помощь. Справа «+» — сделал сам. Нажимайте сразу после каждой пробы.",
+        // На новом планшете целей ещё нет — объясняем, откуда они возьмутся.
+        empty: {
+          title: "Здесь появятся кнопки оценки",
+          text: "Пока не заведено ни одной цели, оценивать нечего. Откройте <b>«Настройка»</b> — последняя вкладка внизу — и добавьте протокол и цели. После этого на этой странице для каждой цели появится строка с кнопками <b>−</b>, <b>P</b>, <b>+</b> и процентом самостоятельных ответов."
+        }
       },
       {
         sel: ".block .btn-prompt",
@@ -76,6 +88,12 @@
         sel: "#sendBtn",
         title: "Главное в конце занятия",
         text: "Нажмите «Отправить данные» — только тогда занятие уйдёт в таблицу. Без интернета данные подождут и уйдут сами."
+      },
+      {
+        // Появляется только когда есть освоенные цели — иначе шаг пропускается.
+        sel: "#genBox",
+        title: "Освоенные цели уходят сюда",
+        text: "Когда цель освоена, она пропадает из списка выше и появляется здесь. Осталось проверить навык в девяти условиях: три материала, три места, три человека. Нажмите на условие, когда проба прошла."
       },
       {
         sel: "#menuDrop",
@@ -100,12 +118,26 @@
       {
         sel: "#addProtocolBtn",
         title: "Добавить протокол",
-        text: "Протокол — это направление работы: «Имитация», «Матчинг», «Речь». Название станет листом в таблице ребёнка."
+        text: "Протокол — это направление работы: «Имитация», «Матчинг», «Речь». Название станет листом в таблице ребёнка.",
+        until: ".protocol-container",
+        doText: "Нажмите подсвеченную кнопку — и продолжим."
+      },
+      {
+        sel: ".protocol-title",
+        title: "Название протокола",
+        text: "Впишите направление работы одним-двумя словами. Это же название вы увидите на странице «Сбор» и листом в таблице ребёнка."
       },
       {
         sel: ".add-goal",
         title: "Добавить цель",
-        text: "Формулируйте наблюдаемо: не «моторика», а «хлопает в ладоши по образцу». Целей может быть сколько нужно."
+        text: "Цель — конкретный навык внутри протокола. Их может быть сколько нужно.",
+        until: ".goal-group",
+        doText: "Нажмите подсвеченную кнопку — и продолжим."
+      },
+      {
+        sel: ".goal-input",
+        title: "Как формулировать цель",
+        text: "Наблюдаемо, чтобы любой терапист понял одинаково: не «моторика», а «хлопает в ладоши по образцу». Цель должна быть видна со стороны."
       },
       {
         sel: ".goal-group .mastery-date",
@@ -192,6 +224,18 @@
       font-weight: 800;
     }
     #aba-tour-card p { margin: 0 0 12px; font-size: 14px; }
+    /* Строка-задание в режиме ожидания: «нажмите подсвеченную кнопку». */
+    #aba-tour-card .aba-tour-do {
+      margin: -4px 0 12px;
+      padding: 8px 10px;
+      background: #ecfeff;
+      border-left: 3px solid #0e7490;
+      border-radius: 0 8px 8px 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: #0e7490;
+    }
+    #aba-tour-card .aba-tour-do[hidden] { display: none; }
     .aba-tour-row {
       display: flex;
       align-items: center;
@@ -219,6 +263,33 @@
   let hole = null;
   let card = null;
   let currentAfter = null;
+  let stopWatching = null; // снять слежение за результатом шага
+
+  // Ждём, пока на странице появится результат шага (нажали кнопку — возник
+  // блок протокола или цели). Следим и мутациями, и таймером: разметку рисуют
+  // разными путями, а MutationObserver молчит, если элемент лишь показали.
+  function watchFor(sel) {
+    unwatch();
+    const check = () => {
+      if (!findVisible(sel)) return;
+      unwatch();
+      next();
+    };
+    const observer = new MutationObserver(check);
+    observer.observe(document.body, { childList: true, subtree: true });
+    const timer = setInterval(check, 400);
+    stopWatching = () => {
+      observer.disconnect();
+      clearInterval(timer);
+    };
+  }
+
+  function unwatch() {
+    if (stopWatching) {
+      stopWatching();
+      stopWatching = null;
+    }
+  }
 
   function seen() {
     try {
@@ -249,6 +320,7 @@
     card.innerHTML = `
       <h4></h4>
       <p></p>
+      <p class="aba-tour-do" hidden></p>
       <div class="aba-tour-row">
         <span class="aba-tour-count"></span>
         <span class="aba-tour-btns">
@@ -269,7 +341,12 @@
     const page = pageId();
     if (page && SCRIPTS[page] && !seen()[page]) {
       setTimeout(() => {
-        if (SCRIPTS[page].some((s) => findVisible(s.sel))) start();
+        // Пустой планшет — как раз тот случай, когда подсказки нужнее всего:
+        // запускаем и если показать пока нечего, кроме заглушек и заданий.
+        const worth = SCRIPTS[page].some(
+          (s) => s.empty || s.until || findVisible(s.sel)
+        );
+        if (worth) start();
       }, 900);
     }
   }
@@ -284,7 +361,14 @@
   }
 
   function show() {
-    // Пропускаем шаги, элементов которых нет на этой странице.
+    unwatch();
+    // Шаг открываем следующим тактом: клик по «Дальше» ещё всплывает к
+    // document, а там обработчик «клик мимо меню» закрыл бы меню, которое шаг
+    // только что открыл (before: openMenu).
+    setTimeout(openStep, 0);
+  }
+
+  function openStep() {
     while (idx < steps.length) {
       const step = steps[idx];
       if (step.before) step.before();
@@ -293,14 +377,49 @@
         render(step, el);
         return;
       }
+      // Элемента нет. Есть запасной текст — показываем карточку по центру,
+      // иначе шаг пропускаем.
+      if (step.empty) {
+        renderEmpty(step);
+        return;
+      }
       if (step.after) step.after();
       idx += 1;
     }
     stop();
   }
 
+  // Общая часть карточки: заголовок, текст, счётчик, подписи кнопок.
+  function fillCard(title, text, doText) {
+    card.hidden = false;
+    card.querySelector("h4").textContent = title;
+    card.querySelector("p").innerHTML = text;
+    const doLine = card.querySelector(".aba-tour-do");
+    doLine.hidden = !doText;
+    if (doText) doLine.textContent = doText;
+    card.querySelector(".aba-tour-count").textContent = `${idx + 1} из ${steps.length}`;
+    // В режиме ожидания «Дальше» превращается в «Пропустить»: терапист может
+    // не захотеть заводить данные прямо сейчас.
+    card.querySelector(".aba-tour-next").textContent = doText
+      ? "Пропустить"
+      : idx + 1 >= steps.length
+        ? "Понятно"
+        : "Дальше";
+  }
+
+  // Шаг без своего элемента: карточка по центру экрана, подсвечивать нечего.
+  function renderEmpty(step) {
+    currentAfter = step.after || null;
+    hole.hidden = true;
+    fillCard(step.empty.title, step.empty.text, "");
+    card.style.top = `${Math.max(8, (window.innerHeight - card.offsetHeight) / 2)}px`;
+    card.style.left = `${Math.max(8, (window.innerWidth - card.offsetWidth) / 2)}px`;
+  }
+
   function render(step, el) {
     currentAfter = step.after || null;
+    // Результата шага ещё нет — значит ведём за руку и ждём реального нажатия.
+    const waiting = Boolean(step.until) && !findVisible(step.until);
     el.scrollIntoView({ behavior: "smooth", block: "center" });
 
     // Ждём окончания прокрутки, иначе подсветим старое место.
@@ -313,12 +432,8 @@
       hole.style.width = `${r.width + pad * 2}px`;
       hole.style.height = `${r.height + pad * 2}px`;
 
-      card.hidden = false;
-      card.querySelector("h4").textContent = step.title;
-      card.querySelector("p").innerHTML = step.text;
-      card.querySelector(".aba-tour-count").textContent = `${idx + 1} из ${steps.length}`;
-      card.querySelector(".aba-tour-next").textContent =
-        idx + 1 >= steps.length ? "Понятно" : "Дальше";
+      fillCard(step.title, step.text, waiting ? step.doText : "");
+      if (waiting) watchFor(step.until);
 
       // Карточка под подсветкой; не влезает снизу — ставим сверху.
       const cw = card.offsetWidth;
@@ -333,6 +448,7 @@
   }
 
   function next() {
+    unwatch();
     if (currentAfter) {
       currentAfter();
       currentAfter = null;
@@ -346,6 +462,7 @@
   }
 
   function stop() {
+    unwatch();
     if (currentAfter) {
       currentAfter();
       currentAfter = null;
