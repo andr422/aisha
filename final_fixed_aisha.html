@@ -226,7 +226,8 @@
       margin-top: 8px;
     }
 
-    body.single-mode .protocol-header .btn {
+    body.single-mode .protocol-header .btn,
+    body.single-mode .protocol-header .select-goals {
       display: none;
     }
 
@@ -341,6 +342,69 @@
       margin-top: 2px;
     }
 
+    /* «Выбрать цели» — служебное действие, а не то, что жмут на занятии:
+       мелкая и неяркая, и только когда протокол раскрыт. */
+    .select-goals {
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-family: var(--font-body);
+      font-size: 13px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .select-goals:active {
+      background: #eef1f4;
+    }
+
+    .protocol-container.collapsed .select-goals,
+    .protocol-container.collapsed .pdf-open {
+      display: none;
+    }
+
+    /* Долгое нажатие на цель — действия с ней (пока только «очистить»). */
+    .goal-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 8px 0 2px;
+      padding: 8px 10px;
+      background: #fff4e5;
+      border-radius: 10px;
+      font-size: 13px;
+      color: #7c3d09;
+    }
+
+    .goal-actions[hidden] {
+      display: none;
+    }
+
+    .goal-actions button {
+      border: none;
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .goal-actions .clear-goal {
+      background: #b45309;
+      color: #fff;
+    }
+
+    .goal-actions .cancel-goal {
+      background: #eef1f4;
+      color: #596270;
+    }
+
     .block {
       margin-bottom: 16px;
       padding: 12px;
@@ -379,6 +443,11 @@
       font-size: 15px;
       line-height: 1.45;
       padding-top: 4px;
+      /* Долгое нажатие открывает действия с целью — выделение текста и
+         системное меню iOS при этом только мешают. */
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
     }
 
     .block-stats {
@@ -1984,7 +2053,7 @@
         };
 
         const selectBtn = document.createElement("button");
-        selectBtn.className = "btn btn-primary";
+        selectBtn.className = "select-goals";
         selectBtn.type = "button";
         selectBtn.textContent = "Выбрать цели";
         selectBtn.onclick = () => openGoalSelector(i);
@@ -2076,7 +2145,29 @@
           const promptDetails = document.createElement("div");
           promptDetails.className = "prompt-details";
 
-          block.append(head, btnSet, promptDetails);
+          // Долгое нажатие на название цели — действия с этой целью.
+          // Обычный тап ничего не делает: случайно очистить нельзя.
+          const actions = document.createElement("div");
+          actions.className = "goal-actions";
+          actions.hidden = true;
+          const actionsText = document.createElement("span");
+          actionsText.textContent = "Обнулить счётчики этой цели?";
+          const clearBtn = document.createElement("button");
+          clearBtn.type = "button";
+          clearBtn.className = "clear-goal";
+          clearBtn.textContent = "Очистить";
+          clearBtn.onclick = () => clearGoalCounts(block);
+          const cancelBtn = document.createElement("button");
+          cancelBtn.type = "button";
+          cancelBtn.className = "cancel-goal";
+          cancelBtn.textContent = "Отмена";
+          cancelBtn.onclick = () => {
+            actions.hidden = true;
+          };
+          actions.append(actionsText, clearBtn, cancelBtn);
+          wireGoalLongPress(goalLabel, actions);
+
+          block.append(head, btnSet, promptDetails, actions);
           goalsWrap.append(block);
         });
 
@@ -3029,6 +3120,60 @@ ${extra}
             : `${goalsText} · нажмите, чтобы открыть`
           : goalsText;
       });
+    }
+
+    // Долгое нажатие (те же 450 мс, что и у «P») по названию цели открывает
+    // строку действий. Уводим палец или прокручиваем — ничего не происходит.
+    function wireGoalLongPress(label, actions) {
+      let timer = null;
+      const cancel = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+      };
+      label.addEventListener("pointerdown", () => {
+        cancel();
+        timer = setTimeout(() => {
+          timer = null;
+          if (document.body.classList.contains("editing")) return; // заблокировано
+          actions.hidden = false;
+          if (navigator.vibrate) navigator.vibrate(15);
+        }, 450);
+      });
+      ["pointerup", "pointerleave", "pointercancel"].forEach((ev) =>
+        label.addEventListener(ev, cancel)
+      );
+      label.addEventListener("contextmenu", (e) => e.preventDefault()); // меню iOS
+    }
+
+    // Обнулить одну цель: счётчики, разбивку подсказок и лог ответов. Нужно,
+    // когда нажимали не по той строке и «Отменить действие» уже не помогает
+    // (например, после перезагрузки страницы стек отмены пуст).
+    function clearGoalCounts(block) {
+      const index = Array.from(document.querySelectorAll(".block")).indexOf(block);
+      if (index === -1) return;
+      block.querySelectorAll(".count").forEach((c) => {
+        c.textContent = "0";
+      });
+
+      const details = getSavedPromptDetails();
+      details[index] = emptyPromptDetail();
+      setSavedPromptDetails(details);
+
+      const log = getSavedResponseLog();
+      log[index] = [];
+      setSavedResponseLog(log);
+
+      // Отменять нажатия этой цели больше нечего — чистим её из стека.
+      undoStack = undoStack.filter((item) => item.button.closest(".block") !== block);
+      if (!undoStack.length) undoBanner.style.display = "none";
+
+      block.querySelector(".goal-actions").hidden = true;
+      updatePercentages();
+      updatePromptDetailsUI();
+      saveProgress();
+      showToast(`Цель «${block.dataset.goalName}» очищена.`);
     }
 
     function updatePercentages() {
