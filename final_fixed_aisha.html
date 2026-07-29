@@ -1069,20 +1069,39 @@
     // Content-Type text/plain — чтобы браузер не требовал preflight-запрос,
     // который Apps Script не умеет; тело всё равно JSON-строка.
     // true = скрипт подтвердил запись ({ok:true}, либо «OK» у старой версии).
+    // Почему в последний раз не ушло. Показывается по нажатию на индикатор
+    // очереди: на планшете и телефоне консоли нет, а знать причину надо.
+    let lastSendInfo = "";
+
     async function sendPacket(endpoint, payload) {
-      const resp = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payload),
-        redirect: "follow"
-      });
-      if (!resp.ok) return false;
+      let resp;
+      try {
+        resp = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload),
+          redirect: "follow"
+        });
+      } catch (err) {
+        // Запрос вообще не состоялся: нет сети, блокировщик, запрет браузера.
+        lastSendInfo = `запрос не ушёл — ${err && err.name ? err.name + ": " : ""}${err && err.message ? err.message : err}`;
+        throw err;
+      }
+      if (!resp.ok) {
+        lastSendInfo = `сервер ответил ${resp.status} ${resp.statusText || ""}`.trim();
+        return false;
+      }
       const text = (await resp.text()).trim();
       if (text === "OK") return true; // скрипт до перехода на JSON-ответы
       try {
         const parsed = JSON.parse(text);
-        return Boolean(parsed && parsed.ok === true);
+        if (parsed && parsed.ok === true) return true;
+        lastSendInfo = `скрипт отказал: ${text.slice(0, 120) || "пустой ответ"}`;
+        return false;
       } catch {
+        lastSendInfo = text
+          ? `ответ не понят: ${text.slice(0, 120)}`
+          : "пустой ответ от скрипта";
         return false;
       }
     }
@@ -1248,14 +1267,29 @@
             }
           }
           showToast("Повторяю отправку…");
-          flushQueue();
+          await flushQueue();
+          const left = await queueCount();
+          if (left) {
+            showToast(`Осталось: ${left}. Причина: ${lastSendInfo || "неизвестна"}`, 12000);
+          }
         };
       } else if (items.length > 0) {
         el.style.display = "inline";
         el.style.color = "var(--prompt-ink)";
-        el.style.cursor = "";
-        el.onclick = null;
-        el.textContent = `⏳ Ожидают отправки: ${items.length}`;
+        el.style.cursor = "pointer";
+        el.textContent = `⏳ Ожидают отправки: ${items.length}. Нажмите — отправить`;
+        // Нажатие: сразу пробуем отправить и показываем, ЧТО именно мешает.
+        el.onclick = async () => {
+          showToast("Отправляю…");
+          await flushQueue();
+          const left = await queueCount();
+          showToast(
+            left === 0
+              ? "Готово, очередь пуста — всё ушло в таблицу."
+              : `Осталось: ${left}. Причина: ${lastSendInfo || "неизвестна"}`,
+            12000
+          );
+        };
       } else {
         el.style.display = "none";
         el.onclick = null;

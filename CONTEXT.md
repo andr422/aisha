@@ -417,7 +417,7 @@ isSettingKey, чтобы старые значения корректно сво
 ## PWA
 manifest.json, sw.js (network-first страницы, cache-first статика, POST не
 перехватывается). APP_SHELL включает tabbar.js и timer.js.
-CACHE_NAME сейчас v47 — ПОДНИМАТЬ ПРИ ЛЮБОЙ ПРАВКЕ HTML/JS. APP_SHELL
+CACHE_NAME сейчас v48 — ПОДНИМАТЬ ПРИ ЛЮБОЙ ПРАВКЕ HTML/JS. APP_SHELL
 включает abc.html.
 Шрифты в APP_SHELL НЕ добавлять (addAll упадёт целиком, если файлов нет);
 они кэшируются рантаймом.
