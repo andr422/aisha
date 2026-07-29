@@ -1106,6 +1106,23 @@
       }
     }
 
+    // Запасной путь: отправка БЕЗ чтения ответа (mode: "no-cors"). Нужна там,
+    // где браузер обрывает обычный запрос — например Chrome на iPhone: адрес
+    // Google доступен, из Safari всё уходит, а здесь fetch падает с
+    // «TypeError: Load failed». Ответ в этом режиме недоступен в принципе,
+    // поэтому доставку НЕ подтверждаем: true = «запрос ушёл с телефона».
+    // Дубликатов не будет — скрипт помнит номера пакетов (uid).
+    async function sendBlind(endpoint, payload) {
+      await fetch(endpoint, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload),
+        redirect: "follow"
+      });
+      return true;
+    }
+
     // Уникальный номер пакета. Присваивается ОДИН раз при постановке в
     // очередь и не меняется при повторах — скрипт пропускает уже принятые
     // номера, поэтому потерянный ответ сервера не создаёт дубликат строки.
@@ -1209,12 +1226,33 @@
         const items = await queueGetAll();
         for (const item of items) {
           if ((item.attempts || 0) >= STUCK_ATTEMPTS) continue;
+          // Пакет уже ушёл вслепую — второй раз не шлём, ждём, пока человек
+          // сверится с таблицей (см. индикатор очереди).
+          if (item.blindSent) continue;
           let delivered;
           try {
             delivered = await sendPacket(item.endpoint, item.payload);
           } catch (err) {
-            // Сетевая ошибка — сети нет, оставшееся досылаем в другой раз.
-            console.warn("Отправка не удалась, элемент остаётся в очереди:", err);
+            // Обычный запрос не состоялся. Это бывает не только когда нет сети:
+            // Chrome на iPhone обрывает такой запрос, хотя адрес доступен и из
+            // Safari всё уходит. Пробуем «вслепую» — без чтения ответа.
+            console.warn("Обычная отправка не удалась, пробую вслепую:", err);
+            let blindOk = false;
+            try {
+              blindOk = await sendBlind(item.endpoint, item.payload);
+            } catch (blindErr) {
+              console.warn("Слепая отправка тоже не удалась:", blindErr);
+            }
+            if (blindOk) {
+              // Ушло, но подтверждения нет — помечаем и НЕ удаляем из очереди,
+              // пока человек не увидит записи в таблице.
+              item.blindSent = Date.now();
+              await queuePut(item);
+              lastSendInfo =
+                "браузер не даёт прочитать ответ Google — отправлено вслепую, " +
+                "проверьте таблицу";
+              continue;
+            }
             break;
           }
           if (delivered) {
@@ -1250,6 +1288,40 @@
         el.style.cursor = "";
         el.onclick = null;
         el.textContent = "⚠ Этот браузер не хранит очередь — отправляйте только при интернете";
+        return;
+      }
+
+      // Ушло вслепую (браузер не даёт прочитать ответ): подтверждения нет,
+      // поэтому удалять такие пакеты может только человек — после того, как
+      // увидит записи в таблице. Иначе получилось бы «сделали вид, что дошло».
+      const blind = items.filter((i) => i.blindSent);
+      if (blind.length) {
+        const rest = items.length - blind.length;
+        el.style.display = "inline";
+        el.style.color = "var(--prompt-ink)";
+        el.style.cursor = "pointer";
+        el.textContent =
+          `📨 Ушло без подтверждения: ${blind.length}. Проверьте таблицу и нажмите` +
+          (rest ? ` (ещё в очереди: ${rest})` : "");
+        el.onclick = async () => {
+          const ok = window.confirm(
+            `В таблице ребёнка появились эти записи (${blind.length})?\n\n` +
+              `Да — уберу их из очереди.\nНет — оставлю, попробуем ещё раз.`
+          );
+          if (!ok) {
+            // Сбрасываем пометку: пусть попробует обычным путём заново.
+            for (const item of blind) {
+              delete item.blindSent;
+              await queuePut(item);
+            }
+            showToast("Оставил в очереди. Попробуйте отправить с другого браузера или с домашнего экрана.", 9000);
+            updateQueueIndicator();
+            return;
+          }
+          for (const item of blind) await queueDelete(item.id);
+          showToast("Убрал из очереди.");
+          updateQueueIndicator();
+        };
         return;
       }
 
@@ -2816,9 +2888,21 @@ ${extra}
       try {
         const mastered = await finalizeSession();
         // Данные уже надёжно в очереди/истории. Сообщаем по факту доставки.
-        const remaining = await queueCount();
-        if (remaining > 0) {
-          showToast(`Сохранено. Ожидают отправки: ${remaining}. Уйдут при появлении сети.`, 6000);
+        let queued = [];
+        try {
+          queued = await queueGetAll();
+        } catch {}
+        const blind = queued.filter((i) => i.blindSent).length;
+        const waiting = queued.length - blind;
+        if (blind > 0) {
+          showToast(
+            `Сохранено. Этот браузер не даёт подтвердить доставку: ${blind} ` +
+              `${blind === 1 ? "запись ушла" : "записей ушло"} вслепую — проверьте таблицу.` +
+              (waiting ? ` Ещё ждут отправки: ${waiting}.` : ""),
+            9000
+          );
+        } else if (waiting > 0) {
+          showToast(`Сохранено. Ожидают отправки: ${waiting}. Уйдут при появлении сети.`, 6000);
         } else {
           showToast("Готово. Сессия сохранена и отправлена.");
         }

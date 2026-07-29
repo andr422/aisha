@@ -669,6 +669,23 @@
     // Уникальный номер пакета. Присваивается ОДИН раз при постановке в
     // очередь и не меняется при повторах — скрипт пропускает уже принятые
     // номера, поэтому потерянный ответ сервера не создаёт дубликат строки.
+    // Запасной путь: отправка БЕЗ чтения ответа (mode: "no-cors"). Нужна там,
+    // где браузер обрывает обычный запрос — например Chrome на iPhone: адрес
+    // Google доступен, из Safari всё уходит, а здесь fetch падает с
+    // «TypeError: Load failed». Ответ в этом режиме недоступен в принципе,
+    // поэтому доставку НЕ подтверждаем: true = «запрос ушёл с телефона».
+    // Дубликатов не будет — скрипт помнит номера пакетов (uid).
+    async function sendBlind(endpoint, payload) {
+      await fetch(endpoint, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload),
+        redirect: "follow"
+      });
+      return true;
+    }
+
     function packetUid() {
       return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     }
@@ -747,11 +764,26 @@
         const items = await queueGetAll();
         for (const item of items) {
           if ((item.attempts || 0) >= STUCK_ATTEMPTS) continue;
+          // Пакет уже ушёл вслепую — ждём, пока человек сверится с таблицей.
+          if (item.blindSent) continue;
           let delivered;
           try {
             delivered = await sendPacket(item.endpoint, item.payload);
           } catch (err) {
-            console.warn("Отправка не удалась, элемент остаётся в очереди:", err);
+            // Обычный запрос не состоялся: нет сети ЛИБО браузер его обрывает
+            // (Chrome на iPhone). Пробуем вслепую, без чтения ответа.
+            console.warn("Обычная отправка не удалась, пробую вслепую:", err);
+            let blindOk = false;
+            try {
+              blindOk = await sendBlind(item.endpoint, item.payload);
+            } catch (blindErr) {
+              console.warn("Слепая отправка тоже не удалась:", blindErr);
+            }
+            if (blindOk) {
+              item.blindSent = Date.now();
+              await queuePut(item);
+              continue;
+            }
             break;
           }
           if (delivered) {
@@ -775,6 +807,18 @@
         items = await queueGetAll();
       } catch {}
       const el = document.getElementById("queueStatus");
+      // Ушло вслепую (браузер не даёт прочитать ответ Google): подтверждения
+      // нет, поэтому удаляет такие пакеты только человек — после того, как
+      // увидит записи в таблице. Разбор — на вкладке «Сбор».
+      const blind = items.filter((i) => i.blindSent).length;
+      if (blind) {
+        el.style.display = "inline";
+        el.style.color = "";
+        el.style.cursor = "";
+        el.onclick = null;
+        el.textContent = `📨 Ушло без подтверждения: ${blind} — проверьте таблицу`;
+        return;
+      }
       const stuck = items.filter((i) => (i.attempts || 0) >= STUCK_ATTEMPTS).length;
       if (stuck > 0) {
         el.style.display = "inline";
