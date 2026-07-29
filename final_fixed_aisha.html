@@ -283,6 +283,64 @@
       margin-bottom: 12px;
     }
 
+    /* Протокол свёрнут: на экране только название и сводка, цели — по нажатию.
+       На занятии обычно работают с одним протоколом за раз, и длинный список
+       целей мешает попадать по кнопкам. */
+    .protocol-container.collapsed .protocol-header {
+      margin-bottom: 0;
+    }
+
+    .protocol-container.collapsed .proto-goals {
+      display: none;
+    }
+
+    /* Режим «по одной» сам показывает по одной цели — там сворачивать нечего. */
+    body.single-mode .protocol-container.collapsed .proto-goals {
+      display: block;
+    }
+
+    .proto-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1 1 auto;
+      min-width: 0;
+      border: none;
+      background: none;
+      padding: 4px 0;
+      font-family: inherit;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .proto-toggle .caret {
+      flex: 0 0 auto;
+      font-size: 18px;
+      color: var(--muted);
+      transition: transform 0.15s ease;
+    }
+
+    .protocol-container:not(.collapsed) .proto-toggle .caret {
+      transform: rotate(90deg);
+    }
+
+    .proto-toggle h3 {
+      margin: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .proto-summary {
+      display: block;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
     .block {
       margin-bottom: 16px;
       padding: 12px;
@@ -1902,16 +1960,48 @@
 
         const header = document.createElement("div");
         header.className = "protocol-header";
+
+        // Название — кнопка: по нажатию протокол раскрывается и сворачивается.
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "proto-toggle";
+        const caret = document.createElement("span");
+        caret.className = "caret";
+        caret.textContent = "▸";
+        const titleBox = document.createElement("span");
         // textContent вместо innerHTML — спецсимволы в названии не ломают разметку.
         const titleEl = document.createElement("h3");
         titleEl.textContent = title;
+        const summaryEl = document.createElement("span");
+        summaryEl.className = "proto-summary";
+        titleBox.append(titleEl, summaryEl);
+        toggle.append(caret, titleBox);
+        toggle.onclick = () => {
+          const nowOpen = wrapper.classList.contains("collapsed");
+          wrapper.classList.toggle("collapsed", !nowOpen);
+          localStorage.setItem(`protocol${i}_open`, nowOpen ? "1" : "0");
+          updateProtocolSummaries();
+        };
+
         const selectBtn = document.createElement("button");
         selectBtn.className = "btn btn-primary";
         selectBtn.type = "button";
         selectBtn.textContent = "Выбрать цели";
         selectBtn.onclick = () => openGoalSelector(i);
-        header.append(titleEl, selectBtn);
+        header.append(toggle, selectBtn);
         wrapper.append(header);
+
+        // Свёрнут по умолчанию. Исключения: терапист сам раскрывал этот
+        // протокол раньше, либо по нему уже есть несданные нажатия — прятать
+        // начатую работу нельзя.
+        const remembered = localStorage.getItem(`protocol${i}_open`);
+        const hasWork = selectedGoals.some((goalId) =>
+          hasUnsentData(unsent, i, localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`)
+        );
+        if (remembered !== "1" && !hasWork) wrapper.classList.add("collapsed");
+
+        const goalsWrap = document.createElement("div");
+        goalsWrap.className = "proto-goals";
 
         // Кнопка просмотра PDF протокола (если прикреплён на сводной).
         // Класс НЕ .btn — в режиме «по одной» кнопки .btn в шапке скрыты,
@@ -1987,9 +2077,10 @@
           promptDetails.className = "prompt-details";
 
           block.append(head, btnSet, promptDetails);
-          wrapper.append(block);
+          goalsWrap.append(block);
         });
 
+        wrapper.append(goalsWrap);
         dailyContainer.append(wrapper);
       }
 
@@ -2040,6 +2131,7 @@
       wirePromptButtons();
       updatePromptDetailsUI();
       applyViewMode();
+      updateProtocolSummaries();
       renderGeneralization();
     }
 
@@ -2920,6 +3012,25 @@ ${extra}
       showUndo();
     }
 
+    // Подпись под названием протокола: сколько целей и по скольким уже есть
+    // нажатия. Свёрнутый протокол должен сам показывать, что внутри.
+    function updateProtocolSummaries() {
+      document.querySelectorAll(".protocol-container").forEach((card) => {
+        const summary = card.querySelector(".proto-summary");
+        if (!summary) return;
+        const blocks = Array.from(card.querySelectorAll(".block"));
+        const withData = blocks.filter((block) =>
+          Array.from(block.querySelectorAll(".count")).some((c) => (Number(c.textContent) || 0) > 0)
+        ).length;
+        const goalsText = `${blocks.length} ${plural(blocks.length, "цель", "цели", "целей")}`;
+        summary.textContent = card.classList.contains("collapsed")
+          ? withData
+            ? `${goalsText} · собрано по ${withData}`
+            : `${goalsText} · нажмите, чтобы открыть`
+          : goalsText;
+      });
+    }
+
     function updatePercentages() {
       document.querySelectorAll(".block").forEach((block) => {
         // Считаем по классам кнопок, а не по позиции — порядок кнопок
@@ -2941,6 +3052,8 @@ ${extra}
         percentEl.innerHTML = `${percent}<span class="pct-sign">%</span>`;
         percentEl.className = `percent ${percent >= 80 ? "green" : "grey"}`;
       });
+      // Сводка в шапке протокола зависит от счётчиков — обновляем вместе.
+      updateProtocolSummaries();
     }
 
     // Сохранение счётчиков по классам кнопок (aba_counts_v2), чтобы порядок
