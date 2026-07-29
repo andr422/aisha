@@ -1094,14 +1094,20 @@
       return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     }
 
+    // Очередь недоступна (приватный режим, урезанное хранилище браузера):
+    // шлём напрямую и ОБЯЗАТЕЛЬНО пробрасываем неудачу наверх. Раньше ошибка
+    // здесь глушилась, и приложение показывало «отправлено», хотя в таблицу
+    // ничего не ушло.
+    function sendDirect(item) {
+      return sendPacket(item.endpoint, item.payload).then((delivered) => {
+        if (!delivered) throw new Error("сервер не подтвердил запись");
+      });
+    }
+
     function queueAdd(item) {
       const withUid = { ...item, payload: { uid: packetUid(), ...item.payload } };
-      // Если IndexedDB недоступна — очередь невозможна. Шлём напрямую
-      // (как в исходной версии), чтобы не потерять попытку отправки.
       if (window.__abaIdbFailed) {
-        return sendPacket(withUid.endpoint, withUid.payload).catch((err) => {
-          console.error("Прямая отправка не удалась:", err);
-        });
+        return sendDirect(withUid);
       }
       return openDB().then(
         (db) =>
@@ -1112,7 +1118,13 @@
             tx.oncomplete = () => resolve();
             tx.onerror = () => reject(tx.error);
           })
-      );
+      ).catch((err) => {
+        // Хранилище отказало прямо сейчас — переходим в прямой режим.
+        window.__abaIdbFailed = true;
+        console.error("Очередь недоступна, шлю напрямую:", err);
+        updateQueueIndicator();
+        return sendDirect(withUid);
+      });
     }
 
     function queueGetAll() {
@@ -1210,6 +1222,18 @@
       } catch {}
       const el = document.getElementById("queueStatus");
       if (!el) return;
+
+      // Браузер не дал хранилище (приватный режим, урезанные настройки):
+      // копить данные офлайн нечем, и терапист должен об этом знать заранее.
+      if (window.__abaIdbFailed) {
+        el.style.display = "inline";
+        el.style.color = "#b4552d";
+        el.style.cursor = "";
+        el.onclick = null;
+        el.textContent = "⚠ Этот браузер не хранит очередь — отправляйте только при интернете";
+        return;
+      }
+
       const stuck = items.filter((i) => (i.attempts || 0) >= STUCK_ATTEMPTS).length;
       if (stuck > 0) {
         el.style.display = "inline";
@@ -2777,7 +2801,12 @@ ${extra}
         }
       } catch (err) {
         console.error(err);
-        showToast("Ошибка сохранения. Попробуйте снова.", 6000);
+        // Счётчики НЕ обнулены — занятие целиком осталось на планшете.
+        showToast(
+          `Не удалось отправить: ${err && err.message ? err.message : "нет связи"}. ` +
+            `Данные занятия остались на планшете — проверьте интернет и нажмите «Отправить данные» ещё раз.`,
+          9000
+        );
       } finally {
         sendBtn.disabled = false;
       }

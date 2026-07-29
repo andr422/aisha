@@ -586,11 +586,19 @@
       return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     }
 
+    // Очередь недоступна (приватный режим, урезанное хранилище браузера):
+    // шлём напрямую и ОБЯЗАТЕЛЬНО пробрасываем неудачу наверх — иначе
+    // приложение отрапортует об отправке, а в таблицу ничего не уйдёт.
+    function sendDirect(item) {
+      return sendPacket(item.endpoint, item.payload).then((delivered) => {
+        if (!delivered) throw new Error("сервер не подтвердил запись");
+      });
+    }
+
     function queueAdd(item) {
       const withUid = { ...item, payload: { uid: packetUid(), ...item.payload } };
       if (window.__abaIdbFailed) {
-        return sendPacket(withUid.endpoint, withUid.payload)
-          .catch((err) => console.error("Прямая отправка не удалась:", err));
+        return sendDirect(withUid);
       }
       return openDB()
         .then(
@@ -606,8 +614,7 @@
           // Сбой IndexedDB — деградация до прямой отправки, как на ежедневной.
           window.__abaIdbFailed = true;
           console.error("Очередь недоступна, шлю напрямую:", err);
-          return sendPacket(withUid.endpoint, withUid.payload)
-            .catch((e) => console.error("Прямая отправка не удалась:", e));
+          return sendDirect(withUid);
         });
     }
 
@@ -920,10 +927,23 @@
           duration: ep.duration,
           intensity: ep.intensity
         }
-      }).then(() => {
-        updateQueueIndicator();
-        flushQueue();
-      });
+      }).then(
+        () => {
+          updateQueueIndicator();
+          flushQueue();
+        },
+        (err) => {
+          // Очереди нет и прямая отправка не прошла: эпизод остался в журнале
+          // на планшете, но в таблицу не уехал — говорим об этом прямо.
+          console.error(err);
+          showToast(
+            "Эпизод сохранён на планшете, но в таблицу не ушёл: " +
+              (err && err.message ? err.message : "нет связи") +
+              ". Выгрузите журнал в CSV или повторите при интернете.",
+            9000
+          );
+        }
+      );
 
       renderAllChips();
       setTimeNow();
@@ -1034,10 +1054,20 @@
           source: note.source,
           text: note.text
         }
-      }).then(() => {
-        updateQueueIndicator();
-        flushQueue();
-      });
+      }).then(
+        () => {
+          updateQueueIndicator();
+          flushQueue();
+        },
+        (err) => {
+          console.error(err);
+          showToast(
+            "Заметка сохранена на планшете, но в таблицу не ушла: " +
+              (err && err.message ? err.message : "нет связи") + ".",
+            9000
+          );
+        }
+      );
 
       field.value = "";
       closeNoteModal();
