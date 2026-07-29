@@ -593,6 +593,7 @@
           key === "aba_notes" ||
           key === "aba_counts" ||
           key === "aba_counts_v2" ||
+          key === "aba_block_keys" ||
           key === "aba_prompt_details" ||
           key === "aba_response_log" ||
           key === sessionKey ||
@@ -1537,7 +1538,7 @@
         }
 
         // Несданные позиционные данные текущей сессии после сдвига невалидны.
-        ["aba_counts", "aba_counts_v2", "aba_prompt_details", "aba_response_log"]
+        ["aba_counts", "aba_counts_v2", "aba_prompt_details", "aba_response_log", "aba_block_keys"]
           .forEach((key) => localStorage.removeItem(key));
 
         renderSummary();

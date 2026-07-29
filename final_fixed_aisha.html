@@ -527,6 +527,37 @@
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
     }
 
+    /* Предупреждение о протоколах, скрытых из-за генерализации. */
+    .hidden-protocols {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      background: #fff4e5;
+      border-left: 4px solid #b45309;
+      border-radius: 0 12px 12px 0;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #7c3d09;
+    }
+
+    .hidden-protocols button {
+      border: none;
+      background: #b45309;
+      color: #fff;
+      border-radius: 9px;
+      padding: 9px 14px;
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      touch-action: manipulation;
+      white-space: nowrap;
+    }
+
     /* === Генерализация освоенных целей === */
     /* Свёрнут по умолчанию: на главном экране это одна строка. */
     #genBox {
@@ -1539,19 +1570,122 @@
     // перед перерисовкой запоминаем данные по ключу «протокол + имя цели»,
     // а после — раскладываем по новым позициям.
 
+    // Ключ блока — «протокол||имя цели». Счётчики, подсказки и лог ответов
+    // лежат массивами ПО ПОРЯДКУ блоков, поэтому при любом изменении набора
+    // целей (правка на «Настройке», удалённая цель, новый протокол) они
+    // съезжают на соседние цели. Ключи позволяют переложить их по местам.
+    function currentBlockKeys() {
+      // Одинаковые названия целей в одном протоколе встречаются (например,
+      // «хлопает» завели дважды). Чтобы их данные не слиплись, к повторам
+      // добавляем номер вхождения; у первого номера нет — старые ключи,
+      // записанные до этой правки, продолжают совпадать.
+      const seen = new Map();
+      return Array.from(document.querySelectorAll(".block")).map((block) => {
+        const proto = block.closest(".protocol-container").dataset.index;
+        const name = (block.dataset.goalName || block.querySelector(".goal-label").textContent).trim();
+        const base = `${proto}||${name}`;
+        const n = (seen.get(base) || 0) + 1;
+        seen.set(base, n);
+        return n > 1 ? `${base}||#${n}` : base;
+      });
+    }
+
+    // Несданные счётчики по ключам блоков: нужны, чтобы цель с уже набранными
+    // нажатиями не исчезла с экрана (вместе с экраном пропали бы и данные).
+    function unsentCountsByKey() {
+      const map = new Map();
+      try {
+        const keys = JSON.parse(localStorage.getItem("aba_block_keys") || "[]");
+        const counts = JSON.parse(localStorage.getItem("aba_counts_v2") || "[]");
+        keys.forEach((key, i) => {
+          const c = counts[i];
+          if (c && (c.s || c.p || c.e)) map.set(key, c);
+        });
+      } catch {
+        /* повреждённые данные — считаем, что несданного нет */
+      }
+      return map;
+    }
+
+    function hasUnsentData(map, protocolIndex, goalName) {
+      const base = `${protocolIndex}||${goalName}`;
+      if (map.has(base)) return true;
+      for (const key of map.keys()) {
+        if (key.startsWith(`${base}||#`)) return true; // цели-тёзки
+      }
+      return false;
+    }
+
+    // Разложить несданные данные по текущим блокам. Вызывается при каждой
+    // отрисовке — до нормализации длин, иначе хвост массивов обрежется.
+    function realignProgressToBlocks() {
+      let savedKeys;
+      try {
+        savedKeys = JSON.parse(localStorage.getItem("aba_block_keys") || "null");
+      } catch {
+        savedKeys = null;
+      }
+      const keys = currentBlockKeys();
+      if (!Array.isArray(savedKeys)) {
+        // Первый запуск после обновления: запоминаем расклад как есть.
+        localStorage.setItem("aba_block_keys", JSON.stringify(keys));
+        return;
+      }
+      if (savedKeys.length === keys.length && savedKeys.every((k, i) => k === keys[i])) {
+        return; // набор целей не менялся
+      }
+
+      const counts = JSON.parse(localStorage.getItem("aba_counts_v2") || "[]");
+      const details = getSavedPromptDetails();
+      const log = getSavedResponseLog();
+      const byKey = new Map();
+      savedKeys.forEach((k, i) => {
+        byKey.set(k, { counts: counts[i], detail: details[i], log: log[i] });
+      });
+
+      const nextCounts = [];
+      const nextDetails = [];
+      const nextLog = [];
+      keys.forEach((k) => {
+        const saved = byKey.get(k);
+        nextCounts.push(saved && saved.counts ? saved.counts : { s: 0, p: 0, e: 0 });
+        nextDetails.push(saved && saved.detail ? saved.detail : emptyPromptDetail());
+        nextLog.push(saved && Array.isArray(saved.log) ? saved.log : []);
+      });
+
+      // Цель убрали из списка, а по ней уже были нажатия — молчать нельзя.
+      const lost = savedKeys
+        .filter((k) => !keys.includes(k))
+        .filter((k) => {
+          const c = byKey.get(k) && byKey.get(k).counts;
+          return c && (c.s || c.p || c.e);
+        })
+        .map((k) => k.split("||")[1]);
+
+      localStorage.setItem("aba_counts_v2", JSON.stringify(nextCounts));
+      setSavedPromptDetails(nextDetails);
+      setSavedResponseLog(nextLog);
+      localStorage.setItem("aba_block_keys", JSON.stringify(keys));
+
+      if (lost.length) {
+        setTimeout(() => {
+          showToast(
+            `Эти цели убрали из списка, их несданные данные пропали: ${lost.join(", ")}.`,
+            9000
+          );
+        }, 800);
+      }
+    }
+
+    // Снимок и восстановление — по тем же ключам, что и перекладка, иначе
+    // цели с одинаковыми названиями получат общие данные.
     function snapshotInProgressData() {
       const perBlock = JSON.parse(localStorage.getItem("aba_counts_v2") || "[]");
       const details = getSavedPromptDetails();
       const log = getSavedResponseLog();
       const map = new Map();
-      Array.from(document.querySelectorAll(".block")).forEach((block, k) => {
-        const proto = block.closest(".protocol-container").dataset.index;
-        const name = (block.dataset.goalName || block.querySelector(".goal-label").textContent).trim();
-        map.set(`${proto}||${name}`, {
-          counts: perBlock[k],
-          detail: details[k],
-          log: log[k]
-        });
+      currentBlockKeys().forEach((key, k) => {
+        map.set(key, { counts: perBlock[k], detail: details[k], log: log[k] });
       });
       return map;
     }
@@ -1560,10 +1694,8 @@
       const perBlock = [];
       const details = [];
       const log = [];
-      Array.from(document.querySelectorAll(".block")).forEach((block) => {
-        const proto = block.closest(".protocol-container").dataset.index;
-        const name = (block.dataset.goalName || block.querySelector(".goal-label").textContent).trim();
-        const saved = map.get(`${proto}||${name}`);
+      currentBlockKeys().forEach((key) => {
+        const saved = map.get(key);
         perBlock.push(saved && saved.counts ? saved.counts : { s: 0, p: 0, e: 0 });
         details.push(saved && saved.detail ? saved.detail : emptyPromptDetail());
         log.push(saved && Array.isArray(saved.log) ? saved.log : []);
@@ -1571,6 +1703,7 @@
       localStorage.setItem("aba_counts_v2", JSON.stringify(perBlock));
       setSavedPromptDetails(details);
       setSavedResponseLog(log);
+      localStorage.setItem("aba_block_keys", JSON.stringify(currentBlockKeys()));
     }
 
     // Автоотметка освоения: когда цель стала «освоенной» (те же 3 последние
@@ -1738,6 +1871,14 @@
         return;
       }
 
+      // Протоколы, целиком ушедшие на генерализацию: о них печатаем заметную
+      // строчку под списком, иначе они пропадают с экрана без следа.
+      const hiddenProtocols = [];
+      // Цель, по которой уже есть несданные нажатия, с экрана НЕ убираем —
+      // даже если её только что отметили освоенной: иначе данные занятия
+      // исчезнут вместе с ней.
+      const unsent = unsentCountsByKey();
+
       for (let i = 1; i <= count; i += 1) {
         const wrapper = document.createElement("div");
         wrapper.className = "protocol-container";
@@ -1746,8 +1887,18 @@
         const title = localStorage.getItem(`protocol${i}_title`) || `Протокол ${i}`;
         // Освоенные цели уходят из ежедневного сбора в блок генерализации —
         // экран занятия остаётся коротким. Вернуть можно кнопкой в этом блоке.
-        const selectedGoals = getSelectedGoalIds(i).filter((goalId) => !isGeneralizing(i, goalId));
-        if (!selectedGoals.length) continue;
+        const selectedGoals = getSelectedGoalIds(i).filter((goalId) => {
+          if (!isGeneralizing(i, goalId)) return true;
+          const goalName = localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`;
+          return hasUnsentData(unsent, i, goalName); // с данными — оставляем
+        });
+        if (!selectedGoals.length) {
+          // Весь протокол ушёл на генерализацию. Молча прятать нельзя: терапист
+          // не увидит его на занятии, а в таблицу за этот день по нему ничего
+          // не попадёт — именно так «пропал протокол» в июле 2026.
+          hiddenProtocols.push(title);
+          continue;
+        }
 
         const header = document.createElement("div");
         header.className = "protocol-header";
@@ -1848,8 +1999,42 @@
         dailyContainer.innerHTML = generalizingGoals().length
           ? '<div class="empty-state">Все цели освоены и перешли на генерализацию — блок ниже.<br>Чтобы продолжить обычный сбор, добавьте новые цели на вкладке «Настройка».</div>'
           : '<div class="empty-state">На это занятие не выбрано ни одной цели.<br>Нажмите «Выбрать цели» или добавьте цели на вкладке «Настройка».</div>';
+      } else if (hiddenProtocols.length) {
+        // Часть протоколов не показана — говорим об этом прямо и даём вернуть.
+        const notice = document.createElement("div");
+        notice.className = "hidden-protocols";
+        const text = document.createElement("div");
+        text.innerHTML =
+          `<b>Не показаны на занятии: ${hiddenProtocols.map(escapeHtml).join(", ")}.</b><br>` +
+          `Все цели этих протоколов освоены — они перешли на проверку в блок «Генерализация» ниже. ` +
+          `За сегодня в таблицу по ним ничего не уйдёт.`;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "Вернуть в занятие";
+        btn.title = "Показать эти цели с кнопками − P + (дата освоения сохранится)";
+        btn.onclick = () => {
+          const inProgress = snapshotInProgressData();
+          for (let i = 1; i <= getProtocolsCount(); i += 1) {
+            existingGoalIds(i).forEach((goalId) => {
+              if (isGeneralizing(i, goalId)) {
+                localStorage.setItem(`protocol${i}_goal${goalId}_keepDaily`, "1");
+              }
+            });
+          }
+          renderDaily();
+          restoreInProgressData(inProgress);
+          undoStack = [];
+          undoBanner.style.display = "none";
+          loadProgress();
+          showToast("Освоенные цели вернулись в занятие.");
+        };
+        notice.append(text, btn);
+        dailyContainer.append(notice);
       }
 
+      // ДО нормализации длин: она подрезает массивы под число блоков, а
+      // перекладка должна успеть спасти данные исчезнувших целей.
+      realignProgressToBlocks();
       normalizePromptDetailsLength();
       normalizeResponseLogLength();
       wirePromptButtons();
@@ -2767,6 +2952,8 @@ ${extra}
         e: countOf(block, "btn-error")
       }));
       localStorage.setItem("aba_counts_v2", JSON.stringify(perBlock));
+      // Вместе со счётчиками запоминаем, каким целям они принадлежат.
+      localStorage.setItem("aba_block_keys", JSON.stringify(currentBlockKeys()));
     }
 
     function loadProgress() {
@@ -2870,9 +3057,15 @@ ${extra}
       const summary = document.getElementById("confirm-summary");
       // Пробы генерализации уходят тем же нажатием — показываем, сколько их.
       const genRows = collectGenRows().length;
+      // Каждый протокол уходит отдельной записью и ложится на СВОЙ лист
+      // таблицы. Перечисляем их поимённо: если терапист отрабатывала больше,
+      // чем здесь названо, она увидит это ДО отправки, а не в таблице потом.
+      const protocolNames = Array.from(document.querySelectorAll(".protocol-container"))
+        .map((card) => card.querySelector("h3").textContent.trim());
       summary.textContent =
         `Ребёнок: ${child}. Дата: ${getSessionDateForHistory()}. ` +
-        `Целей с данными: ${withData} из ${blocks}.` +
+        `Целей с данными: ${withData} из ${blocks}. ` +
+        `Протоколов: ${protocolNames.length} — ${protocolNames.join(", ") || "нет"}.` +
         (genRows ? ` Проб генерализации: ${genRows}.` : "");
       confirmModal.style.display = "flex";
     }
