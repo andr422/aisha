@@ -1876,6 +1876,17 @@
     // Каждая сессия хранит goalNames — поэтому старые цели остаются в истории
     // даже после смены набора. Для сессий до этого обновления (без goalNames)
     // используем позиционный фолбэк по текущему выбору целей.
+    // Позиция цели среди ВСЕХ существующих целей протокола (existingGoalIds —
+    // стабильный порядок, не зависит от текущего выбора). Для старых сессий
+    // без goalNames: раньше здесь брался getSelectedGoalIds, и одна и та же
+    // цель читала разные ячейки при переключении выбора — процент прошлой
+    // сессии «прыгал». Стабильный порядок это чинит.
+    function legacyGoalPos(protocolIndex, goalName) {
+      return existingGoalIds(protocolIndex).findIndex(
+        (gid) => (localStorage.getItem(`protocol${protocolIndex}_goal${gid}`) || `Цель ${gid}`) === goalName
+      );
+    }
+
     function goalValueAt(session, protocolIndex, goalName) {
       const data = session.data?.[protocolIndex - 1] || [];
       const names = session.goalNames?.[protocolIndex - 1];
@@ -1883,9 +1894,7 @@
         const idx = names.indexOf(goalName);
         return idx === -1 ? null : (data[idx] ?? null);
       }
-      const pos = getSelectedGoalIds(protocolIndex).findIndex(
-        (gid) => (localStorage.getItem(`protocol${protocolIndex}_goal${gid}`) || `Цель ${gid}`) === goalName
-      );
+      const pos = legacyGoalPos(protocolIndex, goalName);
       return pos === -1 ? null : (data[pos] ?? null);
     }
 
@@ -1896,9 +1905,7 @@
         const idx = names.indexOf(goalName);
         return idx === -1 ? "" : (pd[idx] || "");
       }
-      const pos = getSelectedGoalIds(protocolIndex).findIndex(
-        (gid) => (localStorage.getItem(`protocol${protocolIndex}_goal${gid}`) || `Цель ${gid}`) === goalName
-      );
+      const pos = legacyGoalPos(protocolIndex, goalName);
       return pos === -1 ? "" : (pd[pos] || "");
     }
 
@@ -3393,39 +3400,55 @@ ${extra}
       const responseLog = getSavedResponseLog();
       const sendPromises = [];
 
-      document.querySelectorAll(".protocol-container").forEach((protocolContainer) => {
-        const protocol = protocolContainer.querySelector("h3").textContent.trim();
+      // ВАЖНО: session.data/promptDetails/goalNames индексируются по НОМЕРУ
+      // протокола (session.data[i-1] ⟺ протокол i), потому что при чтении
+      // истории goalValueAt берёт срез именно по номеру. Поэтому идём по
+      // номерам 1..count, а не по отрисованным контейнерам: у пропущенного
+      // протокола (все цели на генерализации / ничего не выбрано) кладём
+      // ПУСТОЙ срез — иначе следующие протоколы сдвинулись бы, и проценты
+      // прошлых сессий «съезжали» на чужие цели.
+      const protocolsCount = getProtocolsCount();
+      for (let i = 1; i <= protocolsCount; i += 1) {
+        const protocolContainer = document.querySelector(
+          `.protocol-container[data-index="${i}"]`
+        );
         const goalsForServer = [];
         const protocolData = [];
         const protocolPromptDetails = [];
         const protocolGoalNamesArr = [];
 
-        Array.from(protocolContainer.querySelectorAll(".block")).forEach((block) => {
-          const name = block.dataset.goalName || block.querySelector(".goal-label").textContent.trim();
-          const success = countOf(block, "btn-success");
-          const total = success + countOf(block, "btn-prompt") + countOf(block, "btn-error");
-          const percent = total ? Math.round((success / total) * 100) : null;
-          const globalIndex = allBlocks.indexOf(block);
-          const promptText = compactPrompt(promptDetails[globalIndex]);
-          const responses = Array.isArray(responseLog[globalIndex]) ? responseLog[globalIndex] : [];
+        if (protocolContainer) {
+          const protocol = protocolContainer.querySelector("h3").textContent.trim();
+          Array.from(protocolContainer.querySelectorAll(".block")).forEach((block) => {
+            const name = block.dataset.goalName || block.querySelector(".goal-label").textContent.trim();
+            const success = countOf(block, "btn-success");
+            const total = success + countOf(block, "btn-prompt") + countOf(block, "btn-error");
+            const percent = total ? Math.round((success / total) * 100) : null;
+            const globalIndex = allBlocks.indexOf(block);
+            const promptText = compactPrompt(promptDetails[globalIndex]);
+            const responses = Array.isArray(responseLog[globalIndex]) ? responseLog[globalIndex] : [];
 
-          protocolData.push(percent);
-          protocolPromptDetails.push(promptText);
-          protocolGoalNamesArr.push(name);
+            protocolData.push(percent);
+            protocolPromptDetails.push(promptText);
+            protocolGoalNamesArr.push(name);
 
-          goalsForServer.push({
-            name,
-            responses: responses.join(" "),
-            percent: percent == null ? "" : `${percent}%`,
-            promptDetails: promptText
+            goalsForServer.push({
+              name,
+              responses: responses.join(" "),
+              percent: percent == null ? "" : `${percent}%`,
+              promptDetails: promptText
+            });
           });
-        });
+
+          if (goalsForServer.length) {
+            sendPromises.push(sendSessionResults({ protocol, date: serverDate, child, goals: goalsForServer }));
+          }
+        }
 
         session.data.push(protocolData);
         session.promptDetails.push(protocolPromptDetails);
         session.goalNames.push(protocolGoalNamesArr);
-        sendPromises.push(sendSessionResults({ protocol, date: serverDate, child, goals: goalsForServer }));
-      });
+      }
 
       // Пробы генерализации — отдельным пакетом на лист «Генерализация».
       // Отправляем только изменения с прошлого раза (см. collectGenRows).
