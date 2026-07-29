@@ -220,6 +220,16 @@
       margin-top: 0;
     }
 
+    /* Поведение (B) — единственное обязательное поле, поэтому крупнее и
+       темнее соседей: в середине списка его иначе проскакивают. */
+    .section-label.main {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--text);
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
     .time-row {
       display: flex;
       align-items: center;
@@ -401,10 +411,10 @@
 
     <div id="settingsBox" class="card" hidden>
       <div class="hint">По одному варианту на строку. Списки свои у каждого ребёнка.</div>
-      <label for="setB">Поведения (B)</label>
-      <textarea id="setB"></textarea>
       <label for="setA">Что предшествовало (A)</label>
       <textarea id="setA"></textarea>
+      <label for="setB">Поведения (B)</label>
+      <textarea id="setB"></textarea>
       <label for="setC">Что последовало (C)</label>
       <textarea id="setC"></textarea>
     </div>
@@ -416,11 +426,13 @@
         <button class="btn" type="button" id="nowBtn">сейчас</button>
       </div>
 
-      <div class="section-label">Поведение (B) — обязательно, можно несколько</div>
-      <div class="chips" id="chipsB"></div>
-
+      <!-- Порядок как в самой методике: A → B → C. Обязательное поведение (B)
+           выделено, чтобы его не пролистали. -->
       <div class="section-label">Что предшествовало (A) — можно несколько</div>
       <div class="chips" id="chipsA"></div>
+
+      <div class="section-label main">Поведение (B) — обязательно, можно несколько</div>
+      <div class="chips" id="chipsB"></div>
 
       <div class="section-label">Что последовало (C) — можно несколько</div>
       <div class="chips" id="chipsC"></div>
@@ -850,8 +862,8 @@
     }
 
     function renderAllChips() {
-      renderChipGroup("chipsB", getList(KEY_B, DEFAULT_B), "B", true, true);
       renderChipGroup("chipsA", getList(KEY_A, DEFAULT_A), "A", true, true);
+      renderChipGroup("chipsB", getList(KEY_B, DEFAULT_B), "B", true, true);
       renderChipGroup("chipsC", getList(KEY_C, DEFAULT_C), "C", true, true);
       renderChipGroup("chipsD", DURATIONS, "D", false, false);
       renderChipGroup("chipsI", INTENSITIES, "I", false, false);

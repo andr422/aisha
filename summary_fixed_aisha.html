@@ -516,7 +516,6 @@
       <div id="menuDrop" class="menu-drop" hidden>
         <button type="button" id="tourBtn">💡 Подсказки на экране</button>
         <button type="button" id="guideBtn">📖 Как работать (памятка)</button>
-        <button type="button" id="trainingBtn">🎓 Тренажёр для новичков</button>
         <button type="button" id="exportBtn">⬇ Экспорт настроек</button>
         <button type="button" id="importBtn">⬆ Импорт настроек</button>
         <button type="button" id="templatesBtn">📚 Шаблоны протоколов</button>
@@ -2184,9 +2183,6 @@
       function bindToolbar() {
         document.getElementById("guideBtn").onclick = () => {
           window.location.href = "guide.html";
-        };
-        document.getElementById("trainingBtn").onclick = () => {
-          window.location.href = "training.html";
         };
         document.getElementById("exportBtn").onclick = exportSettings;
         const importFile = document.getElementById("importFile");
