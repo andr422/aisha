@@ -48,9 +48,16 @@
     return null;
   }
 
+  // Меню «⋮» живёт в шапке страницы, а его выпадашка — position: fixed с
+  // координатами от кнопки. Если страница прокручена вниз (например, после
+  // шага про блок «Генерализация»), кнопка уходит выше экрана, выпадашка
+  // получает отрицательный top и открывается ЗА экраном — вместе с карточкой
+  // подсказки. Поэтому перед открытием возвращаемся наверх.
   const openMenu = () => {
     const drop = document.getElementById("menuDrop");
-    if (drop && drop.hidden) document.getElementById("menuBtn").click();
+    if (!drop) return;
+    window.scrollTo(0, 0);
+    if (drop.hidden) document.getElementById("menuBtn").click();
   };
   const closeMenu = () => {
     const drop = document.getElementById("menuDrop");
@@ -487,8 +494,12 @@
     currentAfter = step.after || null;
     hole.hidden = true;
     fillCard(step.empty.title, step.empty.text, "");
-    card.style.top = `${Math.max(8, (window.innerHeight - card.offsetHeight) / 2)}px`;
-    card.style.left = `${Math.max(8, (window.innerWidth - card.offsetWidth) / 2)}px`;
+    // Тот же запас по размерам экрана, что и в render(): при innerHeight = 0
+    // карточка иначе прижалась бы к верхнему краю и могла уйти за него.
+    const vw = window.innerWidth || document.documentElement.clientWidth || 360;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 640;
+    card.style.top = `${Math.max(8, (vh - card.offsetHeight) / 2)}px`;
+    card.style.left = `${Math.max(8, (vw - card.offsetWidth) / 2)}px`;
   }
 
   function render(step, el) {
@@ -511,12 +522,21 @@
       if (waiting) watchFor(step.until);
 
       // Карточка под подсветкой; не влезает снизу — ставим сверху.
+      // Размеры экрана берём с запасом: в некоторых обёртках innerHeight = 0,
+      // и без фолбэка карточка уехала бы в отрицательные координаты.
+      const vw = window.innerWidth || document.documentElement.clientWidth || 360;
+      const vh = window.innerHeight || document.documentElement.clientHeight || 640;
       const cw = card.offsetWidth;
       const ch = card.offsetHeight;
       let top = r.bottom + 14;
-      if (top + ch > window.innerHeight - 8) top = Math.max(8, r.top - ch - 14);
+      if (top + ch > vh - 8) top = r.top - ch - 14;
+      // ГЛАВНОЕ: карточка обязана остаться на экране. Если подсвечиваемый
+      // элемент сам за экраном (или он выше экрана целиком), обе прикидки
+      // дают координаты вне видимой области — тогда терапист видит затемнение
+      // без карточки и не может её закрыть.
+      top = Math.max(8, Math.min(top, vh - ch - 8));
       let left = r.left + r.width / 2 - cw / 2;
-      left = Math.max(8, Math.min(left, window.innerWidth - cw - 8));
+      left = Math.max(8, Math.min(left, vw - cw - 8));
       card.style.top = `${top}px`;
       card.style.left = `${left}px`;
     }, 320);
