@@ -481,11 +481,40 @@
          а долгое нажатие P — системное меню на iOS. */
       touch-action: manipulation;
       -webkit-touch-callout: none;
+      /* Без этого iPhone при удержании «P» выделяет надпись на кнопке, и
+         первый тап по варианту подсказки уходит на снятие выделения. */
+      -webkit-user-select: none;
+      user-select: none;
     }
 
     .btn-set button:active {
       transform: translateY(3px);
       box-shadow: none !important;
+    }
+
+    /* === Холодная проба === */
+    /* Одна попытка за занятие: после первого нажатия кнопки цели гаснут. */
+    .btn-set button:disabled {
+      opacity: 0.4;
+      box-shadow: none !important;
+      transform: none !important;
+      cursor: default;
+    }
+
+    .cold-note {
+      margin-top: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #0e7490;
+      letter-spacing: 0.01em;
+    }
+
+    .block.cold-done .cold-note {
+      color: var(--muted);
+    }
+
+    .block.cold-probe {
+      border-color: #bcd9e2;
     }
 
     .btn-success {
@@ -1840,7 +1869,6 @@
     // Возвращает имена целей, которые отметили только что.
     function markMasteredGoals() {
       const dateValue = getSessionDateForServer(); // YYYY-MM-DD, как в поле даты
-      const lastThree = getHistory().slice(-3);
       const marked = [];
       const count = getProtocolsCount();
 
@@ -1850,7 +1878,7 @@
           if ((localStorage.getItem(key) || "").trim()) return; // дата уже стоит
           const goalName = localStorage.getItem(`protocol${i}_goal${goalId}`);
           if (!goalName) return;
-          if (checkMastery(goalSeries(i, goalName, lastThree))) {
+          if (checkMastery(goalMeasurements(i, goalName))) {
             localStorage.setItem(key, dateValue);
             marked.push(goalName);
           }
@@ -1859,8 +1887,21 @@
       return marked;
     }
 
-    function checkMastery(goalHistory) {
-      const lastThree = goalHistory.slice(-3).filter((value) => value != null);
+    // Все ЗАМЕРЫ по цели за историю: занятия, на которых цель не отрабатывали,
+    // выпадают (там null). Именно замеры важны для критерия — между двумя
+    // рабочими занятиями цель могла просто не идти в работу, и это не должно
+    // обнулять серию.
+    function goalMeasurements(protocolIndex, goalName, sessions) {
+      return goalSeries(protocolIndex, goalName, sessions || getHistory())
+        .filter((value) => value != null);
+    }
+
+    // Критерий освоения: три ПОСЛЕДНИХ замера подряд ≥80%. Раньше сюда
+    // приходили значения за три последних ЗАНЯТИЯ, и пропущенное занятие
+    // (цель не отрабатывали) рвало серию — 80/—/80 не засчитывалось, хотя по
+    // сути это три замера ≥80% подряд.
+    function checkMastery(measurements) {
+      const lastThree = (measurements || []).slice(-3);
       return lastThree.length === 3 && lastThree.every((value) => value >= 80);
     }
 
@@ -1995,7 +2036,6 @@
     function renderDaily() {
       const count = getProtocolsCount();
       const history = getHistory();
-      const lastThreeSessions = history.slice(-3);
       const trendSessions = history.slice(-10);
       dailyContainer.innerHTML = "";
 
@@ -2019,6 +2059,8 @@
         wrapper.dataset.index = String(i);
 
         const title = localStorage.getItem(`protocol${i}_title`) || `Протокол ${i}`;
+        // Холодная проба: у всего протокола одна попытка на цель за занятие.
+        const coldProbe = localStorage.getItem(`protocol${i}_coldProbe`) === "1";
         // Освоенные цели уходят из ежедневного сбора в блок генерализации —
         // экран занятия остаётся коротким. Вернуть можно кнопкой в этом блоке.
         const selectedGoals = getSelectedGoalIds(i).filter((goalId) => {
@@ -2101,13 +2143,18 @@
         selectedGoals.forEach((goalId) => {
           const goalName = localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`;
           // Данные ищем по ИМЕНИ цели (устойчиво к смене набора целей).
-          const goalHistory = goalSeries(i, goalName, lastThreeSessions);
+          // Считаем по ЗАМЕРАМ, а не по последним занятиям: если цель не
+          // отрабатывали, занятие для неё просто не считается.
+          const measurements = goalMeasurements(i, goalName);
           const trendValues = goalSeries(i, goalName, trendSessions).filter((value) => value != null);
-          const previousPercents = goalHistory.map((value) => (value == null ? "—" : `${value}%`)).join(" | ");
-          const mastered = checkMastery(goalHistory);
+          const lastMeasurements = measurements.slice(-3);
+          const previousPercents = lastMeasurements.length
+            ? lastMeasurements.map((value) => `${value}%`).join(" | ")
+            : "нет данных";
+          const mastered = checkMastery(measurements);
 
           const block = document.createElement("div");
-          block.className = `block${mastered ? " mastered" : ""}`;
+          block.className = `block${mastered ? " mastered" : ""}${coldProbe ? " cold-probe" : ""}`;
           // Имя цели храним отдельно от отображения, чтобы бейдж «освоено»
           // не попадал в имя при отправке данных.
           block.dataset.goalName = goalName;
@@ -2175,6 +2222,14 @@
           wireGoalLongPress(goalLabel, actions);
 
           block.append(head, btnSet, promptDetails, actions);
+          // Подпись про холодную пробу: до нажатия объясняет правило, после —
+          // почему кнопки закрылись.
+          if (coldProbe) {
+            const coldNote = document.createElement("div");
+            coldNote.className = "cold-note";
+            coldNote.textContent = "❄ Холодная проба: одна попытка за занятие";
+            block.append(coldNote);
+          }
           goalsWrap.append(block);
         });
 
@@ -2230,6 +2285,8 @@
       updatePromptDetailsUI();
       applyViewMode();
       updateProtocolSummaries();
+      // Блоки только что пересобраны — вернуть замки холодных проб.
+      applyColdProbeLocks();
       renderGeneralization();
     }
 
@@ -3144,6 +3201,7 @@ ${extra}
         timer = setTimeout(() => {
           timer = null;
           if (document.body.classList.contains("editing")) return; // заблокировано
+          clearTextSelection(); // см. кнопку «P»: iOS выделяет надпись
           actions.hidden = false;
           if (navigator.vibrate) navigator.vibrate(15);
         }, 450);
@@ -3206,6 +3264,9 @@ ${extra}
       });
       // Сводка в шапке протокола зависит от счётчиков — обновляем вместе.
       updateProtocolSummaries();
+      // Холодные пробы закрываются/открываются по тем же счётчикам, поэтому
+      // пересчитываем здесь: сюда сходятся нажатие, отмена, очистка и загрузка.
+      applyColdProbeLocks();
     }
 
     // Сохранение счётчиков по классам кнопок (aba_counts_v2), чтобы порядок
@@ -3495,13 +3556,48 @@ ${extra}
       return mastered;
     }
 
+    // === Холодные пробы ===
+    // Протокол помечен «холодная проба» → навык проверяют ОДИН раз за занятие,
+    // до всякого обучения. После первого нажатия по цели все три кнопки этой
+    // цели закрываются, чтобы вторая проба не попала в тот же замер.
+    // Разблокировать можно, отменив нажатие («Отменить действие») или очистив
+    // цель долгим нажатием на её название.
+    function applyColdProbeLocks() {
+      document.querySelectorAll(".block.cold-probe").forEach((block) => {
+        const total =
+          countOf(block, "btn-success") + countOf(block, "btn-prompt") + countOf(block, "btn-error");
+        const locked = total > 0;
+        block.classList.toggle("cold-done", locked);
+        block.querySelectorAll(".btn-set button").forEach((btn) => {
+          btn.disabled = locked;
+        });
+        const note = block.querySelector(".cold-note");
+        if (note) {
+          note.textContent = locked
+            ? "❄ Холодная проба записана — на сегодня по этой цели всё"
+            : "❄ Холодная проба: одна попытка за занятие";
+        }
+      });
+    }
+
+    // Снять выделение текста (iOS любит выделять надписи при удержании).
+    function clearTextSelection() {
+      const sel = window.getSelection && window.getSelection();
+      if (sel && sel.removeAllRanges) sel.removeAllRanges();
+    }
+
     function wirePromptButtons() {
       document.querySelectorAll(".btn-prompt").forEach((btn) => {
         const startPress = () => {
+          if (btn.disabled) return; // холодная проба уже записана
           suppressNextClick = false;
           longPressTimer = setTimeout(() => {
             suppressNextClick = true;
             currentPromptTarget = btn;
+            // Страховка к CSS: если iPhone всё же успел выделить текст,
+            // снимаем выделение — иначе первый тап по варианту подсказки
+            // уходит на его снятие, и приходится жать дважды.
+            clearTextSelection();
             promptModal.style.display = "flex";
           }, 450);
         };

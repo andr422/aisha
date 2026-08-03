@@ -447,6 +447,27 @@
       margin-bottom: 12px;
     }
 
+    /* Галочка «холодная проба» под названием протокола. */
+    .cold-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin: -4px 0 12px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: #444;
+      cursor: pointer;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .cold-row input {
+      width: 20px;
+      height: 20px;
+      margin: 1px 0 0;
+      flex: 0 0 auto;
+    }
+
     .goal-group {
       border: 1px solid #ccc;
       border-radius: 6px;
@@ -1319,6 +1340,22 @@
         titleInput.value = localStorage.getItem(`protocol${i}_title`) || "";
         protocol.appendChild(titleInput);
 
+        // Холодная проба: навык проверяют ОДИН раз за занятие, до обучения.
+        // Отмечается на протоколе целиком — на «Сборе» такие цели закроются
+        // после первого же нажатия.
+        const coldRow = document.createElement("label");
+        coldRow.className = "cold-row";
+        const coldBox = document.createElement("input");
+        coldBox.type = "checkbox";
+        coldBox.className = "cold-probe";
+        coldBox.dataset.index = i;
+        coldBox.checked = localStorage.getItem(`protocol${i}_coldProbe`) === "1";
+        const coldText = document.createElement("span");
+        coldText.innerHTML =
+          "❄ <b>Холодная проба</b> — одна попытка за занятие, без обучения";
+        coldRow.append(coldBox, coldText);
+        protocol.appendChild(coldRow);
+
         // Место для кнопки «⚡ Подставить цели из шаблона».
         const tplHint = document.createElement("div");
         tplHint.className = "tpl-hint";
@@ -2152,6 +2189,18 @@
             // Название могло совпасть с шаблоном — обновляем подсказку.
             const card = el.closest(".protocol-container");
             if (card) refreshTemplateHint(card);
+            return;
+          }
+
+          // Галочка «холодная проба» — у чекбокса нет value, только checked.
+          if (el.classList.contains("cold-probe")) {
+            const key = `protocol${protocolIndex}_coldProbe`;
+            if (el.checked) {
+              localStorage.setItem(key, "1");
+              showToast("Холодная проба: на «Сборе» будет одна попытка за занятие.");
+            } else {
+              localStorage.removeItem(key);
+            }
             return;
           }
 
