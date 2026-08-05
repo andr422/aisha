@@ -554,6 +554,10 @@
     // по полю type ("freq" → лист «Частота» в таблице ребёнка).
     const SESSION_ENDPOINT = "https://script.google.com/macros/s/AKfycbyb6efAwZyi1qLvFr4AeOZhXYvdM70xICSXdRI2eAeK7vdqdpa0jHEK4g7EGxJQhfD4cw/exec";
 
+    // Наш сервер: тот же пакет уходит и туда, различая наблюдения по полю type.
+    // Ключ должен совпадать с тем, что стоит на «Сборе» и в ABC.
+    const SERVER_ENDPOINT = "https://api.abachecklist.ru/api/ingest?k=ВСТАВЬТЕ_КЛЮЧ";
+
     // Список поведений общий с ABC (одни и те же поведения ребёнка).
     const KEY_B = "abc_behaviors";
     // Данные частоты — свои ключи (входят в рабочий набор ребёнка).
@@ -693,23 +697,49 @@
     // Очередь недоступна (приватный режим, урезанное хранилище браузера):
     // шлём напрямую и ОБЯЗАТЕЛЬНО пробрасываем неудачу наверх — иначе
     // приложение отрапортует об отправке, а в таблицу ничего не уйдёт.
+    // Куда уходит каждый пакет: зеркало (таблица) и наш сервер. Пустой адрес
+    // отбрасывается — стерев константу, двойную запись можно выключить.
+    function packetTargets(item) {
+      return [item.endpoint, SERVER_ENDPOINT].filter(Boolean);
+    }
+
+    // Успех — если пакет принял ХОТЯ БЫ ОДИН адрес: данные не потеряны.
+    // Ошибку пробрасываем, только когда не принял никто.
     function sendDirect(item) {
-      return sendPacket(item.endpoint, item.payload).then((delivered) => {
-        if (!delivered) throw new Error("сервер не подтвердил запись");
+      return Promise.allSettled(
+        packetTargets(item).map((endpoint) =>
+          sendPacket(endpoint, item.payload).then((delivered) => {
+            if (!delivered) throw new Error("сервер не подтвердил запись");
+          })
+        )
+      ).then((results) => {
+        if (results.some((r) => r.status === "fulfilled")) return;
+        const reason = results[0] && results[0].reason;
+        throw new Error(
+          reason && reason.message ? reason.message : "не приняли ни таблица, ни сервер"
+        );
       });
     }
 
     function queueAdd(item) {
-      const withUid = { ...item, payload: { uid: packetUid(), ...item.payload } };
+      // Номер пакета ОДИН на оба адреса: так строку в таблице и запись на
+      // сервере можно сопоставить, а защита от дублей на каждой стороне
+      // работает независимо.
+      const payload = { uid: packetUid(), ...item.payload };
       if (window.__abaIdbFailed) {
-        return sendDirect(withUid);
+        return sendDirect({ endpoint: item.endpoint, payload });
       }
       return openDB()
         .then(
           (db) =>
             new Promise((resolve, reject) => {
               const tx = db.transaction(IDB_QUEUE, "readwrite");
-              tx.objectStore(IDB_QUEUE).add({ ...withUid, createdAt: Date.now() });
+              const store = tx.objectStore(IDB_QUEUE);
+              // Обе копии — одной транзакцией: либо в очередь попадает всё,
+              // либо ничего.
+              packetTargets(item).forEach((endpoint) =>
+                store.add({ endpoint, payload, createdAt: Date.now() })
+              );
               tx.oncomplete = () => resolve();
               tx.onerror = () => reject(tx.error);
             })
@@ -717,7 +747,7 @@
         .catch((err) => {
           window.__abaIdbFailed = true;
           console.error("Очередь недоступна, шлю напрямую:", err);
-          return sendDirect(withUid);
+          return sendDirect({ endpoint: item.endpoint, payload });
         });
     }
 
@@ -762,8 +792,13 @@
       flushing = true;
       try {
         const items = await queueGetAll();
+        // Адреса, которые в этом проходе уже показали, что недоступны. Пакеты
+        // ОДНОГО адреса пропускаем, остальные шлём: если лежит сервер, данные
+        // всё равно должны уйти в таблицу, и наоборот.
+        const deadEndpoints = new Set();
         for (const item of items) {
           if ((item.attempts || 0) >= STUCK_ATTEMPTS) continue;
+          if (deadEndpoints.has(item.endpoint)) continue;
           // Пакет уже ушёл вслепую — ждём, пока человек сверится с таблицей.
           if (item.blindSent) continue;
           let delivered;
@@ -784,7 +819,10 @@
               await queuePut(item);
               continue;
             }
-            break;
+            // Этот адрес не отвечает — в текущем проходе к нему больше не
+            // стучимся, но остальные адреса перебираем дальше.
+            deadEndpoints.add(item.endpoint);
+            continue;
           }
           if (delivered) {
             await queueDelete(item.id);

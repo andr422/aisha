@@ -1052,6 +1052,12 @@
     // Развёртывание от 14.07.2026: скрипт сам раскладывает данные по таблицам
     // детей («ABA — <метка>» в папке «ABA — дети» на Диске).
     const SESSION_ENDPOINT = "https://script.google.com/macros/s/AKfycbyb6efAwZyi1qLvFr4AeOZhXYvdM70xICSXdRI2eAeK7vdqdpa0jHEK4g7EGxJQhfD4cw/exec";
+
+    // Наш сервер. Каждый пакет уходит в ОБА адреса: таблица остаётся зеркалом,
+    // пока сервер не отработает без потерь. Ключ в адресе закрывает приёмник
+    // от случайных запросов из интернета; настоящий вход по логину будет позже.
+    // Чтобы временно отключить сервер, достаточно оставить строку пустой.
+    const SERVER_ENDPOINT = "https://api.abachecklist.ru/api/ingest?k=ВСТАВЬТЕ_КЛЮЧ";
     const PROMPT_CODES = ["G", "V", "E", "PF", "FF"];
     // Обобщённая подсказка (короткое нажатие P без выбора типа).
     const GENERIC_PROMPT = "P";
@@ -1321,23 +1327,51 @@
     // шлём напрямую и ОБЯЗАТЕЛЬНО пробрасываем неудачу наверх. Раньше ошибка
     // здесь глушилась, и приложение показывало «отправлено», хотя в таблицу
     // ничего не ушло.
+    // Куда уходит каждый пакет: зеркало (таблица) и наш сервер. Пустой адрес
+    // отбрасывается — стерев константу, двойную запись можно выключить.
+    function packetTargets(item) {
+      return [item.endpoint, SERVER_ENDPOINT].filter(Boolean);
+    }
+
+    // Прямая отправка, когда очередь недоступна. Успехом считаем, если пакет
+    // принял ХОТЯ БЫ ОДИН адрес: данные не потеряны. Ошибку пробрасываем
+    // только когда не принял никто — иначе приложение сказало бы
+    // «отправлено», хотя не ушло никуда.
     function sendDirect(item) {
-      return sendPacket(item.endpoint, item.payload).then((delivered) => {
-        if (!delivered) throw new Error("сервер не подтвердил запись");
+      return Promise.allSettled(
+        packetTargets(item).map((endpoint) =>
+          sendPacket(endpoint, item.payload).then((delivered) => {
+            if (!delivered) throw new Error("сервер не подтвердил запись");
+          })
+        )
+      ).then((results) => {
+        if (results.some((r) => r.status === "fulfilled")) return;
+        const reason = results[0] && results[0].reason;
+        throw new Error(
+          reason && reason.message ? reason.message : "не приняли ни таблица, ни сервер"
+        );
       });
     }
 
     function queueAdd(item) {
-      const withUid = { ...item, payload: { uid: packetUid(), ...item.payload } };
+      // Номер пакета ОДИН на оба адреса: так строку в таблице и запись на
+      // сервере можно сопоставить, а защита от дублей на каждой стороне
+      // работает независимо.
+      const payload = { uid: packetUid(), ...item.payload };
       if (window.__abaIdbFailed) {
-        return sendDirect(withUid);
+        return sendDirect({ endpoint: item.endpoint, payload });
       }
       return openDB().then(
         (db) =>
           new Promise((resolve, reject) => {
             const tx = db.transaction(IDB_QUEUE, "readwrite");
+            const store = tx.objectStore(IDB_QUEUE);
             // item: { endpoint, payload, createdAt }
-            tx.objectStore(IDB_QUEUE).add({ ...withUid, createdAt: Date.now() });
+            // Обе копии кладём ОДНОЙ транзакцией: либо в очередь попадает всё,
+            // либо ничего — половинчатого состояния не бывает.
+            packetTargets(item).forEach((endpoint) =>
+              store.add({ endpoint, payload, createdAt: Date.now() })
+            );
             tx.oncomplete = () => resolve();
             tx.onerror = () => reject(tx.error);
           })
@@ -1346,7 +1380,7 @@
         window.__abaIdbFailed = true;
         console.error("Очередь недоступна, шлю напрямую:", err);
         updateQueueIndicator();
-        return sendDirect(withUid);
+        return sendDirect({ endpoint: item.endpoint, payload });
       });
     }
 
@@ -1411,8 +1445,13 @@
       flushing = true;
       try {
         const items = await queueGetAll();
+        // Адреса, которые в этом проходе уже показали, что недоступны. Пакеты
+        // ОДНОГО адреса пропускаем, остальные шлём: если лежит сервер, данные
+        // всё равно должны уйти в таблицу, и наоборот.
+        const deadEndpoints = new Set();
         for (const item of items) {
           if ((item.attempts || 0) >= STUCK_ATTEMPTS) continue;
+          if (deadEndpoints.has(item.endpoint)) continue;
           // Пакет уже ушёл вслепую — второй раз не шлём, ждём, пока человек
           // сверится с таблицей (см. индикатор очереди).
           if (item.blindSent) continue;
@@ -1440,7 +1479,10 @@
                 "проверьте таблицу";
               continue;
             }
-            break;
+            // Этот адрес не отвечает — в текущем проходе к нему больше не
+            // стучимся, но остальные адреса перебираем дальше.
+            deadEndpoints.add(item.endpoint);
+            continue;
           }
           if (delivered) {
             await queueDelete(item.id);
