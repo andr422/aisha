@@ -338,6 +338,59 @@
       color: #596270;
     }
 
+    /* Подсказка под названием протокола: терапист печатает «ими» — под полем
+       появляются подходящие протоколы из библиотеки. Список обычный, не
+       всплывающий: он не перекрывает поле и не мешает дописывать своё
+       название, если ничего из предложенного не подходит. */
+    .tpl-suggest {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 6px;
+    }
+
+    .tpl-suggest button {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      width: 100%;
+      text-align: left;
+      padding: 10px 12px;
+      border: 1px solid #dbe3e8;
+      border-radius: 8px;
+      background: #f7fafb;
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 1.35;
+      color: #1f2933;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .tpl-suggest button:active {
+      background: #e2eef1;
+    }
+
+    /* Точное совпадение названия — то же, что раньше делала кнопка «⚡». */
+    .tpl-suggest button.tpl-exact {
+      border-color: #0e7490;
+      background: #e0f2fe;
+      font-weight: 600;
+    }
+
+    .tpl-suggest .tpl-n {
+      margin-left: auto;
+      font-size: 12px;
+      color: #667085;
+      white-space: nowrap;
+    }
+
+    .tpl-more {
+      font-size: 12px;
+      color: #667085;
+      padding: 6px 2px 0;
+    }
+
     .tpl-restore {
       display: block;
       width: 100%;
@@ -367,11 +420,16 @@
       display: none;
     }
 
-    .add-btn.tpl-apply {
-      border-color: #e0c068;
-      background: #fff8e6;
-      color: #8a6a14;
-      margin: 0 0 12px;
+    /* Поиск по библиотеке шаблонов: их под две сотни, глазами не найти. */
+    #tplFilter {
+      width: 100%;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      font-family: inherit;
+      font-size: 15px;
+      color: #1f2933;
+      border: 1.5px solid #dbe3e8;
+      border-radius: 8px;
     }
 
     /* Архив удалённых протоколов. */
@@ -557,7 +615,8 @@
   </div>
 
   <div id="templatesBox" hidden>
-    <div class="hint">Шаблоны протоколов — общие для всех детей. Помеченные «встроенный» приезжают вместе с приложением и одинаковы на всех планшетах; сохранённые здесь остаются на этом устройстве и замещают встроенный шаблон с тем же названием. В редакторе: первая строка — название протокола, дальше цели по строкам. Когда название нового протокола совпадёт с шаблоном, появится кнопка «⚡ Подставить цели».</div>
+    <div class="hint">Шаблоны протоколов — общие для всех детей. Помеченные «встроенный» приезжают вместе с приложением и одинаковы на всех планшетах; сохранённые здесь остаются на этом устройстве и замещают встроенный шаблон с тем же названием. В редакторе: первая строка — название протокола, дальше цели по строкам. Отдельно искать шаблон не нужно: когда терапист набирает название нового протокола, подходящие подсказываются прямо под полем.</div>
+    <input type="search" id="tplFilter" placeholder="Поиск по названию шаблона" autocomplete="off" />
     <div id="templatesList"></div>
     <textarea id="tplEditor" placeholder="Название протокола&#10;Цель 1&#10;Цель 2&#10;Цель 3"></textarea>
     <button type="button" class="btn-export" id="tplSave">Сохранить шаблон</button>
@@ -1798,10 +1857,6 @@
         return String(s || "").trim().toLowerCase();
       }
 
-      function findTemplate(title) {
-        return getTemplates().find((t) => normTitle(t.title) === normTitle(title)) || null;
-      }
-
       // Сохраняем всегда в СВОИ: правка встроенного = своя версия поверх него.
       function upsertTemplate(title, goals) {
         const list = getOwnTemplates();
@@ -1816,32 +1871,92 @@
         return allGoalKeyIndices(i).some((j) => goalHasData(i, j));
       }
 
-      // Кнопка «⚡ Подставить цели» под названием: только если название
-      // совпало с шаблоном И у протокола ещё нет целей (ничего не перетираем).
+      // С одной буквы список бесполезен, с двух — уже осмысленный.
+      const TPL_MIN_QUERY = 2;
+      // Больше восьми на планшете не помещается, да и выбирать тяжело:
+      // если вариантов много, проще дописать пару букв.
+      const TPL_MAX_SUGGEST = 8;
+
+      function goalsPlural(n) {
+        const tens = n % 100;
+        const ones = n % 10;
+        if (tens >= 11 && tens <= 14) return "целей";
+        if (ones === 1) return "цель";
+        if (ones >= 2 && ones <= 4) return "цели";
+        return "целей";
+      }
+
+      // Поиск по библиотеке. Порядок: точное совпадение → начало названия →
+      // начало любого слова → просто вхождение. Поэтому «ими» находит
+      // «ИМИТАЦИЯ ДВИЖЕНИЙ…», а «мотор» — «…МЕЛКОЙ МОТОРИКИ», хотя это слово
+      // и не первое.
+      function searchTemplates(query) {
+        const q = normTitle(query);
+        if (q.length < TPL_MIN_QUERY) return [];
+        const found = [];
+        getTemplates().forEach((tpl) => {
+          if (!tpl.goals || !tpl.goals.length) return;
+          const title = normTitle(tpl.title);
+          let rank = -1;
+          if (title === q) rank = 0;
+          else if (title.indexOf(q) === 0) rank = 1;
+          else if (title.split(/[^0-9a-zа-яё]+/).some((word) => word.indexOf(q) === 0)) rank = 2;
+          else if (title.indexOf(q) !== -1) rank = 3;
+          if (rank >= 0) found.push({ tpl, rank });
+        });
+        found.sort((a, b) => a.rank - b.rank || a.tpl.title.localeCompare(b.tpl.title, "ru"));
+        return found;
+      }
+
+      // Подставляем И название, и цели: терапист мог набрать только «ими»,
+      // название должно стать полным.
+      function applyTemplateToProtocol(i, tpl) {
+        if (protocolHasAnyGoalData(i)) return;
+        localStorage.setItem(`protocol${i}_title`, tpl.title);
+        tpl.goals.forEach((g, idx) => localStorage.setItem(`protocol${i}_goal${idx + 1}`, g));
+        renderSummary();
+        updateActiveNotice();
+        showToast(`«${tpl.title}»: подставлено ${tpl.goals.length} ${goalsPlural(tpl.goals.length)}.`);
+      }
+
+      // Подсказки под названием протокола. Показываем, ТОЛЬКО пока у протокола
+      // нет целей: иначе подстановка затёрла бы уже набранное терапистом.
       function refreshTemplateHint(card) {
         const i = Number(card.dataset.index);
         const hint = card.querySelector(".tpl-hint");
         if (!hint) return;
         hint.innerHTML = "";
-        const title = (card.querySelector(".protocol-title").value || "").trim();
+        const input = card.querySelector(".protocol-title");
+        const title = input ? (input.value || "").trim() : "";
         if (!title || protocolHasAnyGoalData(i)) return;
-        const tpl = findTemplate(title);
-        if (!tpl || !tpl.goals.length) return;
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "add-btn tpl-apply";
-        btn.textContent = `⚡ Подставить цели из шаблона (${tpl.goals.length})`;
-        btn.onclick = () => {
-          if (protocolHasAnyGoalData(i)) {
-            hint.innerHTML = "";
-            return;
-          }
-          tpl.goals.forEach((g, idx) => localStorage.setItem(`protocol${i}_goal${idx + 1}`, g));
-          renderSummary();
-          updateActiveNotice();
-          showToast(`Подставлено целей: ${tpl.goals.length}.`);
-        };
-        hint.append(btn);
+
+        const found = searchTemplates(title);
+        if (!found.length) return;
+
+        const list = document.createElement("div");
+        list.className = "tpl-suggest";
+        found.slice(0, TPL_MAX_SUGGEST).forEach((match) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          if (match.rank === 0) btn.className = "tpl-exact";
+          const name = document.createElement("span");
+          name.textContent = (match.rank === 0 ? "⚡ " : "") + match.tpl.title;
+          const count = document.createElement("span");
+          count.className = "tpl-n";
+          count.textContent = `${match.tpl.goals.length} ${goalsPlural(match.tpl.goals.length)}`;
+          btn.append(name, count);
+          btn.onclick = () => applyTemplateToProtocol(i, match.tpl);
+          list.appendChild(btn);
+        });
+        hint.appendChild(list);
+
+        if (found.length > TPL_MAX_SUGGEST) {
+          const more = document.createElement("div");
+          more.className = "tpl-more";
+          more.textContent =
+            `…и ещё ${found.length - TPL_MAX_SUGGEST}. Допишите название, чтобы список сузился.`;
+          hint.appendChild(more);
+        }
       }
 
       function refreshAllTemplateHints() {
@@ -1854,9 +1969,18 @@
         const list = document.getElementById("templatesList");
         if (!list) return;
         list.innerHTML = "";
-        const templates = getTemplates();
-        if (!templates.length) {
+        const all = getTemplates();
+        // Библиотека большая (протоколов под две сотни), поэтому список
+        // фильтруется: без этого нужный шаблон приходится искать глазами.
+        const filterBox = document.getElementById("tplFilter");
+        const filter = normTitle(filterBox ? filterBox.value : "");
+        const templates = filter
+          ? all.filter((tpl) => normTitle(tpl.title).indexOf(filter) !== -1)
+          : all;
+        if (!all.length) {
           list.innerHTML = '<p class="hint">Шаблонов пока нет. Сохраните готовый протокол кнопкой «💾 В шаблоны» или впишите ниже.</p>';
+        } else if (!templates.length) {
+          list.innerHTML = `<p class="hint">По запросу «${filterBox.value.trim()}» ничего не нашлось.</p>`;
         }
         templates.forEach((tpl) => {
           const row = document.createElement("div");
@@ -1947,6 +2071,7 @@
           const box = document.getElementById("templatesBox");
           box.hidden = !box.hidden;
         };
+        document.getElementById("tplFilter").oninput = renderTemplates;
         document.getElementById("tplSave").onclick = () => {
           const editor = document.getElementById("tplEditor");
           const lines = editor.value.split("\n").map((s) => s.trim());
