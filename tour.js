@@ -252,7 +252,7 @@
       position: fixed;
       border-radius: 12px;
       box-shadow: 0 0 0 9999px rgba(15, 18, 22, 0.72);
-      border: 2px solid #ffffff;
+      border: 2px solid var(--card);
       z-index: 1400;
       pointer-events: none;
       transition: all 0.25s ease;
@@ -260,8 +260,8 @@
     #aba-tour-card {
       position: fixed;
       z-index: 1401;
-      background: #ffffff;
-      color: #1f2933;
+      background: var(--card);
+      color: var(--text);
       border-radius: 14px;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
       padding: 14px 16px;
@@ -280,12 +280,12 @@
     #aba-tour-card .aba-tour-do {
       margin: -4px 0 12px;
       padding: 8px 10px;
-      background: #ecfeff;
-      border-left: 3px solid #0e7490;
+      background: var(--accent-soft);
+      border-left: 3px solid var(--accent);
       border-radius: 0 8px 8px 0;
       font-size: 14px;
       font-weight: 700;
-      color: #0e7490;
+      color: var(--accent);
     }
     #aba-tour-card .aba-tour-do[hidden] { display: none; }
     /* Показывается один раз, когда подсказки страницы обновились: человек уже
@@ -294,7 +294,7 @@
       margin: -2px 0 8px;
       font-size: 13px;
       font-weight: 700;
-      color: #b45309;
+      color: var(--prompt-ink);
     }
     #aba-tour-card .aba-tour-new[hidden] { display: none; }
     .aba-tour-row {
@@ -303,7 +303,7 @@
       justify-content: space-between;
       gap: 10px;
     }
-    .aba-tour-count { font-size: 12px; color: #8a9099; }
+    .aba-tour-count { font-size: 12px; color: var(--muted); }
     .aba-tour-btns { display: flex; gap: 8px; }
     .aba-tour-btns button {
       border: none;
@@ -315,8 +315,8 @@
       cursor: pointer;
       touch-action: manipulation;
     }
-    .aba-tour-skip { background: #eef1f4; color: #596270; }
-    .aba-tour-next { background: #0e7490; color: #fff; }
+    .aba-tour-skip { background: var(--soft); color: var(--soft-ink); }
+    .aba-tour-next { background: var(--accent); color: var(--accent-ink); }
   `;
 
   let steps = [];

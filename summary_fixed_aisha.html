@@ -7,13 +7,15 @@
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#0d6efd" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="stylesheet" href="theme.css" />
+  <script src="theme.js"></script>
   <style>
     body {
-      font-family: sans-serif;
+      font-family: var(--font-body);
       padding: 20px;
       max-width: 900px;
       margin: auto;
-      background: #f8f9fa;
+      background: var(--bg);
     }
 
     h2,
@@ -35,7 +37,7 @@
       font-size: 14px;
       border: none;
       border-radius: 8px;
-      color: #fff;
+      color: var(--accent-ink);
       cursor: pointer;
     }
 
@@ -45,16 +47,16 @@
     }
 
     .btn-menu {
-      background: #495057;
+      background: var(--neutral);
       font-size: 16px;
     }
 
     .menu-drop {
       /* Координаты выставляет wireMenu() с прижимом к краям экрана. */
       position: fixed;
-      background: #fff;
+      background: var(--card);
       border-radius: 12px;
-      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+      box-shadow: var(--shadow-lg);
       min-width: 240px;
       max-width: calc(100vw - 16px);
       padding: 6px;
@@ -74,21 +76,21 @@
       background: none;
       border-radius: 8px;
       font-size: 15px;
-      color: #1f2933;
+      color: var(--text);
       cursor: pointer;
       touch-action: manipulation;
     }
 
     .toolbar .menu-drop button:active {
-      background: #eef1f4;
+      background: var(--soft);
     }
 
     .btn-export {
-      background: #198754;
+      background: var(--save);
     }
 
     .btn-import {
-      background: #0d6efd;
+      background: var(--load);
     }
 
     .session-info {
@@ -114,13 +116,13 @@
       max-width: 200px;
       padding: 4px 8px;
       font-size: 14px;
-      border: 1px solid #1a3ea9;
+      border: 1px solid var(--add-ink);
       border-radius: 4px;
     }
 
     .field-hint {
       font-size: 12px;
-      color: #c92a2a;
+      color: var(--danger-ink);
       margin-top: 4px;
     }
 
@@ -137,54 +139,54 @@
       max-width: 220px;
       padding: 6px 8px;
       font-size: 15px;
-      border: 1px solid #1a3ea9;
+      border: 1px solid var(--add-ink);
       border-radius: 4px;
     }
 
     .child-btn {
       padding: 6px 10px;
       font-size: 15px;
-      border: 1px solid #b9c2cc;
-      background: #fff;
+      border: 1px solid var(--line-strong);
+      background: var(--card);
       border-radius: 6px;
       cursor: pointer;
     }
 
     .child-btn-danger {
-      border-color: #e3a0a0;
+      border-color: var(--danger);
     }
 
     .warn-banner {
-      background: #fff3cd;
-      border: 1px solid #e0c068;
+      background: var(--warn-soft);
+      border: 1px solid var(--warn);
       border-radius: 8px;
       padding: 12px 14px;
       font-size: 13px;
       line-height: 1.5;
-      color: #5c4813;
+      color: var(--warn-ink);
       margin-bottom: 16px;
     }
 
     .active-notice {
       font-size: 13px;
-      color: #667085;
+      color: var(--muted);
       margin-bottom: 16px;
       padding: 8px 12px;
-      background: #eef2ff;
+      background: var(--add-bg);
       border-radius: 6px;
     }
 
     .active-notice.gap {
-      background: #fdecea;
-      color: #a3261b;
+      background: var(--danger-soft);
+      color: var(--danger-ink);
     }
 
     .protocol-container {
       margin-bottom: 24px;
-      border: 1px solid #ddd;
+      border: 1px solid var(--line);
       border-radius: 8px;
       padding: 16px;
-      background: #fff;
+      background: var(--card);
     }
 
     /* Шапка карточки протокола: заголовок + удаление. */
@@ -204,7 +206,7 @@
     .del-proto {
       border: none;
       background: none;
-      color: #a3261b;
+      color: var(--danger-ink);
       font-size: 13px;
       cursor: pointer;
       padding: 4px 6px;
@@ -220,7 +222,7 @@
 
     .pdf-btn {
       border: none;
-      background: #eef1f4;
+      background: var(--soft);
       border-radius: 6px;
       padding: 6px 10px;
       font-size: 13px;
@@ -229,18 +231,18 @@
     }
 
     .pdf-btn.pdf-del {
-      color: #a3261b;
+      color: var(--danger-ink);
       padding: 6px 8px;
     }
 
     /* Бэкап планшета. */
     .btn-backup {
-      background: #495057;
+      background: var(--neutral);
     }
 
     #backupBox {
-      background: #fff;
-      border: 1px solid #ddd;
+      background: var(--card);
+      border: 1px solid var(--line);
       border-radius: 8px;
       padding: 12px 14px;
       margin-bottom: 20px;
@@ -248,13 +250,13 @@
 
     #backupBox .hint {
       font-size: 12px;
-      color: #667085;
+      color: var(--muted);
       line-height: 1.5;
       margin-bottom: 10px;
     }
 
     #backupBox .hint-warn {
-      color: #a3261b;
+      color: var(--danger-ink);
       margin: 10px 0 0;
     }
 
@@ -267,22 +269,98 @@
     .btn-danger-outline {
       padding: 8px 14px;
       font-size: 14px;
-      border: 1.5px solid #c0392b;
+      border: 1.5px solid var(--danger);
       border-radius: 8px;
-      background: #fff;
-      color: #a3261b;
+      background: var(--card);
+      color: var(--danger-ink);
       cursor: pointer;
       touch-action: manipulation;
     }
 
+    /* Оформление: выбор темы. Кнопки крупные — их жмут пальцем на планшете,
+       а кружки слева показывают фон, акцент и заливку кнопок сбора. */
+    #themeBox {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      margin-bottom: 20px;
+    }
+
+    #themeBox .hint {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+
+    #themePicker {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .theme-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 10px 12px;
+      text-align: left;
+      border: 1.5px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--card);
+      font-family: var(--font-body);
+      color: var(--text);
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .theme-btn.on {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .theme-dots {
+      display: flex;
+      flex: 0 0 auto;
+    }
+
+    .theme-dots span {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 1px solid var(--line-strong);
+      margin-left: -7px;
+    }
+
+    .theme-dots span:first-child {
+      margin-left: 0;
+    }
+
+    .theme-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .theme-text b {
+      font-size: 15px;
+    }
+
+    .theme-text span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
     /* Шаблоны протоколов. */
     .btn-tpl {
-      background: #6c757d;
+      background: var(--neutral);
     }
 
     #templatesBox {
-      background: #fff;
-      border: 1px solid #ddd;
+      background: var(--card);
+      border: 1px solid var(--line);
       border-radius: 8px;
       padding: 12px 14px;
       margin-bottom: 20px;
@@ -290,7 +368,7 @@
 
     #templatesBox .hint {
       font-size: 12px;
-      color: #667085;
+      color: var(--muted);
       margin-bottom: 10px;
       line-height: 1.5;
     }
@@ -301,13 +379,13 @@
       align-items: center;
       gap: 8px;
       padding: 8px 0;
-      border-bottom: 1px solid #eee;
+      border-bottom: 1px solid var(--line);
       font-size: 14px;
     }
 
     .tpl-btns button {
       border: none;
-      background: #eef1f4;
+      background: var(--soft);
       border-radius: 6px;
       padding: 5px 10px;
       font-size: 13px;
@@ -317,7 +395,7 @@
     }
 
     .tpl-btns .tpl-del {
-      color: #a3261b;
+      color: var(--danger-ink);
     }
 
     /* Пометка встроенного шаблона (едет в коде, одинаков на всех планшетах). */
@@ -326,16 +404,16 @@
       margin-left: 6px;
       padding: 1px 6px;
       border-radius: 999px;
-      background: #e0f2fe;
-      color: #0e7490;
+      background: var(--accent-soft);
+      color: var(--accent);
       font-size: 11px;
       font-weight: 700;
       vertical-align: middle;
     }
 
     .tpl-badge.own {
-      background: #eef1f4;
-      color: #596270;
+      background: var(--soft);
+      color: var(--soft-ink);
     }
 
     /* Подсказка под названием протокола: терапист печатает «ими» — под полем
@@ -356,38 +434,38 @@
       width: 100%;
       text-align: left;
       padding: 10px 12px;
-      border: 1px solid #dbe3e8;
+      border: 1px solid var(--line);
       border-radius: 8px;
-      background: #f7fafb;
+      background: var(--soft);
       font-family: inherit;
       font-size: 14px;
       line-height: 1.35;
-      color: #1f2933;
+      color: var(--text);
       cursor: pointer;
       touch-action: manipulation;
     }
 
     .tpl-suggest button:active {
-      background: #e2eef1;
+      background: var(--accent-soft);
     }
 
     /* Точное совпадение названия — то же, что раньше делала кнопка «⚡». */
     .tpl-suggest button.tpl-exact {
-      border-color: #0e7490;
-      background: #e0f2fe;
+      border-color: var(--accent);
+      background: var(--accent-soft);
       font-weight: 600;
     }
 
     .tpl-suggest .tpl-n {
       margin-left: auto;
       font-size: 12px;
-      color: #667085;
+      color: var(--muted);
       white-space: nowrap;
     }
 
     .tpl-more {
       font-size: 12px;
-      color: #667085;
+      color: var(--muted);
       padding: 6px 2px 0;
     }
 
@@ -396,8 +474,8 @@
       width: 100%;
       margin-top: 10px;
       border: none;
-      background: #eef1f4;
-      color: #596270;
+      background: var(--soft);
+      color: var(--soft-ink);
       border-radius: 8px;
       padding: 8px;
       font-size: 13px;
@@ -410,7 +488,7 @@
       min-height: 110px;
       font-size: 14px;
       font-family: inherit;
-      border: 1.5px solid #ccc;
+      border: 1.5px solid var(--line);
       border-radius: 8px;
       padding: 8px 10px;
       margin: 10px 0 8px;
@@ -427,15 +505,15 @@
       margin-bottom: 10px;
       font-family: inherit;
       font-size: 15px;
-      color: #1f2933;
-      border: 1.5px solid #dbe3e8;
+      color: var(--text);
+      border: 1.5px solid var(--line);
       border-radius: 8px;
     }
 
     /* Архив удалённых протоколов. */
     .archive-heading {
       font-size: 15px;
-      color: #667085;
+      color: var(--muted);
       text-align: left;
       margin: 24px 0 8px;
     }
@@ -446,8 +524,8 @@
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
-      background: #fff;
-      border: 1px solid #ddd;
+      background: var(--card);
+      border: 1px solid var(--line);
       border-radius: 8px;
       padding: 10px 12px;
       margin-bottom: 8px;
@@ -456,7 +534,7 @@
 
     .archive-btns button {
       border: none;
-      background: #eef1f4;
+      background: var(--soft);
       border-radius: 6px;
       padding: 6px 10px;
       font-size: 13px;
@@ -466,7 +544,7 @@
     }
 
     .archive-btns .archive-del {
-      color: #a3261b;
+      color: var(--danger-ink);
     }
 
     /* Кнопки «Добавить протокол» / «Добавить цель». */
@@ -476,9 +554,9 @@
       padding: 12px;
       font-size: 15px;
       font-weight: 600;
-      border: 2px dashed #93a7e4;
-      background: #f6f8ff;
-      color: #1a3ea9;
+      border: 2px dashed var(--add-line);
+      background: var(--add-bg);
+      color: var(--add-ink);
       border-radius: 8px;
       cursor: pointer;
       touch-action: manipulation;
@@ -486,21 +564,21 @@
     }
 
     .add-btn.add-goal {
-      border-color: #ccc;
-      background: #fafafa;
-      color: #555;
+      border-color: var(--line);
+      background: var(--soft);
+      color: var(--muted);
       margin: 8px 0 0;
     }
 
     .add-btn:active {
-      background: #e8edfb;
+      background: var(--accent-soft);
     }
 
     .protocol-title {
       width: 100%;
       padding: 8px;
       font-size: 16px;
-      border: 1px solid #1a3ea9;
+      border: 1px solid var(--add-ink);
       border-radius: 4px;
       margin-bottom: 12px;
     }
@@ -513,7 +591,7 @@
       margin: -4px 0 12px;
       font-size: 14px;
       line-height: 1.45;
-      color: #444;
+      color: var(--text);
       cursor: pointer;
       -webkit-user-select: none;
       user-select: none;
@@ -527,11 +605,11 @@
     }
 
     .goal-group {
-      border: 1px solid #ccc;
+      border: 1px solid var(--line);
       border-radius: 6px;
       padding: 12px;
       margin-bottom: 16px;
-      background: #f9f9f9;
+      background: var(--soft);
     }
 
     .goal-input,
@@ -540,7 +618,7 @@
     .gen-input {
       padding: 8px;
       font-size: 16px;
-      border: 1px solid #93a7e4;
+      border: 1px solid var(--add-line);
       border-radius: 4px;
     }
 
@@ -551,11 +629,11 @@
     .intro-date,
     .mastery-date {
       flex: 1;
-      border-color: #6877a5;
+      border-color: var(--add-line);
     }
 
     .gen-input {
-      border-color: #ccc;
+      border-color: var(--line);
       width: calc((100% - 16px) / 3);
       margin-right: 8px;
     }
@@ -572,13 +650,13 @@
       bottom: 80px;
       left: 50%;
       transform: translateX(-50%);
-      background: #1f2933;
-      color: #fff;
+      background: var(--text);
+      color: var(--bg);
       padding: 12px 20px;
       border-radius: 10px;
       font-size: 14px;
       display: none;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      box-shadow: var(--shadow-lg);
       z-index: 1100;
       max-width: 90%;
       text-align: center;
@@ -599,9 +677,15 @@
         <button type="button" id="importBtn">⬆ Импорт настроек</button>
         <button type="button" id="templatesBtn">📚 Шаблоны протоколов</button>
         <button type="button" id="backupBtn">🗄 Бэкап планшета</button>
+        <button type="button" id="themeBtn">🎨 Оформление</button>
       </div>
     </div>
     <input type="file" id="importFile" accept="application/json,.json" style="display:none" />
+  </div>
+
+  <div id="themeBox" hidden>
+    <div class="hint">Оформление — настройка <b>этого планшета</b>, а не ребёнка: при переключении между детьми и при переносе профиля она не меняется. На данные не влияет.</div>
+    <div id="themePicker"></div>
   </div>
 
   <div id="backupBox" hidden>
@@ -2070,6 +2154,14 @@
         document.getElementById("templatesBtn").onclick = () => {
           const box = document.getElementById("templatesBox");
           box.hidden = !box.hidden;
+        };
+        document.getElementById("themeBtn").onclick = () => {
+          const box = document.getElementById("themeBox");
+          box.hidden = !box.hidden;
+          // Рисуем при открытии: тему могли поменять на другой странице.
+          if (!box.hidden && window.ABATheme) {
+            window.ABATheme.renderPicker(document.getElementById("themePicker"));
+          }
         };
         document.getElementById("tplFilter").oninput = renderTemplates;
         document.getElementById("tplSave").onclick = () => {

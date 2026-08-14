@@ -1,0 +1,472 @@
+/*  Оформление приложения: один словарь переменных на все страницы.
+ *
+ *  Правило простое: в страницах НЕ должно оставаться жёстко прописанных
+ *  цветов поверхностей, текста, линий и кнопок — только var(--…). Иначе тема
+ *  поменяет фон, но не кнопки, и получится каша.
+ *
+ *  Тему выставляет theme.js атрибутом data-theme на <html> ДО отрисовки.
+ *  Без JS (или при сбое) работает первая тема — обычная.
+ *
+ *  Смысл групп:
+ *    bg/card/line/text/muted/soft — поверхности и текст;
+ *    accent — основной цвет действия, danger — опасное действие;
+ *    ok/prompt/err — три кнопки на «Сборе»: сам / с подсказкой / ошибка.
+ *      Их РАЗЛИЧИМОСТЬ важнее красоты: терапист жмёт их не глядя.
+ *    mastered/low — освоенная цель и процент ниже критерия.
+ */
+
+/*  Рукописный шрифт для темы «Как от руки». Caveat, лицензия OFL —
+ *  текст лицензии лежит рядом, в fonts/Caveat-OFL.txt.
+ *  Два файла: кириллица и латиница, браузер берёт нужный по unicode-range.
+ *  size-adjust поднимает мелкие буквы Caveat до высоты обычного шрифта —
+ *  иначе рукописный текст выглядит на треть мельче соседнего.  */
+@font-face {
+  font-family: "Caveat";
+  src: url("fonts/Caveat-cyrillic.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: swap;
+  size-adjust: 118%;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+@font-face {
+  font-family: "Caveat";
+  src: url("fonts/Caveat-latin.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: swap;
+  size-adjust: 118%;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+2000-206F, U+2192, U+2212, U+2215;
+}
+
+:root {
+  --save: #198754;          /* «сохранить/выгрузить» */
+  --load: #0d6efd;          /* «загрузить» */
+
+  --warn: #b45309;          /* предупреждающая кнопка: очистить, скрытые протоколы */
+  --warn-soft: #fff4e5;
+  --warn-ink: #7c3d09;
+  --warn-on: #ffffff;       /* текст поверх предупреждающей заливки */
+  --mastered-line: #d8e8dc;
+  --gen-done: #dcfce7;      /* пройденная проба генерализации */
+  --gen-done-line: #4ade80;
+  --gen-done-ink: #14532d;
+
+  --bg: #f3f2ed;
+  --card: #ffffff;
+  --line: #e4e2d9;
+  --line-strong: #d5d1c4;
+  --text: #1f2429;
+  --muted: #6b7280;
+  --soft: #eef1f4;          /* нейтральная заливка: неактивные кнопки, чипы */
+  --soft-ink: #596270;
+
+  --accent: #0e7490;
+  --accent-ink: #ffffff;    /* текст поверх акцента */
+  --accent-soft: #e0f2fe;
+  --accent-edge: #0a5566;   /* «толщина» объёмной кнопки */
+
+  --neutral: #6c757d;       /* второстепенные кнопки */
+  --danger: #b4552d;
+  --danger-edge: #8c4022;
+  --danger-ink: #a3261b;
+  --danger-soft: #fff4e5;
+
+  --add-ink: #1a3ea9;       /* пунктирная кнопка «+ Добавить» */
+  --add-line: #93a7e4;
+  --add-bg: #f6f8ff;
+
+  --ok: #dff0f3;
+  --ok-edge: #b5d9df;
+  --ok-ink: #0e7490;
+  --prompt: #f4ebd6;
+  --prompt-edge: #e0d0a8;
+  --prompt-ink: #8a6a14;
+  --err: #ecedef;
+  --err-edge: #d3d6db;
+  --err-ink: #596270;
+
+  --low-ink: #b4552d;       /* процент ниже критерия */
+  --mastered: #4c9a63;
+
+  --radius: 14px;
+  --radius-sm: 8px;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 6px 24px rgba(0, 0, 0, 0.18);
+  --btn-lift: 3px;          /* высота «ступеньки» под объёмной кнопкой */
+
+  --font-display: "Unbounded", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body: "Onest", -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/*  Поля ввода страницы не красят, поэтому в тёмной теме остались бы белыми.
+ *  Задаём здесь — рамки и прочее страницы по-прежнему решают сами.  */
+input,
+textarea,
+select {
+  background: var(--card);
+  color: var(--text);
+}
+
+/*  Ползунок режима и галочки рисует сам браузер — красим их системным
+ *  способом, иначе в любой теме они остаются ярко-синими.  */
+input[type="range"],
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
+  background: none;
+}
+
+::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+/*  Пастельная: сделана по образцу современных iOS-приложений для сбора
+ *  данных — светло-серо-голубой фон, белые карточки с крупным скруглением,
+ *  системный шрифт, мягкий синий акцент, заливки кнопок пастельные.
+ *  Теней почти нет: глубину держат скругления и цвет, а не тень.  */
+:root[data-theme="soft"] {
+  --bg: #f2f3f7;
+  --card: #ffffff;
+  --line: #e6e8ee;
+  --line-strong: #d3d7e0;
+  --text: #1c1c1e;
+  --muted: #8a8f98;
+  --soft: #f0f1f5;
+  --soft-ink: #4b5058;
+
+  --accent: #0a84ff;
+  --accent-ink: #ffffff;
+  --accent-soft: #e6f0ff;
+  --accent-edge: #0a84ff;
+
+  --neutral: #8a8f98;
+  /* Тёплый коралл, а не чистый алый: этим цветом покрашена кнопка
+     «Отправить данные» — главное действие занятия, и сигналить ею
+     тревогой неправильно. */
+  --danger: #ef5b4f;
+  --danger-edge: #ef5b4f;
+  --danger-ink: #d92c22;
+  --danger-soft: #ffe9e7;
+
+  --warn: #ff9f0a;
+  --warn-soft: #fff4e0;
+  --warn-ink: #9a5b00;
+  --warn-on: #ffffff;
+  --mastered-line: #bfe9c9;
+  --gen-done: #e3f6ea;
+  --gen-done-line: #34c759;
+  --gen-done-ink: #1c7a45;
+
+  --save: #34c759;
+  --load: #0a84ff;
+
+  --add-ink: #0a84ff;
+  --add-line: #b9d7ff;
+  --add-bg: #f2f7ff;
+
+  /* Три кнопки сбора — пастельные заливки, как карточки в таких приложениях:
+     зелёная «сам», жёлтая «с подсказкой», розовая «ошибка». */
+  --ok: #e3f6ea;
+  --ok-edge: #a8dfbc;
+  --ok-ink: #1c7a45;
+  --prompt: #fff3d6;
+  --prompt-edge: #f0d49a;
+  --prompt-ink: #8a6412;
+  --err: #ffe8e6;
+  --err-edge: #f5bdb8;
+  --err-ink: #c0392f;
+
+  --low-ink: #d92c22;
+  --mastered: #34c759;
+
+  --radius: 18px;
+  --radius-sm: 12px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-lg: 0 8px 28px rgba(16, 24, 40, 0.14);
+  --btn-lift: 0px;
+
+  --font-display: -apple-system, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+  --font-body: -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+}
+
+/*  Монохром: цвета нет вообще, только чёрный, белый и серые.
+ *
+ *  Главная трудность такой темы — три кнопки сбора. Их различают не цветом,
+ *  а СВЕТЛОТОЙ, тремя ступенями: «−» белая с тонкой рамкой, «P» серая
+ *  заливка, «+» чёрная с белым знаком. Самое частое нажатие — самое
+ *  заметное, и перепутать ступени невозможно даже боковым зрением.
+ *
+ *  ЧЕСТНАЯ ОГОВОРКА: в приложении цветом помечены освоенные цели (зелёным)
+ *  и проценты ниже критерия (оранжевым). Здесь оба сигнала становятся
+ *  оттенками серого — читаются, но не бросаются в глаза, как в цветных темах.
+ */
+:root[data-theme="mono"] {
+  --bg: #ffffff;
+  --card: #ffffff;
+  --line: #e2e2e2;
+  --line-strong: #b8b8b8;
+  --text: #111111;
+  --muted: #767676;
+  --soft: #f2f2f2;
+  --soft-ink: #444444;
+
+  --accent: #111111;
+  --accent-ink: #ffffff;
+  --accent-soft: #ededed;
+  --accent-edge: #111111;
+
+  --neutral: #767676;
+  --danger: #2b2b2b;
+  --danger-edge: #2b2b2b;
+  --danger-ink: #111111;
+  --danger-soft: #f2f2f2;
+
+  --warn: #5a5a5a;
+  --warn-soft: #f2f2f2;
+  --warn-ink: #333333;
+  --warn-on: #ffffff;
+  --mastered-line: #b8b8b8;
+  --gen-done: #ededed;
+  --gen-done-line: #8f8f8f;
+  --gen-done-ink: #111111;
+
+  --save: #333333;
+  --load: #333333;
+
+  --add-ink: #333333;
+  --add-line: #cfcfcf;
+  --add-bg: #fafafa;
+
+  /* Три ступени светлоты, все в СВЕТЛОМ диапазоне: «−» почти белая,
+     «P» серая, «+» самая тёмная из трёх, но не чёрная. Чёрную заливку
+     не используем нигде: знак на кнопке наследует цвет текста, и на
+     «Частоте» «+» оказался чёрным по чёрному. Разницу между «P» и «+»
+     дополнительно держит тёмная нижняя кромка. */
+  --ok: #cbcbcb;
+  --ok-edge: #4a4a4a;
+  --ok-ink: #111111;
+  --prompt: #e4e4e4;
+  --prompt-edge: #ababab;
+  --prompt-ink: #333333;
+  --err: #f7f7f7;
+  --err-edge: #d9d9d9;
+  --err-ink: #6b6b6b;
+
+  --low-ink: #767676;
+  --mastered: #111111;
+
+  --radius: 4px;
+  --radius-sm: 3px;
+  --shadow: none;
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.15);
+  --btn-lift: 0px;
+
+  --font-display: -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body: -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/*  Как от руки: тетрадный лист и синяя ручка. Рукописный ВЕСЬ интерфейс,
+ *  включая цифры и проценты — так решил пользователь. Если на занятии
+ *  окажется, что проценты читаются хуже, вернуть обычный шрифт цифрам —
+ *  это одна строка: --font-body на системный.
+ *
+ *  Цифры Caveat разной ширины, поэтому в таблице истории столбцы «гуляют».
+ *  Чтобы этого не было, ниже цифрам задана табличная ширина.  */
+/*  Кнопки, поля и списки НЕ наследуют шрифт страницы — браузер ставит в них
+ *  свой системный. В остальных темах это незаметно, а здесь кнопки остались бы
+ *  единственным «печатным» пятном. Правим только в этой теме, чтобы вид
+ *  остальных не менялся.  */
+:root[data-theme="hand"] button,
+:root[data-theme="hand"] input,
+:root[data-theme="hand"] textarea,
+:root[data-theme="hand"] select,
+:root[data-theme="hand"] optgroup,
+:root[data-theme="hand"] option {
+  font-family: "Caveat", "Bradley Hand", cursive;
+}
+
+:root[data-theme="hand"] table,
+:root[data-theme="hand"] .percent,
+:root[data-theme="hand"] .count,
+:root[data-theme="hand"] .btn-set + div,
+:root[data-theme="hand"] .obs-clock {
+  font-variant-numeric: tabular-nums;
+}
+
+:root[data-theme="hand"] {
+  --bg: #fbf7ec;
+  --card: #fffdf7;
+  --line: #e6dcc6;
+  --line-strong: #cdbf9f;
+  --text: #2f3a4a;
+  --muted: #7d7364;
+  --soft: #f2ecdd;
+  --soft-ink: #5c5445;
+
+  --accent: #3557a8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e6ecfb;
+  --accent-edge: #2a4487;
+
+  --neutral: #8b8172;
+  --danger: #c0453a;
+  --danger-edge: #96342b;
+  --danger-ink: #9c3b2d;
+  --danger-soft: #fbe8e3;
+
+  --warn: #c98a2e;
+  --warn-soft: #fdf3dd;
+  --warn-ink: #7a5b12;
+  --warn-on: #ffffff;
+  --mastered-line: #bcd8b4;
+  --gen-done: #e2f0d9;
+  --gen-done-line: #8fbf7a;
+  --gen-done-ink: #33691e;
+
+  --save: #4d8b3f;
+  --load: #3557a8;
+
+  --add-ink: #3557a8;
+  --add-line: #b6c4e6;
+  --add-bg: #f3f6fd;
+
+  --ok: #e2f0d9;
+  --ok-edge: #a9cf95;
+  --ok-ink: #33691e;
+  --prompt: #fdf0c8;
+  --prompt-edge: #e2c675;
+  --prompt-ink: #7a5b12;
+  --err: #fbe3df;
+  --err-edge: #e2b1a8;
+  --err-ink: #9c3b2d;
+
+  --low-ink: #c0453a;
+  --mastered: #4d8b3f;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(90, 70, 40, 0.10);
+  --shadow-lg: 0 6px 22px rgba(90, 70, 40, 0.20);
+  --btn-lift: 2px;
+
+  --font-display: "Caveat", "Bradley Hand", cursive;
+  --font-body: "Caveat", "Bradley Hand", cursive;
+}
+
+/*  Тёмная: для вечерних занятий и тёмных кабинетов. Заливки кнопок сбора
+ *  приглушены, но разница между ними сохранена.  */
+:root[data-theme="dark"] {
+  --save: #4c9a63;
+  --load: #5b8def;
+
+  --warn: #c98a3c;
+  --warn-soft: #2f2718;
+  --warn-ink: #e8c88a;
+  --warn-on: #14181b;
+  --mastered-line: #2f5a41;
+  --gen-done: #1c3a28;
+  --gen-done-line: #3f8a5c;
+  --gen-done-ink: #8fe0ac;
+
+  /* Чтобы системные части — полосы прокрутки, выбор времени — тоже потемнели */
+  color-scheme: dark;
+
+  --bg: #14181b;
+  --card: #1c2226;
+  --line: #2b3238;
+  --line-strong: #3a434a;
+  --text: #e7eaec;
+  --muted: #97a3ac;
+  --soft: #242c31;
+  --soft-ink: #b6c0c7;
+
+  --accent: #4fb3c9;
+  --accent-ink: #0b1417;
+  --accent-soft: #1d3239;
+  --accent-edge: #2f7f92;
+
+  --neutral: #4a545b;
+  --danger: #e08055;
+  --danger-edge: #8a4a2c;
+  --danger-ink: #f0906a;
+  --danger-soft: #2e2019;
+
+  --add-ink: #8fb0f0;
+  --add-line: #3d4c68;
+  --add-bg: #1b2130;
+
+  --ok: #1b3a40;
+  --ok-edge: #2f6a75;
+  --ok-ink: #7fd4e4;
+  --prompt: #37301c;
+  --prompt-edge: #6b5c2f;
+  --prompt-ink: #e0c877;
+  --err: #262c31;
+  --err-edge: #3d464d;
+  --err-ink: #a9b4bc;
+
+  --low-ink: #e08055;
+  --mastered: #63b881;
+
+  --shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+
+/*  Контрастная: яркий кабинет, солнце на экране, слабое зрение.
+ *  Толстые линии, чистый чёрный на белом, насыщенный акцент.  */
+:root[data-theme="contrast"] {
+  --save: #0a6b45;
+  --load: #00337a;
+
+  --warn: #8a4b00;
+  --warn-soft: #ffeccd;
+  --warn-ink: #5c3200;
+  --warn-on: #ffffff;
+  --mastered-line: #0a6b45;
+  --gen-done: #cfeadf;
+  --gen-done-line: #0a6b45;
+  --gen-done-ink: #05452c;
+
+  --bg: #ffffff;
+  --card: #ffffff;
+  --line: #1a1a1a;
+  --line-strong: #000000;
+  --text: #000000;
+  --muted: #3d3d3d;
+  --soft: #f0f0f0;
+  --soft-ink: #000000;
+
+  --accent: #00527a;
+  --accent-ink: #ffffff;
+  --accent-soft: #d6ecf7;
+  --accent-edge: #003b58;
+
+  --neutral: #3d3d3d;
+  --danger: #a11b00;
+  --danger-edge: #6e1200;
+  --danger-ink: #a11b00;
+  --danger-soft: #ffe9e2;
+
+  --add-ink: #00337a;
+  --add-line: #00337a;
+  --add-bg: #eef3ff;
+
+  --ok: #cfeadf;
+  --ok-edge: #0a6b45;
+  --ok-ink: #05452c;
+  --prompt: #ffe9b8;
+  --prompt-edge: #8a6a14;
+  --prompt-ink: #5c4708;
+  --err: #ececec;
+  --err-edge: #000000;
+  --err-ink: #1a1a1a;
+
+  --low-ink: #a11b00;
+  --mastered: #0a6b45;
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow: none;
+  --shadow-lg: 0 4px 18px rgba(0, 0, 0, 0.25);
+}

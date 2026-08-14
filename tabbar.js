@@ -33,7 +33,7 @@
       href: "summary_fixed_aisha.html",
       label: "Настройка",
       icon:
-        '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.4" fill="#fff"/><line x1="4" y1="15" x2="20" y2="15"/><circle cx="15" cy="15" r="2.4" fill="#fff"/></svg>'
+        '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.4" fill="var(--card)"/><line x1="4" y1="15" x2="20" y2="15"/><circle cx="15" cy="15" r="2.4" fill="var(--card)"/></svg>'
     }
     // Примеры на будущее:
     // { href: "frequency.html", label: "Частота", icon: '<svg ...>...</svg>' },
@@ -51,8 +51,8 @@
       z-index: 1200;
       display: flex;
       justify-content: space-around;
-      background: #ffffff;
-      border-top: 1px solid #e4e2d9;
+      background: var(--card);
+      border-top: 1px solid var(--line);
       box-shadow: 0 -2px 10px rgba(31, 36, 41, 0.05);
       padding: 8px 8px calc(10px + env(safe-area-inset-bottom, 0px));
     }
@@ -60,10 +60,10 @@
       text-decoration: none;
       text-align: center;
       min-width: 72px;
-      color: #9aa0a8;
+      color: var(--muted);
     }
     .app-tabbar a.active {
-      color: #0e7490;
+      color: var(--accent);
     }
     .app-tabbar .tab-label {
       display: block;
@@ -82,7 +82,7 @@
       background: transparent;
     }
     .app-tabbar a.active .tab-indicator {
-      background: #0e7490;
+      background: var(--accent);
     }
   `;
 

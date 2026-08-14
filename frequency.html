@@ -7,6 +7,8 @@
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#0d6efd" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="stylesheet" href="theme.css" />
+  <script src="theme.js"></script>
   <style>
     @font-face {
       font-family: "Unbounded";
@@ -22,17 +24,6 @@
       font-display: swap;
     }
 
-    :root {
-      --bg: #f3f2ed;
-      --card: #ffffff;
-      --text: #1f2933;
-      --muted: #667085;
-      --accent: #0e7490;
-      --accent-edge: #0a5566;
-      --line: #e5e2d9;
-      --font-display: "Unbounded", system-ui, sans-serif;
-      --font-body: "Onest", -apple-system, "Segoe UI", Roboto, sans-serif;
-    }
 
     * {
       box-sizing: border-box;
@@ -80,7 +71,7 @@
 
     #queueStatus {
       font-size: 13px;
-      color: #8a6a14;
+      color: var(--prompt-ink);
       font-weight: bold;
     }
 
@@ -89,19 +80,19 @@
       font-size: 14px;
       border: none;
       border-radius: 8px;
-      color: #fff;
+      color: var(--accent-ink);
       cursor: pointer;
       touch-action: manipulation;
-      background: #6c757d;
+      background: var(--neutral);
       font-family: var(--font-body);
     }
 
     .card {
       background: var(--card);
-      border-radius: 14px;
+      border-radius: var(--radius);
       padding: 16px;
       margin-bottom: 16px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+      box-shadow: var(--shadow);
     }
 
     /* === График по журналу наблюдений === */
@@ -125,21 +116,21 @@
     }
 
     .mode-btn {
-      border: 1.5px solid var(--line, #d9d5c9);
-      background: #fff;
+      border: 1.5px solid var(--line);
+      background: var(--card);
       border-radius: 999px;
       padding: 6px 12px;
       font-family: inherit;
       font-size: 13px;
-      color: #596270;
+      color: var(--soft-ink);
       cursor: pointer;
       touch-action: manipulation;
     }
 
     .mode-btn.on {
-      background: #0e7490;
-      border-color: #0e7490;
-      color: #fff;
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--accent-ink);
       font-weight: 700;
     }
 
@@ -156,8 +147,8 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      border: 1.5px solid var(--line, #d9d5c9);
-      background: #fff;
+      border: 1.5px solid var(--line);
+      background: var(--card);
       border-radius: 999px;
       padding: 5px 10px;
       font-family: inherit;
@@ -187,8 +178,8 @@
       /* Координаты выставляет wireMenu() с прижимом к краям экрана. */
       position: fixed;
       background: var(--card);
-      border-radius: 12px;
-      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+      border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-lg);
       min-width: 230px;
       max-width: calc(100vw - 16px);
       padding: 6px;
@@ -215,7 +206,7 @@
     }
 
     .menu-drop button:active {
-      background: #eef1f4;
+      background: var(--soft);
     }
 
     /* Модалка заметки. */
@@ -236,7 +227,7 @@
 
     .modal-card {
       background: var(--card);
-      border-radius: 14px;
+      border-radius: var(--radius);
       padding: 18px;
       width: 100%;
       max-width: 460px;
@@ -312,10 +303,10 @@
       font-weight: 700;
       font-family: var(--font-body);
       border: none;
-      border-radius: 12px;
-      color: #fff;
+      border-radius: var(--radius-sm);
+      color: var(--accent-ink);
       background: var(--accent);
-      box-shadow: 0 3px 0 var(--accent-edge);
+      box-shadow: 0 var(--btn-lift) 0 var(--accent-edge);
       cursor: pointer;
       touch-action: manipulation;
     }
@@ -326,8 +317,8 @@
     }
 
     .obs-btn.stop {
-      background: #b4552d;
-      box-shadow: 0 3px 0 #8c4022;
+      background: var(--danger);
+      box-shadow: 0 var(--btn-lift) 0 var(--danger-edge);
     }
 
     /* Карточка поведения со счётчиком. */
@@ -336,7 +327,7 @@
       align-items: center;
       gap: 12px;
       background: var(--card);
-      border-radius: 14px;
+      border-radius: var(--radius);
       padding: 12px 14px;
       margin-bottom: 10px;
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
@@ -372,10 +363,10 @@
       font-family: var(--font-display);
       font-weight: 900;
       border: none;
-      border-radius: 14px;
-      background: #dbeef3;
+      border-radius: var(--radius);
+      background: var(--ok);
       color: var(--accent);
-      box-shadow: 0 3px 0 #b4d7de;
+      box-shadow: 0 var(--btn-lift) 0 var(--ok-edge);
       cursor: pointer;
       touch-action: manipulation;
       -webkit-touch-callout: none;
@@ -401,8 +392,8 @@
     }
 
     @keyframes flash {
-      0% { background: #a5d8e4; }
-      100% { background: #dbeef3; }
+      0% { background: var(--ok-edge); }
+      100% { background: var(--ok); }
     }
 
     /* Настройка списка. */
@@ -435,7 +426,7 @@
       align-items: flex-start;
       gap: 8px;
       background: var(--card);
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
       padding: 10px 14px;
       margin-bottom: 8px;
       box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
@@ -468,8 +459,8 @@
       bottom: 96px;
       left: 50%;
       transform: translateX(-50%);
-      background: #1f2933;
-      color: #fff;
+      background: var(--text);
+      color: var(--bg);
       padding: 12px 20px;
       border-radius: 10px;
       font-size: 14px;
