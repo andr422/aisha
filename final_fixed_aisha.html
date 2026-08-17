@@ -576,6 +576,19 @@
       font-size: 13px;
     }
 
+    /* Подпись-тренд под спарклайном: описание того, что видно в числах.
+       Намеренно мелкая и тихая — это повод присмотреться, а не вывод. */
+    .trend-note {
+      margin-top: 2px;
+      font-size: 11px;
+      line-height: 1.3;
+      color: var(--muted);
+    }
+
+    .trend-note.growth {
+      color: var(--mastered);
+    }
+
     .mastered-badge {
       display: inline-block;
       margin-left: 8px;
@@ -2008,6 +2021,102 @@
     // Спарклайн прогресса: SVG-линия по процентам последних сессий.
     // values — массив чисел 0–100 (null уже отфильтрованы). Цвет — по
     // последнему значению, теми же порогами, что и текст процента.
+    // === Подпись-тренд у цели ===
+    //
+    // Считается ТОЛЬКО из процентов, которые уже есть в истории планшета:
+    // ни сети, ни каких-либо внешних сервисов. Задача подписи — описать
+    // замеченное в числах, чтобы терапист присмотрелся. Никаких выводов и
+    // рекомендаций: что делать с протоколом, решает человек.
+    //
+    // Пороги вынесены сюда намеренно: их придётся подкрутить по отзывам
+    // после первых недель работы.
+    const TREND_MIN_POINTS = 4;         // меньше замеров — молчим
+    const TREND_PLATEAU_SPREAD = 10;    // п.п. между максимумом и минимумом
+    const TREND_PLATEAU_MEAN_MAX = 80;  // «застряло, но не освоено»
+    const TREND_GROWTH_DELTA = 15;      // п.п.: вторая половина минус первая
+    const TREND_SWING_SPREAD = 50;      // п.п. размаха для «разброса»
+
+    function trendMean(values) {
+      return Math.round(values.reduce((sum, v) => sum + v, 0) / values.length);
+    }
+
+    function sessionsWord(n) {
+      const tens = n % 100;
+      const ones = n % 10;
+      if (tens >= 11 && tens <= 14) return "сессий";
+      if (ones === 1) return "сессия";
+      if (ones >= 2 && ones <= 4) return "сессии";
+      return "сессий";
+    }
+
+    // Сколько последних замеров подряд укладываются в узкий коридор.
+    // Считаем именно хвост, а не всё окно: подпись обещает длину застоя.
+    function plateauRun(values) {
+      let max = values[values.length - 1];
+      let min = max;
+      let run = 1;
+      for (let i = values.length - 2; i >= 0; i -= 1) {
+        const nextMax = Math.max(max, values[i]);
+        const nextMin = Math.min(min, values[i]);
+        if (nextMax - nextMin > TREND_PLATEAU_SPREAD) break;
+        max = nextMax;
+        min = nextMin;
+        run += 1;
+      }
+      return run;
+    }
+
+    function goalTrendStatus(values) {
+      if (!Array.isArray(values) || values.length < TREND_MIN_POINTS) return null;
+
+      // 1. Плато: хвост стоит на месте и не дотягивает до критерия.
+      const run = plateauRun(values);
+      if (run >= TREND_MIN_POINTS) {
+        const tail = values.slice(-run);
+        const avg = trendMean(tail);
+        if (avg < TREND_PLATEAU_MEAN_MAX) {
+          return {
+            kind: "plateau",
+            text: `похоже на плато · ${run} ${sessionsWord(run)}`,
+            title: `${run} ${sessionsWord(run)} подряд в пределах ${Math.max(...tail) - Math.min(...tail)} п.п., в среднем ${avg}%`
+          };
+        }
+      }
+
+      // ПРЕДОХРАНИТЕЛЬ для двух правил ниже: ряд только из 0 и 100 — это
+      // одна проба за сессию (в наших данных так три четверти замеров), а не
+      // рост и не качели. Отличить нельзя, поэтому молчим: ярлык хуже, чем
+      // его отсутствие. Плато это не касается — там значения совпадают, и
+      // «четыре сессии по нулям» остаётся честным фактом.
+      const binary = values.every((v) => v === 0 || v === 100);
+      if (binary) return null;
+
+      // 2. Рост: сравниваем половины окна. Наклон регрессии на таких данных
+      // рисует красивую линию из шума, разность средних — нет.
+      const half = Math.floor(values.length / 2);
+      const first = trendMean(values.slice(0, half));
+      const second = trendMean(values.slice(-half));
+      if (second - first >= TREND_GROWTH_DELTA) {
+        return {
+          kind: "growth",
+          text: "растёт",
+          title: `за ${values.length} ${sessionsWord(values.length)} среднее выросло с ${first}% до ${second}%`
+        };
+      }
+
+      // 3. Разброс: большие качели без направления.
+      const spread = Math.max(...values) - Math.min(...values);
+      if (spread >= TREND_SWING_SPREAD) {
+        return {
+          kind: "swing",
+          text: "разброс",
+          title: `от ${Math.min(...values)}% до ${Math.max(...values)}% без устойчивого направления`
+        };
+      }
+
+      return null;
+    }
+
     function buildSparkline(values) {
       const wrap = document.createElement("div");
       wrap.className = "sparkline";
@@ -2019,7 +2128,7 @@
 
       const last = values[values.length - 1];
       // Та же шкала, что и у крупного процента: цветом только освоение.
-      const color = last >= 80 ? "#0e7490" : "#6b7280";
+      const color = last >= 80 ? "var(--accent)" : "var(--muted)";
 
       const lastLabel = document.createElement("span");
       lastLabel.className = "sparkline-last";
@@ -2204,6 +2313,16 @@
           const prevPercent = buildSparkline(trendValues);
           prevPercent.title = `Пред. сессии: ${previousPercents}`;
           stats.append(percent, prevPercent);
+
+          // У освоенной цели бейдж «освоено» уже всё сказал — не дублируем.
+          const trend = mastered ? null : goalTrendStatus(trendValues);
+          if (trend) {
+            const note = document.createElement("div");
+            note.className = `trend-note ${trend.kind}`;
+            note.textContent = trend.text;
+            note.title = trend.title;
+            stats.append(note);
+          }
 
           const head = document.createElement("div");
           head.className = "block-head";
