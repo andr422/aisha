@@ -576,19 +576,6 @@
       font-size: 13px;
     }
 
-    /* Подпись-тренд под спарклайном: описание того, что видно в числах.
-       Намеренно мелкая и тихая — это повод присмотреться, а не вывод. */
-    .trend-note {
-      margin-top: 2px;
-      font-size: 11px;
-      line-height: 1.3;
-      color: var(--muted);
-    }
-
-    .trend-note.growth {
-      color: var(--mastered);
-    }
-
     .mastered-badge {
       display: inline-block;
       margin-left: 8px;
@@ -2023,6 +2010,11 @@
     // последнему значению, теми же порогами, что и текст процента.
     // === Подпись-тренд у цели ===
     //
+    // ГДЕ ИСПОЛЬЗУЕТСЯ: только в отчёте (столбец «Динамика»). На «Сборе»
+    // сознательно НЕ показываем: там терапист работает, а не разбирает
+    // данные, и лишняя подпись у каждой цели мешает попадать в кнопки.
+    // Решение от 17.08.2026, если понадобится вернуть — см. buildReportHtml.
+    //
     // Считается ТОЛЬКО из процентов, которые уже есть в истории планшета:
     // ни сети, ни каких-либо внешних сервисов. Задача подписи — описать
     // замеченное в числах, чтобы терапист присмотрелся. Никаких выводов и
@@ -2077,6 +2069,7 @@
         if (avg < TREND_PLATEAU_MEAN_MAX) {
           return {
             kind: "plateau",
+            count: run,
             text: `похоже на плато · ${run} ${sessionsWord(run)}`,
             title: `${run} ${sessionsWord(run)} подряд в пределах ${Math.max(...tail) - Math.min(...tail)} п.п., в среднем ${avg}%`
           };
@@ -2094,11 +2087,18 @@
       // 2. Рост: сравниваем половины окна. Наклон регрессии на таких данных
       // рисует красивую линию из шума, разность средних — нет.
       const half = Math.floor(values.length / 2);
-      const first = trendMean(values.slice(0, half));
-      const second = trendMean(values.slice(-half));
-      if (second - first >= TREND_GROWTH_DELTA) {
+      const firstHalf = values.slice(0, half);
+      const secondHalf = values.slice(-half);
+      const first = trendMean(firstHalf);
+      const second = trendMean(secondHalf);
+      // Одной разности средних мало: ряд 10,90,20,85,15,80 — это качели, но
+      // последнее занятие удачное, и средние расходятся. Требуем ступеньку:
+      // худший результат второй половины не ниже лучшего из первой.
+      const steppedUp = Math.min(...secondHalf) >= Math.max(...firstHalf);
+      if (second - first >= TREND_GROWTH_DELTA && steppedUp) {
         return {
           kind: "growth",
+          count: values.length,
           text: "растёт",
           title: `за ${values.length} ${sessionsWord(values.length)} среднее выросло с ${first}% до ${second}%`
         };
@@ -2109,6 +2109,7 @@
       if (spread >= TREND_SWING_SPREAD) {
         return {
           kind: "swing",
+          count: values.length,
           text: "разброс",
           title: `от ${Math.min(...values)}% до ${Math.max(...values)}% без устойчивого направления`
         };
@@ -2313,16 +2314,6 @@
           const prevPercent = buildSparkline(trendValues);
           prevPercent.title = `Пред. сессии: ${previousPercents}`;
           stats.append(percent, prevPercent);
-
-          // У освоенной цели бейдж «освоено» уже всё сказал — не дублируем.
-          const trend = mastered ? null : goalTrendStatus(trendValues);
-          if (trend) {
-            const note = document.createElement("div");
-            note.className = `trend-note ${trend.kind}`;
-            note.textContent = trend.text;
-            note.title = trend.title;
-            stats.append(note);
-          }
 
           const head = document.createElement("div");
           head.className = "block-head";
@@ -2667,7 +2658,7 @@
 
         // Сводка по целям протокола: динамика первого и последнего замера.
         body += `<table class="sum"><thead><tr>
-          <th>Цель</th><th>Замеров</th><th>Первый</th><th>Последний</th><th>Изменение</th><th>Статус</th>
+          <th>Цель</th><th>Замеров</th><th>Первый</th><th>Последний</th><th>Изменение</th><th>Динамика</th><th>Статус</th>
         </tr></thead><tbody>`;
         proto.goals.forEach((goal) => {
           const first = goal.points[0].value;
@@ -2681,16 +2672,34 @@
           // решит, что над ней ещё работают.
           const active = pIdx ? isActiveGoalName(pIdx, goal.name) : true;
           const status = !active ? "снята с работы" : mastered ? "освоено" : "в работе";
+
+          // Тот же расчёт, что на карточке сбора, и то же окно (10 сессий) —
+          // отчёт и экран не должны противоречить друг другу. Формулировки
+          // мягче: читают родители, а «плато» для них звучит приговором.
+          const trend = mastered ? null : goalTrendStatus(goal.points.slice(-10).map((p) => p.value));
+          const trendText = !trend
+            ? "—"
+            : trend.kind === "growth"
+              ? "растёт"
+              : trend.kind === "plateau"
+                ? `без изменений · ${trend.count} ${sessionsWord(trend.count)}`
+                : "неровно";
+
           body += `<tr>
             <td>${escapeHtml(goal.name)}</td>
             <td class="num">${goal.points.length}</td>
             <td class="num">${first}%</td>
             <td class="num"><b>${last}%</b></td>
             <td class="num ${cls}">${arrow}</td>
+            <td>${trendText}</td>
             <td>${status}</td>
           </tr>`;
         });
-        body += `</tbody></table>`;
+        body += `</tbody></table>
+          <p class="legend2">Столбец «Динамика» описывает числа за последние занятия и не оценивает ребёнка.
+          «Растёт» — среднее за последние занятия выше, чем было раньше. «Без изменений» — проценты держатся
+          на одном уровне. «Неровно» — результат сильно скачет от занятия к занятию. Прочерк значит, что
+          замеров пока мало, чтобы говорить о направлении. Что это значит для занятий, объяснит специалист.</p>`;
 
         // Графики по каждой цели.
         proto.goals.forEach((goal) => {
