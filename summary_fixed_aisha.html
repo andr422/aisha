@@ -277,6 +277,57 @@
       touch-action: manipulation;
     }
 
+    /* Свёрнутый протокол на «Настройке»: видно название и число целей,
+       остальное — по нажатию на заголовок. Кнопки PDF и «удалить» остаются
+       снаружи кнопки-переключателя, иначе по ним нельзя было бы попасть. */
+    .protocol-container.collapsed .proto-body {
+      display: none;
+    }
+
+    .protocol-container.collapsed .protocol-title {
+      margin-bottom: 0;
+    }
+
+    .proto-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1 1 auto;
+      min-width: 0;
+      border: none;
+      background: none;
+      padding: 4px 0;
+      font-family: inherit;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .proto-toggle .caret {
+      flex: 0 0 auto;
+      font-size: 18px;
+      color: var(--muted);
+      transition: transform 0.15s ease;
+    }
+
+    .protocol-container:not(.collapsed) .proto-toggle .caret {
+      transform: rotate(90deg);
+    }
+
+    .proto-toggle h3 {
+      margin: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .proto-count {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
     /* Оформление: выбор темы. Кнопки крупные — их жмут пальцем на планшете,
        а кружки слева показывают фон, акцент и заливку кнопок сбора. */
     #themeBox {
@@ -1378,8 +1429,23 @@
 
         const head = document.createElement("div");
         head.className = "protocol-head";
-        const titleHeading = document.createElement("h3");
-        titleHeading.textContent = `Протокол ${i}`;
+
+        // Заголовок — кнопка: по нажатию цели сворачиваются и разворачиваются.
+        // Со ста семьюдесятью протоколами в библиотеке экран настройки иначе
+        // превращается в бесконечную простыню полей.
+        const titleHeading = document.createElement("button");
+        titleHeading.type = "button";
+        titleHeading.className = "proto-toggle";
+        const caret = document.createElement("span");
+        caret.className = "caret";
+        caret.textContent = "▸";
+        const headText = document.createElement("span");
+        const headName = document.createElement("h3");
+        headName.textContent = `Протокол ${i}`;
+        const headCount = document.createElement("span");
+        headCount.className = "proto-count";
+        headText.append(headName, headCount);
+        titleHeading.append(caret, headText);
 
         // PDF протокола: открыть / прикрепить (заменить) / убрать.
         const pdfWrap = document.createElement("span");
@@ -1483,6 +1549,13 @@
         titleInput.value = localStorage.getItem(`protocol${i}_title`) || "";
         protocol.appendChild(titleInput);
 
+        // Свёртываемая часть: холодная проба, подсказки шаблонов, цели и
+        // кнопка добавления. Название остаётся видимым всегда — по нему
+        // протокол и узнают в свёрнутом виде.
+        const body = document.createElement("div");
+        body.className = "proto-body";
+        protocol.appendChild(body);
+
         // Холодная проба: навык проверяют ОДИН раз за занятие, до обучения.
         // Отмечается на протоколе целиком — на «Сборе» такие цели закроются
         // после первого же нажатия.
@@ -1497,12 +1570,12 @@
         coldText.innerHTML =
           "❄ <b>Холодная проба</b> — одна попытка за занятие, без обучения";
         coldRow.append(coldBox, coldText);
-        protocol.appendChild(coldRow);
+        body.appendChild(coldRow);
 
         // Место для кнопки «⚡ Подставить цели из шаблона».
         const tplHint = document.createElement("div");
         tplHint.className = "tpl-hint";
-        protocol.appendChild(tplHint);
+        body.appendChild(tplHint);
 
         const goalsWrap = document.createElement("div");
         goalsWrap.className = "goals-wrap";
@@ -1511,12 +1584,18 @@
             goalsWrap.appendChild(buildGoalGroup(i, j));
           }
         });
-        protocol.appendChild(goalsWrap);
+        body.appendChild(goalsWrap);
 
         const addGoalBtn = document.createElement("button");
         addGoalBtn.type = "button";
         addGoalBtn.className = "add-btn add-goal";
         addGoalBtn.textContent = "＋ Добавить цель";
+        // Сколько целей у протокола — видно и в свёрнутом виде.
+        const refreshCount = () => {
+          const n = body.querySelectorAll(".goal-group").length;
+          headCount.textContent = n ? `${n} ${goalsPlural(n)}` : "целей пока нет";
+        };
+
         addGoalBtn.onclick = () => {
           // Следующий свободный номер: больше всех существующих и показанных.
           const inDom = Array.from(goalsWrap.querySelectorAll(".goal-group")).map((g) => Number(g.dataset.goalIndex));
@@ -1524,8 +1603,26 @@
           const group = buildGoalGroup(i, next);
           goalsWrap.appendChild(group);
           group.querySelector(".goal-input").focus();
+          refreshCount();
         };
-        protocol.appendChild(addGoalBtn);
+        body.appendChild(addGoalBtn);
+
+        titleHeading.onclick = () => {
+          const collapsed = protocol.classList.toggle("collapsed");
+          localStorage.setItem(`protocol${i}_setupOpen`, collapsed ? "0" : "1");
+          refreshCount();
+        };
+
+        // По умолчанию свёрнуто, но НОВЫЙ протокол (без названия) открыт:
+        // иначе человек нажимает «Добавить протокол» и не видит, куда писать.
+        const remembered = localStorage.getItem(`protocol${i}_setupOpen`);
+        const isNew = !(localStorage.getItem(`protocol${i}_title`) || "").trim();
+        if (remembered === "1" || (remembered === null && isNew)) {
+          protocol.classList.remove("collapsed");
+        } else {
+          protocol.classList.add("collapsed");
+        }
+        refreshCount();
 
         refreshTemplateHint(protocol);
         return protocol;

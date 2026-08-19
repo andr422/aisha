@@ -385,12 +385,17 @@
       color: var(--soft-ink);
     }
 
+    /* Направление «карточки» (выбрано 18.08.2026): каждая цель — карточка,
+       в шапке имя и процент за сегодня, ниже история, ниже кнопки во всю
+       ширину. Всё, что описывает вид, живёт здесь; смысл кнопок и формулы
+       не менялись. */
     .block {
-      margin-bottom: 16px;
-      padding: 12px;
-      border-radius: 16px;
+      margin-bottom: 12px;
+      padding: 14px 14px 12px;
+      border-radius: var(--radius);
       border: 1px solid var(--line);
       background: var(--card);
+      box-shadow: var(--shadow);
     }
 
     .block.mastered {
@@ -412,17 +417,17 @@
     .block-head {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
+      align-items: baseline;
       gap: 12px;
-      margin-bottom: 12px;
+      margin-bottom: 2px;
     }
 
     .goal-label {
       flex: 1;
       min-width: 0;
-      font-size: 15px;
-      line-height: 1.45;
-      padding-top: 4px;
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.35;
       /* Долгое нажатие открывает действия с целью — выделение текста и
          системное меню iOS при этом только мешают. */
       -webkit-user-select: none;
@@ -438,8 +443,8 @@
     .btn-set {
       display: flex;
       justify-content: space-around;
-      gap: 12px;
-      margin-bottom: 8px;
+      gap: 8px;
+      margin-bottom: 4px;
     }
 
     .btn-set > div {
@@ -454,7 +459,7 @@
       font-weight: 900;
       line-height: 1;
       border: none;
-      border-radius: 14px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
       transition: transform 0.06s ease, box-shadow 0.06s ease;
       /* Быстрые повторные тапы не должны вызывать double-tap-зум,
@@ -526,10 +531,12 @@
 
     .count {
       text-align: center;
-      font-weight: 800;
+      font-weight: 700;
       font-size: var(--tap-count);
-      margin-top: 6px;
+      margin-top: 4px;
+      color: var(--muted);
       font-family: var(--font-display);
+      font-variant-numeric: tabular-nums;
     }
 
     .percent {
@@ -559,12 +566,12 @@
     .sparkline {
       display: flex;
       align-items: center;
-      justify-content: flex-end;
+      justify-content: flex-start;
       gap: 8px;
-      margin-top: 4px;
+      margin: 0 0 10px;
       font-size: 12px;
       color: var(--muted);
-      min-height: 24px;
+      min-height: 22px;
     }
 
     .sparkline svg {
@@ -2313,7 +2320,10 @@
           percent.textContent = "—";
           const prevPercent = buildSparkline(trendValues);
           prevPercent.title = `Пред. сессии: ${previousPercents}`;
-          stats.append(percent, prevPercent);
+          // Направление «карточки»: справа в шапке только процент за сегодня,
+          // а история — отдельной строкой под названием, слева. Так шапка
+          // читается одним взглядом: имя цели и число.
+          stats.append(percent);
 
           const head = document.createElement("div");
           head.className = "block-head";
@@ -2353,7 +2363,7 @@
           actions.append(actionsText, clearBtn, cancelBtn);
           wireGoalLongPress(goalLabel, actions);
 
-          block.append(head, btnSet, promptDetails, actions);
+          block.append(head, prevPercent, btnSet, promptDetails, actions);
           // Подпись про холодную пробу: до нажатия объясняет правило, после —
           // почему кнопки закрылись.
           if (coldProbe) {
