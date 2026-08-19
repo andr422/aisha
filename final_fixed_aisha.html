@@ -2130,7 +2130,15 @@
       wrap.className = "sparkline";
 
       if (!values.length) {
-        wrap.textContent = "нет данных";
+        // История пуста. Подпись отдельным элементом: как только за сегодня
+        // появятся нажатия, updatePercentages поменяет её на «первое занятие».
+        // Иначе рядом с крупным «67%» висело бы «нет данных» — читается как
+        // ошибка, хотя речь про разные вещи: процент за сегодня и история.
+        wrap.classList.add("empty");
+        const label = document.createElement("span");
+        label.className = "spark-empty";
+        label.textContent = "нет данных";
+        wrap.append(label);
         return wrap;
       }
 
@@ -3411,11 +3419,17 @@ ${extra}
         const total = success + prompts + errors;
         const percentEl = block.querySelector(".percent");
 
+        const emptyLabel = block.querySelector(".sparkline.empty .spark-empty");
+
         if (!total) {
           percentEl.textContent = "—";
           percentEl.className = "percent";
+          if (emptyLabel) emptyLabel.textContent = "нет данных";
           return;
         }
+
+        // По этой цели ещё не было ни одного занятия, но сегодня уже работают.
+        if (emptyLabel) emptyLabel.textContent = "первое занятие";
 
         // Процент самостоятельных реакций: + / (+ P −).
         const percent = Math.round((success / total) * 100);

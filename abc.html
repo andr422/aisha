@@ -88,10 +88,20 @@
 
     .card {
       background: var(--card);
+      border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: 16px;
-      margin-bottom: 20px;
+      padding: 14px 14px 12px;
+      margin-bottom: 12px;
       box-shadow: var(--shadow);
+    }
+
+    /* Обязательный шаг выделен рамкой акцента: его пролистывают чаще всего. */
+    .card.card-main {
+      border-color: var(--accent-soft);
+    }
+
+    .card .section-label:first-child {
+      margin-top: 0;
     }
 
     /* Меню «⋮» — как на сводной и ежедневной. */
@@ -410,32 +420,44 @@
       <textarea id="setC"></textarea>
     </div>
 
+    <!-- Каждый шаг записи — отдельная карточка, как цель на «Сборе».
+         Раньше всё лежало в одной, и экран читался сплошной стеной. -->
     <div class="card">
       <div class="section-label">Время эпизода</div>
       <div class="time-row">
         <input type="time" id="epTime" />
         <button class="btn" type="button" id="nowBtn">сейчас</button>
       </div>
+    </div>
 
-      <!-- Порядок как в самой методике: A → B → C. Обязательное поведение (B)
-           выделено, чтобы его не пролистали. -->
+    <!-- Порядок как в самой методике: A → B → C. Обязательное поведение (B)
+         выделено, чтобы его не пролистали. -->
+    <div class="card">
       <div class="section-label">Что предшествовало (A) — можно несколько</div>
       <div class="chips" id="chipsA"></div>
+    </div>
 
+    <div class="card card-main">
       <div class="section-label main">Поведение (B) — обязательно, можно несколько</div>
       <div class="chips" id="chipsB"></div>
+    </div>
 
+    <div class="card">
       <div class="section-label">Что последовало (C) — можно несколько</div>
       <div class="chips" id="chipsC"></div>
+    </div>
 
+    <!-- Длительность и интенсивность — уточнения к одному и тому же эпизоду,
+         поэтому живут в одной карточке. -->
+    <div class="card">
       <div class="section-label">Длительность</div>
       <div class="chips" id="chipsD"></div>
 
       <div class="section-label">Интенсивность</div>
       <div class="chips" id="chipsI"></div>
-
-      <button class="save-btn" type="button" id="saveBtn">Записать эпизод</button>
     </div>
+
+    <button class="save-btn" type="button" id="saveBtn">Записать эпизод</button>
 
     <h2>Журнал</h2>
     <div id="logList"></div>
