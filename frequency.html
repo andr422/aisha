@@ -328,7 +328,7 @@
        с точку между двумя разными по весу кнопками. */
     .beh {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 76px 1fr auto;
       align-items: center;
       gap: 8px 12px;
       background: var(--card);
@@ -340,7 +340,7 @@
     }
 
     .beh-name {
-      grid-column: 1;
+      grid-column: 1 / 3;
       font-size: 16px;
       font-weight: 600;
       line-height: 1.35;
@@ -356,7 +356,7 @@
     }
 
     .beh-count {
-      grid-column: 2;
+      grid-column: 3;
       justify-self: end;
       font-family: var(--font-display);
       font-size: 28px;
@@ -366,7 +366,7 @@
     }
 
     .beh-plus {
-      grid-column: 2;
+      grid-column: 2 / 4;
       grid-row: 2;
       width: 100%;
       height: 48px;
@@ -390,17 +390,19 @@
 
     /* «−» перестала быть еле заметной: та же высота и вес, что у «+»,
        но в спокойной заливке — промахнуться по ней не страшно. */
+    /* «−» намеренно узкая и тихая: ею исправляют случайное нажатие, а
+       считают «плюсом». Равный вес провоцировал промахи. */
     .beh-minus {
       grid-column: 1;
       grid-row: 2;
       height: 48px;
       border: none;
       border-radius: var(--radius-sm);
-      background: var(--err);
-      color: var(--err-ink);
+      background: var(--soft);
+      color: var(--muted);
       font-family: var(--font-display);
-      font-size: var(--tap-font);
-      font-weight: 900;
+      font-size: 22px;
+      font-weight: 700;
       cursor: pointer;
       touch-action: manipulation;
       -webkit-touch-callout: none;
