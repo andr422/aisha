@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Проба оформления: цель как на «Частоте»</title>
+<!-- ПРОБНАЯ СТРАНИЦА. Ничего не отправляет и ничего не сохраняет:
+     счётчики живут в памяти вкладки и обнуляются при перезагрузке.
+     В приложение не подключена, лежит рядом просто чтобы потрогать.
+
+     Что пробуем: цель на «Сборе» устроена как карточка поведения на
+     «Частоте» — сверху строка «название … процент», снизу две кнопки:
+       • узкая слева «P/−» — короткое нажатие пишет обобщённую подсказку
+         (как сейчас), долгое открывает варианты, среди которых и «Ошибка»;
+       • широкая справа «+» — самостоятельный ответ.
+     Отдельной «−» на экране нет, разбивки подсказок (P1, P4 …) под целью тоже.
+     Оформление берём из theme.css — чтобы проба выглядела как настоящий экран. -->
+<script src="theme.js"></script>
+<link rel="stylesheet" href="theme.css" />
+<style>
+  /* Те же шрифты, что в приложении: файлы лежат в fonts/ рядом. */
+  @font-face { font-family: "Unbounded"; src: url("fonts/Unbounded.woff2") format("woff2");
+    font-weight: 400 900; font-display: swap; }
+  @font-face { font-family: "Onest"; src: url("fonts/Onest.woff2") format("woff2");
+    font-weight: 300 800; font-display: swap; }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 14px 12px 48px;
+    background: var(--bg); color: var(--text);
+    font-family: var(--font-body); font-size: 15px;
+    -webkit-text-size-adjust: 100%;
+    --p-w: 108px;              /* ширина «P/−»; переключается кнопкой ниже */
+  }
+  body.narrow-p { --p-w: 76px; }   /* ровно как «−» на «Частоте» */
+  .wrap { max-width: 520px; margin: 0 auto; }
+  h1 { font-family: var(--font-display); font-size: 20px; margin: 0 0 4px; }
+  .lead { color: var(--muted); font-size: 13px; margin: 0 0 14px; line-height: 1.45; }
+
+  /* --- шапка протокола: как в приложении --- */
+  .protocol-container {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 14px 12px; margin-bottom: 14px;
+  }
+  .protocol-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .proto-toggle {
+    display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
+    background: none; border: none; padding: 0; text-align: left; cursor: pointer;
+    color: inherit; font: inherit;
+  }
+  .proto-toggle h3 { font-family: var(--font-display); font-size: 18px; margin: 0; }
+  .proto-summary { display: block; font-size: 12px; color: var(--muted); }
+  .caret { color: var(--muted); font-size: 13px; transition: transform .15s; }
+  .protocol-container.open .caret { transform: rotate(90deg); }
+  .proto-body { margin-top: 12px; }
+  .protocol-container:not(.open) .proto-body { display: none; }
+
+  /* --- цель: та же сетка, что у карточки поведения на «Частоте» --- */
+  .goal {
+    display: grid; grid-template-columns: var(--p-w) 1fr auto;
+    align-items: center; gap: 8px 12px;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 12px 14px; margin-bottom: 10px; box-shadow: var(--shadow);
+    position: relative; overflow: hidden;
+  }
+  .goal.mastered::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--mastered);
+  }
+  .goal-name {
+    grid-column: 1 / 3; font-size: 16px; font-weight: 600; line-height: 1.35; word-break: break-word;
+  }
+  .badge {
+    font-size: 10px; letter-spacing: .06em; text-transform: uppercase; font-weight: 700;
+    color: var(--mastered); border: 1px solid var(--mastered-line); border-radius: 999px;
+    padding: 1px 6px; margin-left: 6px; vertical-align: 2px; white-space: nowrap;
+  }
+  /* Процент — по правому краю той же строки, ровно там же, где на
+     «Частоте» стоит число нажатий. */
+  .goal-pct {
+    grid-column: 3; justify-self: end;
+    font-family: var(--font-display); font-size: 28px; font-weight: 900; line-height: 1;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .goal-pct small { font-size: 14px; font-weight: 700; }
+  .goal-pct.low { color: var(--low-ink); }
+  .goal-pct.high { color: var(--mastered); }
+  .goal-pct.empty { color: var(--muted); font-size: 22px; }
+
+  .tap {
+    grid-row: 2; position: relative; height: 48px; border: none; border-radius: var(--radius-sm);
+    font-family: var(--font-display); font-weight: 900; cursor: pointer;
+    touch-action: manipulation; -webkit-touch-callout: none;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  .tap:active { transform: translateY(var(--btn-lift)); box-shadow: none !important; }
+  .tap em {
+    position: absolute; right: 7px; bottom: 2px; font-style: normal;
+    font-family: var(--font-body); font-size: 12px; font-weight: 700; opacity: .7;
+  }
+  /* «P/−»: узкая и спокойная, как «−» на «Частоте», но пишет подсказку. */
+  .tap-p {
+    grid-column: 1; font-size: 22px;
+    background: var(--prompt); color: var(--prompt-ink);
+    box-shadow: 0 var(--btn-lift) 0 var(--prompt-edge);
+  }
+  .tap-p .slash { opacity: .55; font-weight: 700; }
+  /* Уголок — намёк, что под долгим нажатием есть варианты (и «Ошибка») */
+  .tap-p::after {
+    content: ""; position: absolute; left: 5px; top: 5px; width: 0; height: 0;
+    border-left: 6px solid currentColor; border-bottom: 6px solid transparent; opacity: .45;
+  }
+  .tap-p.err-flash {
+    background: var(--err); color: var(--err-ink); box-shadow: 0 var(--btn-lift) 0 var(--err-edge);
+  }
+  .tap-plus {
+    grid-column: 2 / 4; width: 100%; font-size: var(--tap-font);
+    background: var(--ok); color: var(--ok-ink); box-shadow: 0 var(--btn-lift) 0 var(--ok-edge);
+  }
+
+  /* --- лист выбора подсказки --- */
+  .sheet-back {
+    position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none;
+    align-items: flex-end; justify-content: center; z-index: 40;
+  }
+  .sheet-back.show { display: flex; }
+  .sheet {
+    width: 100%; max-width: 520px; background: var(--card); color: var(--text);
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding: 16px 14px calc(16px + env(safe-area-inset-bottom)); box-shadow: var(--shadow-lg);
+  }
+  .sheet h3 { font-family: var(--font-display); font-size: 17px; margin: 0 0 2px; }
+  .sheet .goal-of { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+  .sheet button {
+    display: block; width: 100%; margin-bottom: 8px; padding: 14px 12px; font-size: 16px;
+    font-family: var(--font-body); border-radius: var(--radius-sm); cursor: pointer;
+    border: 1px solid var(--line-strong); background: var(--soft); color: var(--soft-ink); text-align: left;
+  }
+  /* «Ошибка» — отдельной группой под чертой: это не вид подсказки,
+     а другой исход. Заливка спокойная, но не такая же, как у подсказок,
+     иначе в списке из шести пунктов её не найти. */
+  .sheet .b-err {
+    background: var(--danger-soft); color: var(--danger-ink); border-color: var(--danger-edge);
+    font-weight: 700;
+  }
+  .sheet .sheet-sep { border: none; border-top: 1px solid var(--line); margin: 14px 0 10px; }
+  .sheet .sheet-cap { font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+  .sheet .b-cancel { background: none; border: none; color: var(--muted); text-align: center; margin-bottom: 0; }
+  .sheet hr { border: none; border-top: 1px solid var(--line); margin: 12px 0 0; }
+
+  /* --- служебное --- */
+  .tools { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 16px; }
+  .tools button {
+    font: inherit; font-size: 13px; padding: 8px 12px; border-radius: var(--radius-sm);
+    border: 1px solid var(--line-strong); background: var(--card); color: var(--text); cursor: pointer;
+  }
+
+  /* Переключатель тем — теми же стилями, что на «Настройке». */
+  #themeBox { display: grid; gap: 8px; margin-bottom: 16px; }
+  .theme-btn {
+    display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px;
+    text-align: left; border: 1.5px solid var(--line); border-radius: var(--radius-sm);
+    background: var(--card); font-family: var(--font-body); color: var(--text);
+    cursor: pointer; touch-action: manipulation;
+  }
+  .theme-btn.on { border-color: var(--accent); background: var(--accent-soft); }
+  .theme-dots { display: flex; flex: 0 0 auto; }
+  .theme-dots span { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line-strong); margin-left: -7px; }
+  .theme-dots span:first-child { margin-left: 0; }
+  .theme-text { display: flex; flex-direction: column; gap: 2px; }
+  .theme-text b { font-size: 15px; }
+  .theme-text span { font-size: 12px; color: var(--muted); }
+  #undo {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%) translateY(140%);
+    background: var(--text); color: var(--bg); border: none; border-radius: 999px;
+    padding: 11px 18px; font: inherit; font-size: 14px; cursor: pointer; z-index: 30;
+    transition: transform .18s; box-shadow: var(--shadow-lg);
+  }
+  #undo.show { transform: translateX(-50%) translateY(0); }
+  .note { font-size: 12px; color: var(--muted); line-height: 1.55; margin-top: 18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Проба: цель как на «Частоте»</h1>
+  <p class="lead">
+    Сверху название и процент этой сессии по краям одной строки, снизу две кнопки.
+    Узкая «P/−»: короткое нажатие — подсказка, долгое (полсекунды) — список вариантов,
+    где есть и «Ошибка». Страница ничего не отправляет и не сохраняет.
+  </p>
+
+  <div id="themeBox"></div>
+  <div class="tools">
+    <button type="button" id="widthBtn">«P» уже — как на «Частоте»</button>
+    <button type="button" id="resetBtn">Обнулить счётчики</button>
+    <button type="button" id="denseBtn">Свернуть всё</button>
+  </div>
+
+  <div id="protocols"></div>
+
+  <p class="note">
+    Что проверить на планшете: не тесно ли пальцу на «P/−», не мешает ли, что «−» спрятана
+    в её долгом нажатии, читается ли процент справа от названия, сколько целей видно без прокрутки.
+    Кнопкой сверху можно на ходу сравнить две ширины «P».
+  </p>
+</div>
+
+<div class="sheet-back" id="sheetBack">
+  <div class="sheet">
+    <h3>Как ответил ребёнок?</h3>
+    <p class="goal-of" id="sheetGoal"></p>
+    <button type="button" data-code="G">Жестовая подсказка</button>
+    <button type="button" data-code="V">Вербальная</button>
+    <button type="button" data-code="E">Эхо</button>
+    <button type="button" data-code="PF">Частичная физическая</button>
+    <button type="button" data-code="FF">Полная физическая</button>
+    <hr class="sheet-sep" />
+    <p class="sheet-cap">Другой исход</p>
+    <button type="button" class="b-err" data-code="ERR">Ошибка — не выполнил</button>
+    <hr />
+    <button type="button" class="b-cancel" data-code="">Отмена</button>
+  </div>
+</div>
+
+<button type="button" id="undo">Отменить действие</button>
+
+<script>
+(function () {
+  // Данные только для пробы.
+  const DATA = [
+    { name: "Категории", goals: ["Овощи", "Фрукты", "Мебель", "Одежда", "Транспорт"] },
+    { name: "Имитация с предметами", goals: ["Стучит кубиком", "Катает машинку", "Кладёт предмет в коробку"] },
+    { name: "Просьбы (манд)", goals: ["Просит любимую еду", "Просит помощь", "Просит паузу", "Просит игрушку"] }
+  ];
+
+  const state = new Map();   // «протокол||цель» → {ok, prompt, err}
+  const undoStack = [];
+  const box = document.getElementById("protocols");
+  const sheetBack = document.getElementById("sheetBack");
+  const sheetGoal = document.getElementById("sheetGoal");
+  const undoBtn = document.getElementById("undo");
+  let target = null;
+  let pressTimer = null;
+  let longFired = false;
+  let undoTimer = null;
+
+  const key = (p, g) => p + "||" + g;
+  function get(k) {
+    if (!state.has(k)) state.set(k, { ok: 0, prompt: 0, err: 0 });
+    return state.get(k);
+  }
+  function plural(n) {
+    const t = n % 10, h = n % 100;
+    if (t === 1 && h !== 11) return "цель";
+    if (t >= 2 && t <= 4 && (h < 12 || h > 14)) return "цели";
+    return "целей";
+  }
+
+  function render() {
+    box.innerHTML = "";
+    DATA.forEach((proto) => {
+      const wrap = document.createElement("div");
+      wrap.className = "protocol-container open";
+      wrap.innerHTML =
+        '<div class="protocol-header">' +
+          '<button class="proto-toggle" type="button"><span class="caret">▸</span>' +
+          '<span><h3>' + proto.name + '</h3><span class="proto-summary">' +
+          proto.goals.length + ' ' + plural(proto.goals.length) + '</span></span></button>' +
+        '</div><div class="proto-body"></div>';
+      const body = wrap.querySelector(".proto-body");
+      proto.goals.forEach((g) => body.appendChild(goalCard(proto.name, g)));
+      wrap.querySelector(".proto-toggle").addEventListener("click", () => wrap.classList.toggle("open"));
+      box.appendChild(wrap);
+    });
+  }
+
+  function goalCard(proto, goal) {
+    const k = key(proto, goal);
+    const el = document.createElement("div");
+    el.className = "goal";
+    el.dataset.key = k;
+    el.innerHTML =
+      '<div class="goal-name"><span class="goal-title">' + goal + '</span></div>' +
+      '<div class="goal-pct empty">—</div>' +
+      '<button class="tap tap-p" type="button">P<span class="slash">/−</span><em>0</em></button>' +
+      '<button class="tap tap-plus" type="button">+<em>0</em></button>';
+
+    el.querySelector(".tap-plus").addEventListener("click", () => bump(k, "ok"));
+
+    const pBtn = el.querySelector(".tap-p");
+    const start = () => {
+      longFired = false;
+      pressTimer = setTimeout(() => { longFired = true; openSheet(k, goal); }, 500);
+    };
+    const stop = () => { clearTimeout(pressTimer); pressTimer = null; };
+    pBtn.addEventListener("pointerdown", start);
+    pBtn.addEventListener("pointerup", stop);
+    pBtn.addEventListener("pointerleave", stop);
+    pBtn.addEventListener("pointercancel", stop);
+    pBtn.addEventListener("contextmenu", (e) => e.preventDefault());
+    pBtn.addEventListener("click", () => {
+      if (longFired) { longFired = false; return; }
+      bump(k, "prompt");
+    });
+    return el;
+  }
+
+  function bump(k, kind) {
+    get(k)[kind] += 1;
+    undoStack.push({ k: k, kind: kind });
+    paint(k);
+    if (kind === "err") flashErr(k);
+    showUndo();
+  }
+
+  function flashErr(k) {
+    const btn = document.querySelector('[data-key="' + CSS.escape(k) + '"] .tap-p');
+    if (!btn) return;
+    btn.classList.add("err-flash");
+    setTimeout(() => btn.classList.remove("err-flash"), 450);
+  }
+
+  function paint(k) {
+    const el = document.querySelector('[data-key="' + CSS.escape(k) + '"]');
+    if (!el) return;
+    const s = get(k);
+    const total = s.ok + s.prompt + s.err;
+    el.querySelector(".tap-p em").textContent = s.prompt + s.err;
+    el.querySelector(".tap-plus em").textContent = s.ok;
+
+    const pct = el.querySelector(".goal-pct");
+    if (!total) {
+      pct.className = "goal-pct empty";
+      pct.textContent = "—";
+    } else {
+      const v = Math.round((s.ok / total) * 100);
+      pct.className = "goal-pct " + (v >= 80 ? "high" : v < 50 ? "low" : "");
+      pct.innerHTML = v + '<small>%</small>';
+    }
+
+    const mastered = total >= 5 && s.ok / total >= 0.8;
+    el.classList.toggle("mastered", mastered);
+    const title = el.querySelector(".goal-name");
+    const badge = title.querySelector(".badge");
+    if (mastered && !badge) title.insertAdjacentHTML("beforeend", '<span class="badge">освоено</span>');
+    if (!mastered && badge) badge.remove();
+  }
+
+  function openSheet(k, goal) {
+    target = k;
+    sheetGoal.textContent = goal;
+    sheetBack.classList.add("show");
+  }
+  function closeSheet() { sheetBack.classList.remove("show"); target = null; }
+
+  sheetBack.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) { if (e.target === sheetBack) closeSheet(); return; }
+    const code = btn.dataset.code;
+    const k = target;
+    closeSheet();
+    if (!k || !code) return;
+    bump(k, code === "ERR" ? "err" : "prompt");
+  });
+
+  function showUndo() {
+    undoBtn.classList.add("show");
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(() => undoBtn.classList.remove("show"), 5000);
+  }
+  undoBtn.addEventListener("click", () => {
+    const last = undoStack.pop();
+    undoBtn.classList.remove("show");
+    if (!last) return;
+    const s = get(last.k);
+    if (s[last.kind] > 0) s[last.kind] -= 1;
+    paint(last.k);
+  });
+
+  document.getElementById("widthBtn").addEventListener("click", (e) => {
+    const narrow = document.body.classList.toggle("narrow-p");
+    e.target.textContent = narrow ? "«P» шире — 108 px" : "«P» уже — как на «Частоте»";
+  });
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    state.clear(); undoStack.length = 0;
+    document.querySelectorAll(".goal").forEach((el) => paint(el.dataset.key));
+  });
+  document.getElementById("denseBtn").addEventListener("click", (e) => {
+    const anyOpen = document.querySelector(".protocol-container.open");
+    document.querySelectorAll(".protocol-container").forEach((c) => c.classList.toggle("open", !anyOpen));
+    e.target.textContent = anyOpen ? "Раскрыть всё" : "Свернуть всё";
+  });
+
+  render();
+  if (window.ABATheme) window.ABATheme.renderPicker(document.getElementById("themeBox"));
+})();
+</script>
+</body>
+</html>
