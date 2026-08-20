@@ -526,7 +526,7 @@
     </div>
 
     <div id="settingsBox" class="card" hidden>
-      <div class="hint">Список поведений — общий с вкладкой ABC (по одному на строку). У каждого ребёнка свой.</div>
+      <div class="hint">Список поведений этой вкладки (по одному на строку). У каждого ребёнка свой, и со списком в ABC он больше не связан: правка здесь на ABC не влияет.</div>
       <label for="setB">Поведения</label>
       <textarea id="setB"></textarea>
     </div>
@@ -570,8 +570,15 @@
     // Ключ должен совпадать с тем, что стоит на «Сборе» и в ABC.
     const SERVER_ENDPOINT = "https://api.abachecklist.ru/api/ingest?k=5b8cdc533b88a0451b6ed3bc80259cd6";
 
-    // Список поведений общий с ABC (одни и те же поведения ребёнка).
-    const KEY_B = "abc_behaviors";
+    // Список поведений СВОЙ, отдельно от ABC (20.08.2026). Раньше обе
+    // вкладки читали один ключ abc_behaviors, и правка в одной молча меняла
+    // список в другой. Это разные задачи: в ABC перечисляют поведения,
+    // эпизоды которых разбирают, на «Частоте» — те, что считают за
+    // наблюдение, и совпадать они не обязаны.
+    const KEY_B = "freq_behaviors";
+    // Отметка, что список уже отделён от ABC: без неё пустой список на
+    // «Частоте» каждый раз заново подтягивался бы из ABC.
+    const KEY_SPLIT = "freq_behaviors_split";
     // Данные частоты — свои ключи (входят в рабочий набор ребёнка).
     const KEY_COUNTS = "freq_counts";   // {поведение: число} текущего наблюдения
     const KEY_START = "freq_start";     // метка времени старта (ms) или пусто
@@ -907,6 +914,23 @@
     }
 
     // === Список поведений ===
+    // Разовый перенос: у кого список был настроен под старым общим ключом,
+    // тот же список становится начальным и здесь — иначе после обновления
+    // терапист увидел бы вместо своих поведений заготовку.
+    // Ключ начинается с freq_ → он попадает в набор данных ребёнка и
+    // переезжает вместе с ним (см. регулярки в «Настройке»).
+    function splitBehaviorsOnce() {
+      try {
+        if (localStorage.getItem(KEY_SPLIT) === "1") return;
+        const own = localStorage.getItem(KEY_B);
+        const shared = localStorage.getItem("abc_behaviors");
+        if (!own && shared) localStorage.setItem(KEY_B, shared);
+        localStorage.setItem(KEY_SPLIT, "1");
+      } catch {
+        // приватный режим — просто работаем с заготовкой
+      }
+    }
+
     function getBehaviors() {
       try {
         const list = JSON.parse(localStorage.getItem(KEY_B) || "null");
@@ -1601,6 +1625,7 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       ensureActiveChild();
+      splitBehaviorsOnce();   // до первой отрисовки списка
       renderActiveChild();
       renderObs();
       renderBehaviors();

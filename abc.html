@@ -411,7 +411,7 @@
     </div>
 
     <div id="settingsBox" class="card" hidden>
-      <div class="hint">По одному варианту на строку. Списки свои у каждого ребёнка.</div>
+      <div class="hint">По одному варианту на строку. Списки свои у каждого ребёнка. Список поведений этой вкладки отдельный от того, что на «Частоте».</div>
       <label for="setA">Что предшествовало (A)</label>
       <textarea id="setA"></textarea>
       <label for="setB">Поведения (B)</label>
@@ -477,6 +477,8 @@
     // Ключи данных — с префиксом abc_, входят в рабочий набор ребёнка
     // (сводная сворачивает их при переключении профиля, см. isChildDataKey).
     const KEY_A = "abc_antecedents";
+    // Список поведений этой вкладки. С 20.08.2026 он НЕ общий с «Частотой»:
+    // там свой ключ freq_behaviors. Правка здесь на «Частоту» не влияет.
     const KEY_B = "abc_behaviors";
     const KEY_C = "abc_consequences";
     const KEY_LOG = "abc_log";
