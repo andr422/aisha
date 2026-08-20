@@ -533,7 +533,7 @@
 
     <div class="card obs">
       <div id="obsClock" class="obs-clock idle">00:00</div>
-      <div id="obsNote" class="obs-note">Наблюдение не начато — счётчики работают, но частота в час не посчитается.</div>
+      <div id="obsNote" class="obs-note">Наблюдение не начато — считать можно, но длительность не запишется, и сравнить это наблюдение с другими будет нельзя.</div>
       <button id="obsBtn" class="obs-btn" type="button">▶ Начать наблюдение</button>
     </div>
 
@@ -545,10 +545,8 @@
     <div id="chartBox" class="card" hidden>
       <div class="chart-head">
         <h3>Динамика по наблюдениям</h3>
-        <div class="chart-modes">
-          <button type="button" class="mode-btn" data-mode="rate">раз в час</button>
-          <button type="button" class="mode-btn" data-mode="count">количество</button>
-        </div>
+        <!-- Шкала одна: количество. «Раз в час» осталась в данных и в
+             кабинете супервизора — на занятии она только мешала. -->
       </div>
       <div id="chartLegend" class="chart-legend"></div>
       <div id="chartArea"></div>
@@ -1010,7 +1008,7 @@
       } else {
         clock.textContent = fmtClock(0);
         clock.classList.add("idle");
-        note.textContent = "Наблюдение не начато — счётчики работают, но частота в час не посчитается.";
+        note.textContent = "Наблюдение не начато — считать можно, но длительность не запишется, и сравнить это наблюдение с другими будет нельзя.";
         btn.textContent = "▶ Начать наблюдение";
         btn.classList.remove("stop");
       }
@@ -1044,11 +1042,10 @@
         const name = document.createElement("div");
         name.className = "beh-name";
         name.textContent = behavior;
-        const rate = document.createElement("span");
-        rate.className = "beh-rate";
-        const rph = ratePerHour(count, minutes);
-        rate.textContent = rph ? `${rph} раз/час` : "";
-        name.append(rate);
+        // «Раз в час» на занятии больше не показываем (20.08.2026): на коротком
+        // наблюдении это число скачет в разы и пугает, а решение по нему всё
+        // равно принимает супервизор. Считаться и уходить в данные оно
+        // продолжает — см. finishObservation и ratePerHour.
 
         const minus = document.createElement("button");
         minus.className = "beh-minus";
@@ -1068,10 +1065,6 @@
         plus.onclick = () => {
           const next = bump(behavior, 1);
           countEl.textContent = String(next);
-          rate.textContent = (() => {
-            const r = ratePerHour(next, elapsedMs() / 60000);
-            return r ? `${r} раз/час` : "";
-          })();
           plus.classList.remove("flash");
           void plus.offsetWidth;
           plus.classList.add("flash");
@@ -1081,10 +1074,6 @@
         minus.onclick = () => {
           const next = bump(behavior, -1);
           countEl.textContent = String(next);
-          rate.textContent = (() => {
-            const r = ratePerHour(next, elapsedMs() / 60000);
-            return r ? `${r} раз/час` : "";
-          })();
         };
 
         row.append(name, minus, countEl, plus);
@@ -1127,7 +1116,7 @@
         const details = document.createElement("span");
         const parts = obs.items
           .filter((it) => it.count > 0)
-          .map((it) => `${it.behavior}: ${it.count}${it.rate ? ` (${it.rate}/ч)` : ""}`);
+          .map((it) => `${it.behavior}: ${it.count}`);
         details.textContent =
           (obs.minutes ? ` · ${obs.minutes} мин · ` : " · ") +
           (parts.length ? parts.join(", ") : "без проявлений");
@@ -1241,7 +1230,9 @@
     // По оси X — наблюдения по порядку (последние 15), по Y — либо «раз в час»
     // (сопоставимо между наблюдениями разной длины), либо просто количество.
     const CHART_KEY = "freq_chart_open";   // раскрыт ли график
-    const CHART_MODE_KEY = "freq_chart_mode"; // "rate" | "count"
+    // Ключ остался от переключателя шкал: на занятии шкала теперь одна.
+    // Не удаляю, чтобы старое значение на планшетах ничему не мешало.
+    const CHART_MODE_KEY = "freq_chart_mode";
     const CHART_OFF_KEY = "freq_chart_off";   // скрытые вручную поведения
     const CHART_POINTS = 15;
     // Цвета линий: контрастные и различимые, в том числе на печати.
@@ -1251,7 +1242,8 @@
     ];
 
     function chartMode() {
-      return localStorage.getItem(CHART_MODE_KEY) === "count" ? "count" : "rate";
+      // На «Частоте» шкала всегда одна — количество за наблюдение.
+      return "count";
     }
 
     function hiddenBehaviors() {
@@ -1363,9 +1355,6 @@
       if (!opened) return;
 
       const mode = chartMode();
-      box.querySelectorAll(".mode-btn").forEach((btn) => {
-        btn.classList.toggle("on", btn.dataset.mode === mode);
-      });
 
       const area = document.getElementById("chartArea");
       const legend = document.getElementById("chartLegend");
@@ -1407,21 +1396,13 @@
 
       const shown = all.filter((s) => !off.includes(s.name) && s.values.some((v) => v != null));
       if (!shown.length) {
-        note.textContent =
-          mode === "rate"
-            ? "Нет данных: «раз в час» считается только для наблюдений с таймером. Переключитесь на «количество»."
-            : "Все линии скрыты — нажмите на поведение, чтобы вернуть.";
+        note.textContent = "Все линии скрыты — нажмите на поведение, чтобы вернуть.";
         return;
       }
 
       area.innerHTML = buildFreqChart(log, shown, mode);
-      const withoutTimer = log.filter((obs) => !obs.minutes).length;
       note.textContent =
-        (mode === "rate" ? "Проявлений в час" : "Проявлений за наблюдение") +
-        `, последние ${log.length} наблюдений.` +
-        (mode === "rate" && withoutTimer
-          ? ` Наблюдений без таймера: ${withoutTimer} — на графике они пропущены.`
-          : "") +
+        `Проявлений за наблюдение, последние ${log.length} наблюдений.` +
         (silent ? ` Поведений без единого проявления: ${silent} — не показаны.` : "");
     }
 
@@ -1434,12 +1415,6 @@
           document.getElementById("chartBox").scrollIntoView({ behavior: "smooth", block: "start" });
         }
       };
-      document.querySelectorAll("#chartBox .mode-btn").forEach((btn) => {
-        btn.onclick = () => {
-          localStorage.setItem(CHART_MODE_KEY, btn.dataset.mode);
-          renderChart();
-        };
-      });
     }
 
     // === Экспорт журнала в CSV ===
