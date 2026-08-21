@@ -594,6 +594,13 @@
       font-weight: 600;
     }
 
+    .gen-offer.waiting {
+      display: block;
+      background: var(--soft);
+      color: var(--muted);
+      font-weight: 600;
+    }
+
     .gen-offer button {
       border: none;
       border-radius: var(--radius-sm);
@@ -2639,6 +2646,14 @@
             offerBtn.onclick = () => sendGoalToGeneralization(i, goalId);
             offer.append(offerText, offerBtn);
             block.append(offer);
+          } else if (isGeneralizing(i, goalId)) {
+            // Цель уже переведена, но осталась на экране: по ней есть
+            // сегодняшние нажатия, а терять их нельзя. Без этой подписи
+            // выглядит так, будто кнопка не сработала.
+            const waiting = document.createElement("div");
+            waiting.className = "gen-offer waiting";
+            waiting.textContent = "Уйдёт в «Генерализацию» после отправки занятия";
+            block.append(waiting);
           }
           // Подпись про холодную пробу: до нажатия объясняет правило, после —
           // почему кнопки закрылись.
@@ -3350,7 +3365,19 @@ ${extra}
       renderDaily();
       restoreInProgressData(inProgress);
       loadProgress();
-      showToast(`«${goalName}» перешла в блок «Генерализация» внизу — проверьте навык в девяти условиях.`, 6000);
+
+      // Если по цели уже есть несданные нажатия, она останется на экране до
+      // отправки — данные важнее аккуратного списка. Говорим об этом прямо,
+      // иначе нажатие выглядит как «ничего не произошло».
+      const stillOnScreen = Array.from(document.querySelectorAll(".block")).some(
+        (b) => b.dataset.protocolIndex === String(i) && b.dataset.goalId === String(goalId)
+      );
+      showToast(
+        stillOnScreen
+          ? `«${goalName}» уйдёт в блок «Генерализация» после отправки занятия: по ней уже есть сегодняшние нажатия, и они не потеряются.`
+          : `«${goalName}» перешла в блок «Генерализация» внизу — проверьте навык в девяти условиях.`,
+        7000
+      );
     }
 
     // В блок генерализации попадают ВСЕ освоенные цели — включая возвращённые
