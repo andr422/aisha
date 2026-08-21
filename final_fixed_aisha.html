@@ -361,42 +361,108 @@
     }
 
     /* Долгое нажатие на цель — действия с ней (пока только «очистить»). */
-    .goal-actions {
+    /* Окно цели: история прошлых занятий по долгому нажатию на название.
+       Тераписты просили видеть предыдущие результаты прямо на «Сборе»
+       (20.08.2026), а на самой карточке для этого места нет. */
+    #goal-modal .modal-content {
+      max-width: 460px;
+    }
+
+    .gm-title {
+      font-family: var(--font-display);
+      font-size: 19px;
+      font-weight: 900;
+      margin: 0 0 2px;
+      line-height: 1.2;
+      text-align: left;   /* общее правило h2/h3 центрирует — здесь мешает */
+    }
+
+    .gm-proto {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0 0 14px;
+    }
+
+    .gm-today {
       display: flex;
-      align-items: center;
-      gap: 8px;
+      align-items: baseline;
+      gap: 10px;
       flex-wrap: wrap;
-      margin: 8px 0 2px;
-      padding: 8px 10px;
-      background: var(--warn-soft);
-      border-radius: 10px;
-      font-size: 13px;
-      color: var(--warn-ink);
-    }
-
-    .goal-actions[hidden] {
-      display: none;
-    }
-
-    .goal-actions button {
-      border: none;
-      border-radius: 8px;
-      padding: 7px 12px;
-      font-family: var(--font-body);
-      font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
-      touch-action: manipulation;
-    }
-
-    .goal-actions .clear-goal {
-      background: var(--warn);
-      color: var(--warn-on);
-    }
-
-    .goal-actions .cancel-goal {
       background: var(--soft);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      margin-bottom: 14px;
+      font-size: 14px;
       color: var(--soft-ink);
+    }
+
+    .gm-today b {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--text);
+    }
+
+    .gm-section {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 700;
+      margin: 0 0 6px;
+    }
+
+    .gm-trend {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+
+    .gm-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    .gm-table td {
+      padding: 7px 4px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .gm-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .gm-table .gm-pct {
+      text-align: right;
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .gm-table .gm-prompts {
+      text-align: right;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .gm-empty {
+      color: var(--muted);
+      font-size: 14px;
+      margin: 0 0 6px;
+    }
+
+    .gm-dates {
+      font-size: 12px;
+      color: var(--muted);
+      margin: 12px 0 0;
     }
 
     /* Цель устроена как карточка поведения на «Частоте» (20.08.2026):
@@ -510,6 +576,36 @@
       box-shadow: none !important;
       transform: none !important;
       cursor: default;
+    }
+
+    /* Предложение перевести освоенную цель в обобщение. Спокойный зелёный:
+       это хорошая новость, а не тревога, и нажимать не обязательно сегодня. */
+    .gen-offer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 10px;
+      padding: 8px 10px;
+      background: var(--gen-done);
+      color: var(--gen-done-ink);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .gen-offer button {
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 8px 14px;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 700;
+      background: var(--mastered);
+      color: var(--accent-ink);
+      cursor: pointer;
+      touch-action: manipulation;
+      white-space: nowrap;
     }
 
     .cold-note {
@@ -1000,7 +1096,8 @@
     #goal-selector-modal,
     #prompt-modal,
     #confirm-modal,
-    #note-modal {
+    #note-modal,
+    #goal-modal {
       display: none;
       position: fixed;
       inset: 0;
@@ -1131,6 +1228,14 @@
         <p class="prompt-cap">Другой исход</p>
         <button class="btn btn-error-choice" type="button" onclick="selectError()">Ошибка — не выполнил</button>
         <button class="btn btn-primary" type="button" onclick="closePromptModal()">Отмена</button>
+      </div>
+    </div>
+
+    <div id="goal-modal">
+      <div class="modal-content">
+        <div id="goalModalBody"></div>
+        <button class="btn btn-danger" type="button" id="goalModalClear">Очистить счётчики цели</button>
+        <button class="btn btn-secondary" type="button" id="goalModalClose">Закрыть</button>
       </div>
     </div>
 
@@ -2052,6 +2157,8 @@
           if (!goalName) return;
           if (checkMastery(goalMeasurements(i, goalName))) {
             localStorage.setItem(key, dateValue);
+            // Цель остаётся на занятии, пока терапист не нажмёт «В обобщение».
+            localStorage.setItem(`protocol${i}_goal${goalId}_genHold`, "1");
             marked.push(goalName);
           }
         });
@@ -2493,29 +2600,28 @@
           const promptDetails = document.createElement("div");
           promptDetails.className = "prompt-details";
 
-          // Долгое нажатие на название цели — действия с этой целью.
-          // Обычный тап ничего не делает: случайно очистить нельзя.
-          const actions = document.createElement("div");
-          actions.className = "goal-actions";
-          actions.hidden = true;
-          const actionsText = document.createElement("span");
-          actionsText.textContent = "Обнулить счётчики этой цели?";
-          const clearBtn = document.createElement("button");
-          clearBtn.type = "button";
-          clearBtn.className = "clear-goal";
-          clearBtn.textContent = "Очистить";
-          clearBtn.onclick = () => clearGoalCounts(block);
-          const cancelBtn = document.createElement("button");
-          cancelBtn.type = "button";
-          cancelBtn.className = "cancel-goal";
-          cancelBtn.textContent = "Отмена";
-          cancelBtn.onclick = () => {
-            actions.hidden = true;
-          };
-          actions.append(actionsText, clearBtn, cancelBtn);
-          wireGoalLongPress(goalLabel, actions);
+          // Долгое нажатие на название цели открывает окно этой цели:
+          // прошлые занятия и кнопка «Очистить». Обычный тап ничего не
+          // делает — случайно очистить нельзя.
+          wireGoalLongPress(goalLabel);
 
-          block.append(head, btnSet, promptDetails, actions);
+          block.append(head, btnSet, promptDetails);
+
+          // Критерий достигнут — предлагаем перевести цель в обобщение.
+          // Решает терапист: раньше цель уходила вниз сама, и это застигало
+          // врасплох посреди занятия.
+          if (isAwaitingGeneralization(i, goalId)) {
+            const offer = document.createElement("div");
+            offer.className = "gen-offer";
+            const offerText = document.createElement("span");
+            offerText.textContent = "Критерий выполнен";
+            const offerBtn = document.createElement("button");
+            offerBtn.type = "button";
+            offerBtn.textContent = "В обобщение";
+            offerBtn.onclick = () => sendGoalToGeneralization(i, goalId);
+            offer.append(offerText, offerBtn);
+            block.append(offer);
+          }
           // Подпись про холодную пробу: до нажатия объясняет правило, после —
           // почему кнопки закрылись.
           if (coldProbe) {
@@ -3197,10 +3303,36 @@ ${extra}
     const GEN_TOTAL = GEN_CATS.length * GEN_SLOTS; // 9 проб на цель
 
     // Цель ушла на генерализацию: есть дата освоения и её не вернули в работу.
+    // Цель уходит в блок «Генерализация» не сама: с 21.08.2026 после
+    // достижения критерия она остаётся на занятии с кнопкой «В обобщение»,
+    // и переводит её терапист. Признак ожидания — `_genHold`.
+    //
+    // Почему именно «ожидание», а не «переведена»: у целей, освоенных ДО
+    // этой правки, признака нет, и они продолжают вести себя как раньше —
+    // никакой разовой миграции по планшетам не нужно.
     function isGeneralizing(i, goalId) {
       const mastery = (localStorage.getItem(`protocol${i}_goal${goalId}_masteryDate`) || "").trim();
       const keep = localStorage.getItem(`protocol${i}_goal${goalId}_keepDaily`) === "1";
-      return Boolean(mastery) && !keep;
+      const hold = localStorage.getItem(`protocol${i}_goal${goalId}_genHold`) === "1";
+      return Boolean(mastery) && !keep && !hold;
+    }
+
+    // Критерий достигнут, но цель ещё на занятии: ждёт решения тераписта.
+    function isAwaitingGeneralization(i, goalId) {
+      const mastery = (localStorage.getItem(`protocol${i}_goal${goalId}_masteryDate`) || "").trim();
+      return Boolean(mastery) && localStorage.getItem(`protocol${i}_goal${goalId}_genHold`) === "1";
+    }
+
+    // Нажали «В обобщение»: снимаем ожидание, цель уходит вниз, в блок проб.
+    function sendGoalToGeneralization(i, goalId) {
+      localStorage.removeItem(`protocol${i}_goal${goalId}_genHold`);
+      localStorage.removeItem(`protocol${i}_goal${goalId}_keepDaily`);
+      const goalName = localStorage.getItem(`protocol${i}_goal${goalId}`) || "Цель";
+      const inProgress = snapshotInProgressData();
+      renderDaily();
+      restoreInProgressData(inProgress);
+      loadProgress();
+      showToast(`«${goalName}» перешла в блок «Генерализация» внизу — проверьте навык в девяти условиях.`, 6000);
     }
 
     // В блок генерализации попадают ВСЕ освоенные цели — включая возвращённые
@@ -3213,6 +3345,10 @@ ${extra}
         existingGoalIds(i).forEach((goalId) => {
           const mastery = (localStorage.getItem(`protocol${i}_goal${goalId}_masteryDate`) || "").trim();
           if (!mastery) return;
+          // Цель, которая ждёт решения тераписта («В обобщение» ещё не
+          // нажимали), в блок проб не попадает: иначе перевод происходил бы
+          // сам собой, а мы как раз это и убрали.
+          if (isAwaitingGeneralization(i, goalId)) return;
           out.push({
             protocolIndex: i,
             protocolTitle,
@@ -3500,7 +3636,123 @@ ${extra}
 
     // Долгое нажатие (те же 450 мс, что и у «P») по названию цели открывает
     // строку действий. Уводим палец или прокручиваем — ничего не происходит.
-    function wireGoalLongPress(label, actions) {
+    // Окно цели: что было на прошлых занятиях. Долгое нажатие на название —
+    // тот же жест, что раньше открывал строку «Очистить»; она теперь внутри
+    // окна, чтобы жест остался один.
+    let goalModalBlock = null;
+
+    function openGoalModal(block) {
+      goalModalBlock = block;
+      const modal = document.getElementById("goal-modal");
+      const body = document.getElementById("goalModalBody");
+      const protocolIndex = Number(block.dataset.protocolIndex);
+      const goalName = block.dataset.goalName || "";
+      const protoTitle = localStorage.getItem(`protocol${protocolIndex}_title`) || `Протокол ${protocolIndex}`;
+
+      // Сегодняшние нажатия — из самих кнопок, как и проценты на карточке.
+      const success = countOf(block, "btn-success");
+      const prompts = countOf(block, "btn-prompt");
+      const errors = countOf(block, "btn-error");
+      const total = success + prompts + errors;
+      const todayPercent = total ? Math.round((success / total) * 100) : null;
+
+      // Прошлые занятия — из истории, по ИМЕНИ цели: так занятие не потеряется,
+      // если список целей менялся (см. goalValueAt).
+      const rows = getHistory()
+        .map((session) => ({
+          date: session.date,
+          percent: goalValueAt(session, protocolIndex, goalName),
+          prompts: goalPromptAt(session, protocolIndex, goalName)
+        }))
+        .filter((row) => row.percent != null);
+
+      const values = rows.map((r) => r.percent);
+      const trend = goalTrendStatus(values);
+      const introDate = localStorage.getItem(`protocol${protocolIndex}_goal${block.dataset.goalId}_introDate`) || "";
+      const masteryDate = localStorage.getItem(`protocol${protocolIndex}_goal${block.dataset.goalId}_masteryDate`) || "";
+
+      body.innerHTML = "";
+
+      const title = document.createElement("h3");
+      title.className = "gm-title";
+      title.textContent = goalName;
+      const proto = document.createElement("p");
+      proto.className = "gm-proto";
+      proto.textContent = protoTitle;
+      body.append(title, proto);
+
+      const today = document.createElement("div");
+      today.className = "gm-today";
+      today.innerHTML = total
+        ? `<span>Сегодня:</span><b>${todayPercent}%</b><span>+ ${success} · P ${prompts} · − ${errors}</span>`
+        : "<span>Сегодня по этой цели ещё не отмечали.</span>";
+      body.append(today);
+
+      const head = document.createElement("p");
+      head.className = "gm-section";
+      head.textContent = `Прошлые занятия${values.length ? ` · ${values.length} ${sessionsWord(values.length)}` : ""}`;
+      body.append(head);
+
+      if (values.length) {
+        // График тот же, что раньше стоял на карточке: здесь ему самое место.
+        body.append(buildSparkline(values));
+        if (trend) {
+          const chip = document.createElement("span");
+          chip.className = "gm-trend";
+          chip.textContent = trend.text;
+          chip.title = trend.title;
+          body.append(chip);
+        }
+        const table = document.createElement("table");
+        table.className = "gm-table";
+        table.innerHTML = rows
+          .slice(-10)
+          .reverse()
+          .map(
+            (r) => `<tr><td>${escapeHtml(r.date)}</td>` +
+              `<td class="gm-pct" style="color:${r.percent >= 80 ? "var(--mastered)" : r.percent < 50 ? "var(--low-ink)" : "var(--text)"}">${r.percent}%</td>` +
+              `<td class="gm-prompts">${escapeHtml(r.prompts || "")}</td></tr>`
+          )
+          .join("");
+        body.append(table);
+      } else {
+        const empty = document.createElement("p");
+        empty.className = "gm-empty";
+        empty.textContent = "Это первое занятие по цели — сравнивать пока не с чем.";
+        body.append(empty);
+      }
+
+      if (introDate || masteryDate) {
+        const dates = document.createElement("p");
+        dates.className = "gm-dates";
+        const human = (iso) => {
+          const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
+        };
+        dates.textContent =
+          (introDate ? `Введена: ${human(introDate)}. ` : "") +
+          (masteryDate ? `Освоена: ${human(masteryDate)}.` : "");
+        body.append(dates);
+      }
+
+      modal.style.display = "flex";
+    }
+
+    function closeGoalModal() {
+      document.getElementById("goal-modal").style.display = "none";
+      goalModalBlock = null;
+    }
+
+    function wireGoalModal() {
+      document.getElementById("goalModalClose").onclick = closeGoalModal;
+      document.getElementById("goalModalClear").onclick = () => {
+        const block = goalModalBlock;
+        closeGoalModal();
+        if (block) clearGoalCounts(block);
+      };
+    }
+
+    function wireGoalLongPress(label) {
       let timer = null;
       const cancel = () => {
         if (timer) {
@@ -3514,7 +3766,7 @@ ${extra}
           timer = null;
           if (document.body.classList.contains("editing")) return; // заблокировано
           clearTextSelection(); // см. кнопку «P»: iOS выделяет надпись
-          actions.hidden = false;
+          openGoalModal(label.closest(".block"));
           if (navigator.vibrate) navigator.vibrate(15);
         }, 450);
       });
@@ -3546,7 +3798,6 @@ ${extra}
       undoStack = undoStack.filter((item) => item.button.closest(".block") !== block);
       if (!undoStack.length) undoBanner.style.display = "none";
 
-      block.querySelector(".goal-actions").hidden = true;
       updatePercentages();
       updatePromptDetailsUI();
       saveProgress();
@@ -3752,8 +4003,8 @@ ${extra}
           setTimeout(() => {
             showToast(
               `🎉 Критерий освоения достигнут: ${mastered.join(", ")}. ` +
-                `Дата проставлена, цель перешла в блок «Генерализация» внизу — ` +
-                `проверьте навык в девяти условиях. Обсудите с супервизором новую цель.`,
+                `Дата проставлена. Цель осталась на занятии — когда решите, ` +
+                `что пора проверять обобщение, нажмите у неё «В обобщение».`,
               9000
             );
           }, 3200);
@@ -4256,6 +4507,7 @@ ${extra}
       document.getElementById("viewModeBtn").onclick = toggleViewMode;
       wireMenu();
       wireNote();
+      wireGoalModal();
       document.getElementById("prevGoalBtn").onclick = () => moveGoal(-1);
       document.getElementById("nextGoalBtn").onclick = () => moveGoal(1);
       sendBtn.onclick = openConfirmModal;
