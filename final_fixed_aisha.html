@@ -1108,6 +1108,24 @@
       z-index: 1000;
     }
 
+    #goal-selector-modal,
+    #prompt-modal,
+    #confirm-modal,
+    #note-modal,
+    #goal-modal {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    /* Заметку и выбор целей всё же надо уметь править — там поля ввода. */
+    #note-modal textarea,
+    #goal-selector-modal input,
+    .modal-content input {
+      -webkit-user-select: text;
+      user-select: text;
+    }
+
     .modal-content {
       background: var(--card);
       padding: 20px;
@@ -2610,7 +2628,7 @@
           // Критерий достигнут — предлагаем перевести цель в обобщение.
           // Решает терапист: раньше цель уходила вниз сама, и это застигало
           // врасплох посреди занятия.
-          if (isAwaitingGeneralization(i, goalId)) {
+          if ((mastered || isAwaitingGeneralization(i, goalId)) && !isGeneralizing(i, goalId)) {
             const offer = document.createElement("div");
             offer.className = "gen-offer";
             const offerText = document.createElement("span");
@@ -3736,6 +3754,8 @@ ${extra}
       }
 
       modal.style.display = "flex";
+      clearTextSelection();
+      setTimeout(clearTextSelection, 60); // iOS выделяет уже после показа
     }
 
     function closeGoalModal() {
@@ -3744,6 +3764,14 @@ ${extra}
     }
 
     function wireGoalModal() {
+      // Третья страховка от выделения на iPhone (после user-select: none в
+      // стилях и очистки при показе): снимаем выделение и на касании самого
+      // окна — тогда первый тап по кнопке точно сработает как нажатие.
+      ["goal-modal", "prompt-modal"].forEach((id) => {
+        const box = document.getElementById(id);
+        if (box) box.addEventListener("pointerdown", clearTextSelection);
+      });
+
       document.getElementById("goalModalClose").onclick = closeGoalModal;
       document.getElementById("goalModalClear").onclick = () => {
         const block = goalModalBlock;
@@ -4172,6 +4200,7 @@ ${extra}
             // уходит на его снятие, и приходится жать дважды.
             clearTextSelection();
             promptModal.style.display = "flex";
+            setTimeout(clearTextSelection, 60); // iOS выделяет уже после показа
           }, 450);
         };
 
