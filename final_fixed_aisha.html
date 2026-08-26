@@ -368,6 +368,47 @@
       max-width: 460px;
     }
 
+    /* Окно записи пробы: одно поле и два ответа. Всё остальное — лишние
+       движения посреди занятия. */
+    #gen-probe-modal .gp-goal {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0 0 12px;
+    }
+
+    #gen-probe-modal input {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      font-family: var(--font-body);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
+      background: var(--card);
+      color: var(--text);
+      margin-bottom: 14px;
+    }
+
+    #gen-probe-modal .gp-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    #gen-probe-modal .gp-buttons .btn {
+      margin: 0;
+      width: 100%;
+    }
+
+    .gp-ok {
+      background: var(--mastered);
+    }
+
+    .gp-fail {
+      background: var(--err);
+      color: var(--err-ink);
+      border: 1px solid var(--err-edge);
+    }
+
     .gm-title {
       font-family: var(--font-display);
       font-size: 19px;
@@ -1060,6 +1101,23 @@
       font-weight: 700;
     }
 
+    /* Проба была, но не получилось. Не красным: это рабочий результат
+       проверки, а не ошибка тераписта. Пунктир — «условие ещё открыто». */
+    .gen-chip.failed {
+      background: var(--err);
+      border-style: dashed;
+      border-color: var(--err-edge);
+      color: var(--err-ink);
+      font-weight: 600;
+    }
+
+    /* Пустая клетка — приглашение записать пробу, а не кнопка-невидимка. */
+    .gen-chip:not(.done):not(.failed) {
+      border-style: dashed;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
     .gen-actions {
       display: flex;
       gap: 8px;
@@ -1104,7 +1162,8 @@
     #prompt-modal,
     #confirm-modal,
     #note-modal,
-    #goal-modal {
+    #goal-modal,
+    #gen-probe-modal {
       display: none;
       position: fixed;
       inset: 0;
@@ -1119,7 +1178,8 @@
     #prompt-modal,
     #confirm-modal,
     #note-modal,
-    #goal-modal {
+    #goal-modal,
+    #gen-probe-modal {
       -webkit-user-select: none;
       user-select: none;
       -webkit-touch-callout: none;
@@ -1253,6 +1313,21 @@
         <p class="prompt-cap">Другой исход</p>
         <button class="btn btn-error-choice" type="button" onclick="selectError()">Ошибка — не выполнил</button>
         <button class="btn btn-primary" type="button" onclick="closePromptModal()">Отмена</button>
+      </div>
+    </div>
+
+    <div id="gen-probe-modal">
+      <div class="modal-content">
+        <h3 id="genProbeTitle">Условие</h3>
+        <p class="gp-goal" id="genProbeGoal"></p>
+        <input id="genProbeText" type="text" list="genProbeList" autocomplete="off" />
+        <datalist id="genProbeList"></datalist>
+        <div class="gp-buttons">
+          <button class="btn gp-ok" type="button" id="genProbeOk">Получилось</button>
+          <button class="btn gp-fail" type="button" id="genProbeFail">Не получилось</button>
+        </div>
+        <button class="btn btn-secondary" type="button" id="genProbeClear" hidden>Стереть пробу</button>
+        <button class="btn btn-secondary" type="button" id="genProbeCancel">Отмена</button>
       </div>
     </div>
 
@@ -3047,16 +3122,27 @@
         let genRows = "";
         genGoals.forEach((goal) => {
           const done = genDoneCount(goal.log);
-          const parts = GEN_CATS.map(
-            (cat) => `${cat.label.toLowerCase()} ${goal.log[cat.key].filter(Boolean).length}/${GEN_SLOTS}`
-          ).join(", ");
+          // Условия словами: родителю «стимулы 2/3» ничего не говорит,
+          // а «мяч, кубик» — говорит.
+          const passed = [];
+          const failed = [];
+          GEN_CATS.forEach((cat) => {
+            goal.log[cat.key].forEach((slot, n) => {
+              if (!slot) return;
+              const label = slot.t || genPlanLabels(goal.protocolIndex, goal.goalId, cat)[n];
+              (slot.ok ? passed : failed).push(label);
+            });
+          });
           const status = done >= GEN_TOTAL ? "навык обобщён" : "проверка продолжается";
           genRows += `<tr><td>${escapeHtml(goal.goalName)}<br><span class="off">${escapeHtml(goal.protocolTitle)}</span></td>` +
-            `<td class="num">${done} из ${GEN_TOTAL}</td><td>${parts}</td><td>${status}</td></tr>`;
+            `<td class="num">${done} из ${GEN_TOTAL}</td>` +
+            `<td>${passed.length ? escapeHtml(passed.join(", ")) : "—"}` +
+            `${failed.length ? `<br><span class="off">пока не получилось: ${escapeHtml(failed.join(", "))}</span>` : ""}</td>` +
+            `<td>${status}</td></tr>`;
         });
         tables += `<section class="proto"><h3>Перенос навыков в жизнь</h3>
           <p>Освоенный навык проверяют в разных условиях: с тремя разными материалами, в трёх местах и с тремя людьми — всего девять проверок. Так видно, что ребёнок умеет пользоваться навыком не только за столом с одним человеком.</p>
-          <div class="scroll"><table class="hist"><thead><tr><th>Навык</th><th>Проверено</th><th>По условиям</th><th>Статус</th></tr></thead><tbody>${genRows}</tbody></table></div>
+          <div class="scroll"><table class="hist"><thead><tr><th>Навык</th><th>Проверено</th><th>Где получилось</th><th>Статус</th></tr></thead><tbody>${genRows}</tbody></table></div>
         </section>`;
       }
 
@@ -3292,13 +3378,28 @@ ${extra}
     // 3 человека. Названия условий терапист перечисляет через запятую на
     // «Настройке» (поля генерализации) — это ПЛАН; здесь отмечается ФАКТ.
     const GEN_CATS = [
-      { key: "stim", storeKey: "genStim", label: "Стимулы" },
-      { key: "place", storeKey: "genPlace", label: "Места" },
-      { key: "people", storeKey: "genPeople", label: "Люди" }
+      { key: "stim", storeKey: "genStim", label: "Стимулы", one: "С каким материалом?", placeholder: "мяч, кубик, карточка…" },
+      { key: "place", storeKey: "genPlace", label: "Места", one: "В каком месте?", placeholder: "коридор, дом, площадка…" },
+      { key: "people", storeKey: "genPeople", label: "Люди", one: "С кем?", placeholder: "мама, второй терапист…" }
     ];
     const GEN_SLOTS = 3; // условий в каждой категории
 
+    // Одна клетка обобщения. Раньше здесь лежала просто дата успешной пробы.
+    // С 21.08.2026 храним запись: {d: дата, t: что это было, ok: получилось}.
+    // Старый формат (строка-дата) читаем как успешную пробу без подписи —
+    // на планшетах уже есть отмеченные условия, терять их нельзя.
+    function normGenSlot(value) {
+      if (!value) return null;
+      if (typeof value === "string") return { d: value, t: "", ok: true };
+      if (typeof value === "object" && value.d) {
+        return { d: value.d, t: String(value.t || ""), ok: value.ok !== false };
+      }
+      return null;
+    }
+
     // План: «мяч, кубик, машинка» → подписи чипов. Не заполнен — «1 / 2 / 3».
+    // Поля плана убраны с «Настройки», но у старых целей они могут быть
+    // заполнены — тогда подпись берём оттуда.
     function genPlanLabels(i, goalId, cat) {
       const raw = localStorage.getItem(`protocol${i}_goal${goalId}_${cat.storeKey}`) || "";
       const parts = raw.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
@@ -3313,7 +3414,7 @@ ${extra}
         const saved = JSON.parse(localStorage.getItem(`protocol${i}_goal${goalId}_genLog`) || "{}");
         GEN_CATS.forEach((cat) => {
           if (Array.isArray(saved[cat.key])) {
-            base[cat.key] = Array.from({ length: GEN_SLOTS }, (_, n) => saved[cat.key][n] || null);
+            base[cat.key] = Array.from({ length: GEN_SLOTS }, (_, n) => normGenSlot(saved[cat.key][n]));
           }
         });
       } catch {
@@ -3326,9 +3427,18 @@ ${extra}
       localStorage.setItem(`protocol${i}_goal${goalId}_genLog`, JSON.stringify(log));
     }
 
+    // Условие считается пройденным только при успешной пробе. Неудачная
+    // запись остаётся в журнале и уходит в данные, но девятку не закрывает.
     function genDoneCount(log) {
       return GEN_CATS.reduce(
-        (sum, cat) => sum + log[cat.key].filter(Boolean).length,
+        (sum, cat) => sum + log[cat.key].filter((slot) => slot && slot.ok).length,
+        0
+      );
+    }
+
+    function genFailCount(log) {
+      return GEN_CATS.reduce(
+        (sum, cat) => sum + log[cat.key].filter((slot) => slot && !slot.ok).length,
         0
       );
     }
@@ -3446,7 +3556,7 @@ ${extra}
       const hint = document.createElement("div");
       hint.className = "gen-hint";
       hint.textContent =
-        "Навык считается обобщённым, когда получился в девяти условиях: с тремя разными материалами, в трёх местах и с тремя людьми. Отмечайте условие, когда проба прошла успешно; нажать повторно — снять отметку. Что именно использовать, перечислите через запятую в полях генерализации на «Настройке».";
+        "Навык считается обобщённым, когда получился в девяти условиях: с тремя разными материалами, в трёх местах и с тремя людьми. Нажмите «+», напишите, что это было — «коридор», «бабушка», — и отметьте, получилось или нет. Неудачная проба тоже записывается: она не закрывает условие, но остаётся в данных.";
       body.append(hint);
 
       goals.forEach((goal) => {
@@ -3479,15 +3589,18 @@ ${extra}
 
           const labels = genPlanLabels(goal.protocolIndex, goal.goalId, cat);
           for (let n = 0; n < GEN_SLOTS; n += 1) {
-            const marked = goal.log[cat.key][n];
+            const probe = goal.log[cat.key][n];
             const chip = document.createElement("button");
             chip.type = "button";
-            chip.className = `gen-chip${marked ? " done" : ""}`;
-            chip.textContent = labels[n];
-            chip.title = marked
-              ? `Проба прошла ${marked} — нажмите, чтобы снять отметку`
-              : "Отметить успешную пробу в этом условии";
-            chip.onclick = () => toggleGenProbe(goal, cat.key, n);
+            chip.className = "gen-chip" + (probe ? (probe.ok ? " done" : " failed") : "");
+            // Пустая клетка — плюс: место, куда записывают условие.
+            // Заполненная — само условие словами (или подпись из старого
+            // плана, если проба отмечена ещё до 21.08.2026).
+            chip.textContent = probe ? (probe.t || labels[n]) : "+";
+            chip.title = probe
+              ? `${probe.ok ? "Получилось" : "Не получилось"} ${probe.d} — нажмите, чтобы изменить`
+              : "Записать пробу в этом условии";
+            chip.onclick = () => openGenProbe(goal, cat.key, n);
             row.append(chip);
           }
           card.append(row);
@@ -3541,7 +3654,7 @@ ${extra}
         const saved = JSON.parse(localStorage.getItem(`protocol${i}_goal${goalId}_genSent`) || "{}");
         GEN_CATS.forEach((cat) => {
           if (Array.isArray(saved[cat.key])) {
-            base[cat.key] = Array.from({ length: GEN_SLOTS }, (_, n) => saved[cat.key][n] || null);
+            base[cat.key] = Array.from({ length: GEN_SLOTS }, (_, n) => normGenSlot(saved[cat.key][n]));
           }
         });
       } catch {
@@ -3562,14 +3675,19 @@ ${extra}
           for (let n = 0; n < GEN_SLOTS; n += 1) {
             const now = goal.log[cat.key][n];
             const was = sent[cat.key][n];
-            if (now === was) continue;
+            // Сравниваем содержимое: изменилось условие или исход — это
+            // новая строка, повтор одного и того же — нет.
+            const same = JSON.stringify(now) === JSON.stringify(was);
+            if (same) continue;
             rows.push({
               protocol: goal.protocolTitle,
               goal: goal.goalName,
               category: cat.label,
-              condition: labels[n],
-              mark: now ? "проба пройдена" : "отметка снята",
-              date: now || getSessionDateForServer(),
+              // Что именно проверяли, словами. У проб, отмеченных до
+              // 21.08.2026, подписи нет — тогда старый план или номер.
+              condition: (now && now.t) || labels[n],
+              mark: !now ? "отметка снята" : now.ok ? "проба пройдена" : "проба не прошла",
+              date: (now && now.d) || getSessionDateForServer(),
               progress: status
             });
           }
@@ -3590,10 +3708,65 @@ ${extra}
     }
 
     // Отметить/снять пробу. Дата — системная, как и везде в приложении.
-    function toggleGenProbe(goal, catKey, slot) {
+    // Запись пробы: терапист называет условие («коридор», «бабушка») и
+    // говорит, получилось или нет. Заранее план не составляем — на «Настройке»
+    // осталась только дата обобщения.
+    let genProbeTarget = null;
+
+    function openGenProbe(goal, catKey, slot) {
+      const cat = GEN_CATS.find((c) => c.key === catKey);
       const log = getGenLog(goal.protocolIndex, goal.goalId);
-      const was = log[catKey][slot];
-      log[catKey][slot] = was ? null : getSessionDateForServer();
+      const current = log[catKey][slot];
+      genProbeTarget = { goal, catKey, slot };
+
+      document.getElementById("genProbeTitle").textContent = cat.one;
+      document.getElementById("genProbeGoal").textContent = goal.goalName;
+
+      const field = document.getElementById("genProbeText");
+      field.value = current ? current.t : "";
+      field.placeholder = cat.placeholder;
+
+      // Подсказываем то, что уже называли раньше по этому же виду условий:
+      // терапист печатает «коридор» один раз, дальше выбирает из списка.
+      const list = document.getElementById("genProbeList");
+      list.innerHTML = genKnownLabels(catKey)
+        .map((value) => `<option value="${escapeHtml(value)}"></option>`)
+        .join("");
+
+      document.getElementById("genProbeClear").hidden = !current;
+      document.getElementById("gen-probe-modal").style.display = "flex";
+      clearTextSelection();
+      setTimeout(clearTextSelection, 60);
+      setTimeout(() => field.focus(), 80);
+    }
+
+    function closeGenProbe() {
+      document.getElementById("gen-probe-modal").style.display = "none";
+      genProbeTarget = null;
+    }
+
+    // Все условия, которые уже называли по этому виду — по всем целям ребёнка.
+    function genKnownLabels(catKey) {
+      const seen = new Set();
+      generalizingGoals().forEach((goal) => {
+        goal.log[catKey].forEach((slot) => {
+          if (slot && slot.t) seen.add(slot.t);
+        });
+      });
+      return [...seen].sort((a, b) => a.localeCompare(b));
+    }
+
+    function saveGenProbe(ok) {
+      if (!genProbeTarget) return;
+      const { goal, catKey, slot } = genProbeTarget;
+      const text = document.getElementById("genProbeText").value.trim();
+      closeGenProbe();
+      setGenProbe(goal, catKey, slot, ok === null ? null : { d: getSessionDateForServer(), t: text, ok });
+    }
+
+    function setGenProbe(goal, catKey, slot, value) {
+      const log = getGenLog(goal.protocolIndex, goal.goalId);
+      log[catKey][slot] = value;
       setGenLog(goal.protocolIndex, goal.goalId, log);
 
       const count = genDoneCount(log);
@@ -3788,6 +3961,20 @@ ${extra}
     function closeGoalModal() {
       document.getElementById("goal-modal").style.display = "none";
       goalModalBlock = null;
+    }
+
+    function wireGenProbeModal() {
+      document.getElementById("genProbeOk").onclick = () => saveGenProbe(true);
+      document.getElementById("genProbeFail").onclick = () => saveGenProbe(false);
+      document.getElementById("genProbeClear").onclick = () => saveGenProbe(null);
+      document.getElementById("genProbeCancel").onclick = closeGenProbe;
+      // Enter в поле = «Получилось»: самый частый исход, лишний тап ни к чему.
+      document.getElementById("genProbeText").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          saveGenProbe(true);
+        }
+      });
     }
 
     function wireGoalModal() {
@@ -4564,6 +4751,7 @@ ${extra}
       wireMenu();
       wireNote();
       wireGoalModal();
+      wireGenProbeModal();
       document.getElementById("prevGoalBtn").onclick = () => moveGoal(-1);
       document.getElementById("nextGoalBtn").onclick = () => moveGoal(1);
       sendBtn.onclick = openConfirmModal;

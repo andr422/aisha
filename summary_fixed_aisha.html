@@ -665,8 +665,7 @@
 
     .goal-input,
     .intro-date,
-    .mastery-date,
-    .gen-input {
+    .mastery-date {
       padding: 8px;
       font-size: 16px;
       border: 1px solid var(--add-line);
@@ -683,10 +682,20 @@
       border-color: var(--add-line);
     }
 
-    .gen-input {
-      border-color: var(--line);
-      width: calc((100% - 16px) / 3);
-      margin-right: 8px;
+    .gen-done-label {
+      align-self: center;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .gen-done-date {
+      padding: 8px;
+      font-size: 16px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--soft);
+      color: var(--text);
+      width: 180px;
     }
 
     .row {
@@ -1348,6 +1357,9 @@
           (localStorage.getItem(`protocol${i}_goal${j}`) || "").trim() ||
             localStorage.getItem(`protocol${i}_goal${j}_introDate`) ||
             localStorage.getItem(`protocol${i}_goal${j}_masteryDate`) ||
+            (localStorage.getItem(`protocol${i}_goal${j}_genDoneDate`) || "").trim() ||
+            // Старые поля плана: на экране их больше нет, но у давних целей
+            // они могут быть заполнены — цель с ними не пустая.
             (localStorage.getItem(`protocol${i}_goal${j}_genStim`) || "").trim() ||
             (localStorage.getItem(`protocol${i}_goal${j}_genPlace`) || "").trim() ||
             (localStorage.getItem(`protocol${i}_goal${j}_genPeople`) || "").trim()
@@ -1392,28 +1404,27 @@
 
         group.appendChild(rowMain);
 
+        // Раньше здесь были три поля плана обобщения (материалы, места,
+        // люди). С 21.08.2026 условия записывает терапист прямо на «Сборе»,
+        // когда проба случилась, — планировать их заранее оказалось лишним
+        // шагом. Осталась одна дата: она проставляется сама, когда навык
+        // получился во всех девяти условиях.
         const rowGen = document.createElement("div");
         rowGen.className = "row";
-        // План генерализации: по ТРИ условия через запятую. Эти подписи
-        // становятся кнопками проб в блоке «Генерализация» на «Сборе».
-        const GEN_FIELDS = [
-          { type: "Stim", placeholder: "3 материала: мяч, кубик, машинка", title: "Три разных материала или стимула через запятую" },
-          { type: "Place", placeholder: "3 места: класс, коридор, дом", title: "Три разных места через запятую" },
-          { type: "People", placeholder: "3 человека: мама, терапист 2, бабушка", title: "Три разных человека через запятую" }
-        ];
-        GEN_FIELDS.forEach(({ type, placeholder, title }) => {
-          const input = document.createElement("input");
-          input.type = "text";
-          input.className = "gen-input";
-          input.dataset.protocolIndex = i;
-          input.dataset.goalIndex = j;
-          input.dataset.genType = type.toLowerCase();
-          input.placeholder = placeholder;
-          input.title = title;
-          input.value = localStorage.getItem(`protocol${i}_goal${j}_gen${type}`) || "";
-          rowGen.appendChild(input);
-        });
 
+        const genLabel = document.createElement("span");
+        genLabel.className = "gen-done-label";
+        genLabel.textContent = "Обобщено:";
+
+        const genDone = document.createElement("input");
+        genDone.type = "date";
+        genDone.className = "gen-done-date";
+        genDone.readOnly = true;
+        genDone.title = "Ставится сама, когда навык получился во всех девяти условиях на «Сборе». Вручную не заполняется.";
+        genDone.value = localStorage.getItem(`protocol${i}_goal${j}_genDoneDate`) || "";
+        genDone.placeholder = "ещё не обобщено";
+
+        rowGen.append(genLabel, genDone);
         group.appendChild(rowGen);
         return group;
       }
@@ -2533,11 +2544,8 @@
             return;
           }
 
-          if (el.classList.contains("gen-input")) {
-            const type = el.dataset.genType;
-            const normalizedType = type.charAt(0).toUpperCase() + type.slice(1);
-            save(`protocol${protocolIndex}_goal${goalIndex}_gen${normalizedType}`);
-          }
+          // Дата обобщения только показывается: её ставит «Сбор», когда
+          // закрыты все девять условий. Руками её не правят.
         };
 
         container.addEventListener("input", handler);
