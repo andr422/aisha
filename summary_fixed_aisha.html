@@ -330,6 +330,13 @@
 
     /* Оформление: выбор темы. Кнопки крупные — их жмут пальцем на планшете,
        а кружки слева показывают фон, акцент и заливку кнопок сбора. */
+    /* Пункт «Кто работает» спрятан 26.08.2026: у кнопок меню свой display,
+       и атрибута hidden им мало. Вернуть — убрать это правило. Механика
+       подписи при этом жива: пустое имя = пакеты без автора, как раньше. */
+    #staffBtn {
+      display: none;
+    }
+
     #themeBox {
       background: var(--card);
       border: 1px solid var(--line);
@@ -737,10 +744,27 @@
         <button type="button" id="importBtn">⬆ Импорт настроек</button>
         <button type="button" id="templatesBtn">📚 Шаблоны протоколов</button>
         <button type="button" id="backupBtn">🗄 Бэкап планшета</button>
+        <!-- СПРЯТАНО 26.08.2026 по решению пользователя: подпись планшета
+             вводить пока не просим, чтобы не давать терапистам лишний шаг
+             перед входом по логину. Механика рабочая и остаётся на месте:
+             пустое имя = пакеты уходят без автора, как раньше. Вернуть —
+             снять hidden. -->
+        <button type="button" id="staffBtn" hidden>👤 Кто работает</button>
         <button type="button" id="themeBtn">🎨 Оформление</button>
       </div>
     </div>
     <input type="file" id="importFile" accept="application/json,.json" style="display:none" />
+  </div>
+
+  <!-- Само поле тоже остаётся в разметке: обработчики на него навешаны,
+       и без него страница бы ругалась в консоли. Открыть его сейчас нечем —
+       кнопка скрыта. -->
+  <div id="staffBox" hidden>
+    <div class="hint">Кто работает на <b>этом планшете</b>. Имя уходит вместе с каждым занятием — по нему видно, кто вёл. Это настройка планшета, а не ребёнка: при переключении между детьми она не меняется и в данные ребёнка не входит. В полную копию планшета попадает — копия делается со всего устройства.</div>
+    <div class="row">
+      <input type="text" id="staffName" placeholder="Имя и фамилия, например: Мария Т." autocomplete="off" />
+    </div>
+    <div class="hint" id="staffHint"></div>
   </div>
 
   <div id="themeBox" hidden>
@@ -2263,6 +2287,33 @@
           const box = document.getElementById("templatesBox");
           box.hidden = !box.hidden;
         };
+        // Подпись планшета: имя того, кто на нём работает. Настройка
+        // УСТРОЙСТВА — как тема: не входит в данные ребёнка, не переносится
+        // с профилем и не попадает в резервную копию. Временная мера до
+        // входа по логину: её никто не проверяет, но она сразу отвечает на
+        // вопрос «кто вёл занятие».
+        const staffField = document.getElementById("staffName");
+        const staffHint = document.getElementById("staffHint");
+        const showStaffHint = () => {
+          const value = (localStorage.getItem("aba_staff_name") || "").trim();
+          staffHint.textContent = value
+            ? `Занятия с этого планшета подписываются: ${value}`
+            : "Пока не заполнено — занятия уходят без автора.";
+        };
+        staffField.value = localStorage.getItem("aba_staff_name") || "";
+        showStaffHint();
+        staffField.oninput = () => {
+          const value = staffField.value.trim();
+          if (value) localStorage.setItem("aba_staff_name", value);
+          else localStorage.removeItem("aba_staff_name");
+          showStaffHint();
+        };
+        document.getElementById("staffBtn").onclick = () => {
+          const box = document.getElementById("staffBox");
+          box.hidden = !box.hidden;
+          if (!box.hidden) staffField.focus();
+        };
+
         document.getElementById("themeBtn").onclick = () => {
           const box = document.getElementById("themeBox");
           box.hidden = !box.hidden;

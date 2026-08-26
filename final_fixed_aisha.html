@@ -1387,7 +1387,7 @@
     // пока сервер не отработает без потерь. Ключ в адресе закрывает приёмник
     // от случайных запросов из интернета; настоящий вход по логину будет позже.
     // Чтобы временно отключить сервер, достаточно оставить строку пустой.
-    const SERVER_ENDPOINT = "https://api.abachecklist.ru/api/ingest?k=5b8cdc533b88a0451b6ed3bc80259cd6";
+    const SERVER_ENDPOINT = "https://api.abachecklist.ru/api/ingest?k=ea3af4b5fdb1b122fc95685874653e83";
     // Коды, которые выбирают в окне под долгим нажатием «P/−».
     // «/» — не подсказка, а частично верный ответ; в проценте считается
     // как подсказка (в знаменателе, не в числителе): самостоятельным
@@ -1688,11 +1688,29 @@
       });
     }
 
+    // Подпись планшета: кто на нём работает. Со входом по логину сюда будет
+    // ложиться ИМЯ ИЗ УЧЁТНОЙ ЗАПИСИ (не логин и не почта) — механика та же,
+    // меняется только источник; ручное поле останется запасным вариантом.
+    // Имя в учётке обязано совпадать с тем, что проставлено старым занятиям
+    // («Валерия Акимова», «Суайбат Исаева»): ключ занятия включает подпись.
+    // Настройка УСТРОЙСТВА, не ребёнка: в данные ребёнка и в экспорт его
+    // настроек не входит (в полную копию планшета — входит, она про
+    // устройство). Пустая — пакет уходит без автора, как раньше.
+    function staffName() {
+      try {
+        return (localStorage.getItem("aba_staff_name") || "").trim();
+      } catch {
+        return "";
+      }
+    }
+
     function queueAdd(item) {
       // Номер пакета ОДИН на оба адреса: так строку в таблице и запись на
       // сервере можно сопоставить, а защита от дублей на каждой стороне
       // работает независимо.
+      const staff = staffName();
       const payload = { uid: packetUid(), ...item.payload };
+      if (staff) payload.staff = staff;
       if (window.__abaIdbFailed) {
         return sendDirect({ endpoint: item.endpoint, payload });
       }
@@ -4268,6 +4286,46 @@ ${extra}
       }
     }
 
+    // Что именно считаем «настройкой ребёнка»: протоколы, цели, даты и
+    // журнал обобщения — всё, чего на сервере нет ни в каком виде. Счётчики
+    // текущего занятия сюда НЕ входят: это временное состояние.
+    function buildChildConfig() {
+      try {
+        const protocols = [];
+        const count = getProtocolsCount();
+        for (let i = 1; i <= count; i += 1) {
+          const goals = existingGoalIds(i).map((goalId) => ({
+            id: goalId,
+            name: localStorage.getItem(`protocol${i}_goal${goalId}`) || "",
+            introDate: localStorage.getItem(`protocol${i}_goal${goalId}_introDate`) || "",
+            masteryDate: localStorage.getItem(`protocol${i}_goal${goalId}_masteryDate`) || "",
+            genDoneDate: localStorage.getItem(`protocol${i}_goal${goalId}_genDoneDate`) || "",
+            genHold: localStorage.getItem(`protocol${i}_goal${goalId}_genHold`) === "1",
+            keepDaily: localStorage.getItem(`protocol${i}_goal${goalId}_keepDaily`) === "1",
+            genLog: getGenLog(i, goalId)
+          }));
+          protocols.push({
+            index: i,
+            title: localStorage.getItem(`protocol${i}_title`) || "",
+            coldProbe: localStorage.getItem(`protocol${i}_coldProbe`) === "1",
+            selected: localStorage.getItem(`protocol${i}_selectedGoals`) || "",
+            goals
+          });
+        }
+
+        const lists = {};
+        ["abc_antecedents", "abc_behaviors", "abc_consequences", "freq_behaviors"].forEach((key) => {
+          const value = localStorage.getItem(key);
+          if (value) lists[key] = value;
+        });
+
+        return { version: 1, savedAt: new Date().toISOString(), protocols, lists };
+      } catch (err) {
+        console.error(err);
+        return null; // слепок не должен мешать отправке занятия
+      }
+    }
+
     async function finalizeSession() {
       const historyDate = getSessionDateForHistory();
       const serverDate = getSessionDateForServer();
@@ -4330,7 +4388,19 @@ ${extra}
         session.goalNames.push(protocolGoalNamesArr);
       }
 
-      // Пробы генерализации — отдельным пакетом на лист «Генерализация».
+        // Слепок настройки ребёнка — на сервер вместе с занятием.
+      // Зачем: замеры на сервере есть, а СПИСКА целей нет, и потеря планшета
+      // означала бы настройку заново (у активного ребёнка это десятки целей).
+      // Уходит ТОЛЬКО на наш сервер: Apps Script такого пакета не понимает,
+      // поэтому endpoint пустой — packetTargets отбросит пустой адрес.
+      const config = buildChildConfig();
+      if (config) {
+        sendPromises.push(
+          queueAdd({ endpoint: "", payload: { type: "config", child, date: serverDate, config } })
+        );
+      }
+
+    // Пробы генерализации — отдельным пакетом на лист «Генерализация».
       // Отправляем только изменения с прошлого раза (см. collectGenRows).
       const genRows = collectGenRows();
       if (genRows.length) {
