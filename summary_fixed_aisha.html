@@ -750,6 +750,7 @@
              пустое имя = пакеты уходят без автора, как раньше. Вернуть —
              снять hidden. -->
         <button type="button" id="staffBtn" hidden>👤 Кто работает</button>
+        <button type="button" id="authBtn">🔑 Вход</button>
         <button type="button" id="themeBtn">🎨 Оформление</button>
       </div>
     </div>
@@ -759,6 +760,19 @@
   <!-- Само поле тоже остаётся в разметке: обработчики на него навешаны,
        и без него страница бы ругалась в консоли. Открыть его сейчас нечем —
        кнопка скрыта. -->
+  <div id="authBox" hidden>
+    <div class="hint" id="authHint"></div>
+    <div class="row" id="authForm">
+      <input type="email" id="authEmail" placeholder="Рабочая почта" autocomplete="username" />
+      <input type="password" id="authPassword" placeholder="Пароль" autocomplete="current-password" />
+      <button type="button" class="btn btn-primary" id="authSubmit">Войти</button>
+    </div>
+    <div class="row" id="authLogoutRow" hidden>
+      <button type="button" class="btn btn-secondary" id="authLogout">Выйти</button>
+    </div>
+    <div class="hint">Вход нужен, чтобы у занятий появился автор. <b>Сбор данных от него не зависит:</b> кнопки на «Сборе» работают и без входа, и без интернета — занятие уйдёт, когда появится связь. Пароль спросите у руководителя.</div>
+  </div>
+
   <div id="staffBox" hidden>
     <div class="hint">Кто работает на <b>этом планшете</b>. Имя уходит вместе с каждым занятием — по нему видно, кто вёл. Это настройка планшета, а не ребёнка: при переключении между детьми она не меняется и в данные ребёнка не входит. В полную копию планшета попадает — копия делается со всего устройства.</div>
     <div class="row">
@@ -1891,9 +1905,15 @@
           .catch(() => []);
       }
 
+      // Ключи, которым не место в файле копии: это не данные, а доступ.
+      // Копию носят на флешке и пересылают — вместе с токеном уехал бы и
+      // вход на сервер, причём действующий.
+      const НЕ_В_КОПИЮ = ["aba_auth"];
+
       async function backupDevice() {
         const ls = {};
         Object.keys(localStorage).forEach((k) => {
+          if (НЕ_В_КОПИЮ.includes(k)) return;
           ls[k] = localStorage.getItem(k);
         });
 
@@ -1938,10 +1958,14 @@
           decoded.push([key, val && val.__blob ? await dataUrlToBlob(val.data) : val]);
         }
 
-        // localStorage: полностью заменяем.
+        // localStorage: полностью заменяем. Вход НЕ трогаем: восстановление
+        // делают на новом планшете, и выкидывать только что выполненный вход
+        // из-за старой копии — лишний шаг для тераписта.
+        const входБыл = localStorage.getItem("aba_auth");
         localStorage.clear();
         const ls = payload.localStorage || {};
         Object.keys(ls).forEach((k) => localStorage.setItem(k, ls[k]));
+        if (входБыл) localStorage.setItem("aba_auth", входБыл);
 
         // IndexedDB history: чистим и переписываем в одной транзакции.
         const db = await openHistDB();
@@ -2308,6 +2332,69 @@
           else localStorage.removeItem("aba_staff_name");
           showStaffHint();
         };
+        // ── Вход по логину ────────────────────────────────────────────
+        const authBox = document.getElementById("authBox");
+        const authHint = document.getElementById("authHint");
+        const authForm = document.getElementById("authForm");
+        const authLogoutRow = document.getElementById("authLogoutRow");
+
+        const рисоватьВход = () => {
+          const кто = window.abaAuth ? window.abaAuth.get() : null;
+          authHint.innerHTML = кто
+            ? `Вошли: <b>${кто.name || кто.email}</b>. Занятия с этого планшета подписываются этим именем.`
+            : "Не вошли. Занятия уходят без автора — данные не теряются, но в кабинете не видно, кто вёл.";
+          authForm.hidden = Boolean(кто);
+          authLogoutRow.hidden = !кто;
+        };
+
+        document.getElementById("authBtn").onclick = () => {
+          authBox.hidden = !authBox.hidden;
+          if (!authBox.hidden) {
+            рисоватьВход();
+            const поле = document.getElementById("authEmail");
+            if (!poleЗаполнено(поле)) поле.focus();
+          }
+        };
+
+        function poleЗаполнено(поле) {
+          return Boolean(поле && поле.value.trim());
+        }
+
+        document.getElementById("authSubmit").onclick = async () => {
+          const кнопка = document.getElementById("authSubmit");
+          const email = document.getElementById("authEmail").value;
+          const пароль = document.getElementById("authPassword").value;
+          if (!email.trim() || !пароль) {
+            authHint.textContent = "Введите почту и пароль.";
+            return;
+          }
+          кнопка.disabled = true;
+          const было = кнопка.textContent;
+          кнопка.textContent = "Входим…";
+          try {
+            const кто = await window.abaAuth.login(email, пароль);
+            document.getElementById("authPassword").value = "";
+            рисоватьВход();
+            showToast(`Здравствуйте, ${кто.name || кто.email}. Занятия теперь подписываются вашим именем.`);
+          } catch (err) {
+            authHint.textContent = err.message + ". Если сети нет — просто продолжайте работать, вход можно сделать позже.";
+          } finally {
+            кнопка.disabled = false;
+            кнопка.textContent = было;
+          }
+        };
+
+        document.getElementById("authLogout").onclick = () => {
+          window.abaAuth.logout();
+          рисоватьВход();
+          showToast("Вышли. Занятия будут уходить без автора.");
+        };
+
+        рисоватьВход();
+        // Молча продлеваем вход при открытии страницы: если сервер сказал,
+        // что вход больше не годится, надпись сама это покажет.
+        if (window.abaAuth) window.abaAuth.refresh().then(рисоватьВход);
+
         document.getElementById("staffBtn").onclick = () => {
           const box = document.getElementById("staffBox");
           box.hidden = !box.hidden;
@@ -2723,6 +2810,7 @@
   </script>
   <script src="timer.js"></script>
   <script src="tabbar.js"></script>
+  <script src="auth.js"></script>
   <script src="tour.js"></script>
 </body>
 </html>

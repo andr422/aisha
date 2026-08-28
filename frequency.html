@@ -670,9 +670,14 @@
 
     // Честная отправка: обычный запрос, ответ читается (см. CONTEXT).
     async function sendPacket(endpoint, payload) {
+      const заголовки = { "Content-Type": "text/plain;charset=utf-8" };
+      // Своему серверу представляемся: он поставит автора из учётной записи.
+      if (window.abaAuth && SERVER_ENDPOINT && endpoint.indexOf(SERVER_ENDPOINT.split("?")[0]) === 0) {
+        Object.assign(заголовки, window.abaAuth.headers());
+      }
       const resp = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        headers: заголовки,
         body: JSON.stringify(payload),
         redirect: "follow"
       });
@@ -747,6 +752,9 @@
     // настроек не входит (в полную копию планшета — входит, она про
     // устройство). Пустая — пакет уходит без автора, как раньше.
     function staffName() {
+      // Вошли по логину — имя из учётной записи (подделать полем в пакете
+      // нельзя, сервер всё равно возьмёт своё). Не вошли — ручная подпись.
+      if (window.abaAuth) return window.abaAuth.name();
       try {
         return (localStorage.getItem("aba_staff_name") || "").trim();
       } catch {
@@ -1654,6 +1662,7 @@
   </script>
   <script src="timer.js"></script>
   <script src="tabbar.js"></script>
+  <script src="auth.js"></script>
   <script src="tour.js"></script>
 </body>
 </html>
