@@ -4296,44 +4296,10 @@ ${extra}
       }
     }
 
-    // Что именно считаем «настройкой ребёнка»: протоколы, цели, даты и
-    // журнал обобщения — всё, чего на сервере нет ни в каком виде. Счётчики
-    // текущего занятия сюда НЕ входят: это временное состояние.
+    // Слепок настройки собирает общий модуль config.js — им пользуется и
+    // «Настройка», где есть кнопка отправить настройку вручную.
     function buildChildConfig() {
-      try {
-        const protocols = [];
-        const count = getProtocolsCount();
-        for (let i = 1; i <= count; i += 1) {
-          const goals = existingGoalIds(i).map((goalId) => ({
-            id: goalId,
-            name: localStorage.getItem(`protocol${i}_goal${goalId}`) || "",
-            introDate: localStorage.getItem(`protocol${i}_goal${goalId}_introDate`) || "",
-            masteryDate: localStorage.getItem(`protocol${i}_goal${goalId}_masteryDate`) || "",
-            genDoneDate: localStorage.getItem(`protocol${i}_goal${goalId}_genDoneDate`) || "",
-            genHold: localStorage.getItem(`protocol${i}_goal${goalId}_genHold`) === "1",
-            keepDaily: localStorage.getItem(`protocol${i}_goal${goalId}_keepDaily`) === "1",
-            genLog: getGenLog(i, goalId)
-          }));
-          protocols.push({
-            index: i,
-            title: localStorage.getItem(`protocol${i}_title`) || "",
-            coldProbe: localStorage.getItem(`protocol${i}_coldProbe`) === "1",
-            selected: localStorage.getItem(`protocol${i}_selectedGoals`) || "",
-            goals
-          });
-        }
-
-        const lists = {};
-        ["abc_antecedents", "abc_behaviors", "abc_consequences", "freq_behaviors"].forEach((key) => {
-          const value = localStorage.getItem(key);
-          if (value) lists[key] = value;
-        });
-
-        return { version: 1, savedAt: new Date().toISOString(), protocols, lists };
-      } catch (err) {
-        console.error(err);
-        return null; // слепок не должен мешать отправке занятия
-      }
+      return window.abaConfig ? window.abaConfig.build() : null;
     }
 
     async function finalizeSession() {
@@ -4877,6 +4843,7 @@ ${extra}
   <script src="timer.js"></script>
   <script src="tabbar.js"></script>
   <script src="auth.js"></script>
+  <script src="config.js"></script>
   <script src="tour.js"></script>
 </body>
 </html>

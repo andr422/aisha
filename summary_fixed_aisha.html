@@ -768,6 +768,11 @@
       <button type="button" class="btn btn-primary" id="syncLoad">Загрузить</button>
     </div>
     <div class="hint" id="syncResult"></div>
+    <div class="hint" style="margin-top:14px">Обратная сторона: настройка попадает на сервер вместе с занятием. Если этот планшет занятий в новой версии ещё не отправлял, его ребёнка в списке выше не будет — отправьте настройку вручную.</div>
+    <div class="row">
+      <button type="button" class="btn btn-secondary" id="syncPush">⬆ Отправить настройку на сервер</button>
+    </div>
+    <div class="hint" id="syncPushResult"></div>
   </div>
 
   <div id="authBox" hidden>
@@ -2501,6 +2506,48 @@
           }
         };
 
+        // Отправка настройки вручную — обратная сторона загрузки. Ничего не
+        // перезаписывает на планшете, поэтому подтверждения не просим:
+        // просто кладём на сервер слепок текущего ребёнка.
+        document.getElementById("syncPush").onclick = async () => {
+          const кнопка = document.getElementById("syncPush");
+          const итог = document.getElementById("syncPushResult");
+          const кто = window.abaAuth && window.abaAuth.get();
+          if (!кто) {
+            итог.textContent = "Сначала войдите: меню ⋮ → «🔑 Вход».";
+            return;
+          }
+          const label = getChildLabel(getActiveChildId());
+          if (!label) {
+            итог.textContent = "Не понял, какой ребёнок открыт.";
+            return;
+          }
+          const config = window.abaConfig && window.abaConfig.build();
+          if (!config || !config.protocols.length) {
+            итог.textContent = `У «${label}» нет ни одного протокола — отправлять нечего.`;
+            return;
+          }
+          const целей = config.protocols.reduce((n, p) => n + (p.goals || []).length, 0);
+
+          кнопка.disabled = true;
+          итог.textContent = "Отправляю…";
+          try {
+            const resp = await fetch(SYNC_URL, {
+              method: "POST",
+              headers: Object.assign({ "Content-Type": "application/json" }, window.abaAuth.headers()),
+              body: JSON.stringify({ child: label, config })
+            });
+            const данные = await resp.json();
+            if (!resp.ok || !данные.ok) throw new Error(данные.error || `сервер ответил ${resp.status}`);
+            итог.textContent = `Готово: «${label}» — протоколов ${config.protocols.length}, целей ${целей}. Теперь этого ребёнка можно загрузить на другой планшет.`;
+            showToast("Настройка отправлена на сервер.");
+          } catch (err) {
+            итог.textContent = "Не получилось: " + err.message + " Нужен интернет.";
+          } finally {
+            кнопка.disabled = false;
+          }
+        };
+
         // История ребёнка из IndexedDB — чтобы показать в подтверждении,
         // сколько занятий сейчас на планшете.
         async function историяРебёнка(label) {
@@ -3033,6 +3080,7 @@
   <script src="timer.js"></script>
   <script src="tabbar.js"></script>
   <script src="auth.js"></script>
+  <script src="config.js"></script>
   <script src="tour.js"></script>
 </body>
 </html>
