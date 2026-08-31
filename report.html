@@ -161,7 +161,7 @@
       return;
     }
     if (err.forbidden) {
-      sheet.innerHTML = '<div class="err"><b>Отчёты открыты супервизорам и администратору.</b> ' + escapeHtml(err.message) + "</div>";
+      sheet.innerHTML = '<div class="err"><b>Отчёты открыты супервизорам и владельцу.</b> ' + escapeHtml(err.message) + "</div>";
       return;
     }
     sheet.innerHTML = '<div class="err"><b>Сервер не ответил.</b> ' + escapeHtml(err.message) + "</div>";
