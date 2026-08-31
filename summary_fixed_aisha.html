@@ -751,6 +751,10 @@
              снять hidden. -->
         <button type="button" id="staffBtn" hidden>👤 Кто работает</button>
         <button type="button" id="authBtn">🔑 Вход</button>
+        <!-- Кабинет виден только тому, кому он открыт: роль приходит вместе
+             со входом. Тераписту пункт не показываем вовсе — он вёл бы к
+             отказу сервера, а это не пункт меню, а тупик. -->
+        <button type="button" id="cabinetBtn" hidden>📊 Кабинет супервизора</button>
         <button type="button" id="syncBtn">⬇ Загрузить с сервера</button>
         <button type="button" id="themeBtn">🎨 Оформление</button>
       </div>
@@ -2390,6 +2394,7 @@
             const кто = await window.abaAuth.login(email, пароль);
             document.getElementById("authPassword").value = "";
             рисоватьВход();
+            обновитьКабинет();
             showToast(`Здравствуйте, ${кто.name || кто.email}. Занятия теперь подписываются вашим именем.`);
           } catch (err) {
             authHint.textContent = err.message + ". Если сети нет — просто продолжайте работать, вход можно сделать позже.";
@@ -2402,13 +2407,32 @@
         document.getElementById("authLogout").onclick = () => {
           window.abaAuth.logout();
           рисоватьВход();
+          обновитьКабинет();
           showToast("Вышли. Занятия будут уходить без автора.");
         };
 
+        // Пункт «Кабинет» появляется и исчезает вместе со входом.
+        function обновитьКабинет() {
+          const кто = window.abaAuth && window.abaAuth.get();
+          const роль = кто ? String(кто.role || "") : "";
+          document.getElementById("cabinetBtn").hidden = !(роль === "supervisor" || роль === "owner");
+        }
+
+        // Открываем в ТОМ ЖЕ окне: так кабинет работает внутри приложения и с
+        // тем же входом. В отдельной вкладке на iPad пришлось бы входить
+        // заново — у приложения с домашнего экрана своё хранилище.
+        document.getElementById("cabinetBtn").onclick = () => {
+          location.href = "cabinet.html";
+        };
+
         рисоватьВход();
+        обновитьКабинет();
         // Молча продлеваем вход при открытии страницы: если сервер сказал,
         // что вход больше не годится, надпись сама это покажет.
-        if (window.abaAuth) window.abaAuth.refresh().then(рисоватьВход);
+        if (window.abaAuth) window.abaAuth.refresh().then(() => {
+          рисоватьВход();
+          обновитьКабинет();
+        });
 
         // ── Загрузка настройки с сервера ──────────────────────────────
         // Осторожность здесь важнее удобства: операция ПЕРЕЗАПИСЫВАЕТ

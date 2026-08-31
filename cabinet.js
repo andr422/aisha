@@ -331,6 +331,7 @@ function renderTop(who, role) {
   const initials = (who || "").split(" ").map((s) => s[0]).join("").slice(0, 2).toUpperCase();
   return `<div class="topbar">
     <div class="brand">ABA Чек-лист <span>кабинет</span></div>
+    <nav class="topnav"><a href="index.html">‹ приложение</a></nav>
     <div class="who">
       <span>${escapeHtml(who || "")}${role ? ` · ${ROLE_NAME[role] || escapeHtml(role)}` : ""}</span>
       <span class="avatar">${initials}</span>
