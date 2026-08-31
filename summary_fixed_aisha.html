@@ -751,6 +751,7 @@
              снять hidden. -->
         <button type="button" id="staffBtn" hidden>👤 Кто работает</button>
         <button type="button" id="authBtn">🔑 Вход</button>
+        <button type="button" id="syncBtn">⬇ Загрузить с сервера</button>
         <button type="button" id="themeBtn">🎨 Оформление</button>
       </div>
     </div>
@@ -760,6 +761,15 @@
   <!-- Само поле тоже остаётся в разметке: обработчики на него навешаны,
        и без него страница бы ругалась в консоли. Открыть его сейчас нечем —
        кнопка скрыта. -->
+  <div id="syncBox" hidden>
+    <div class="hint" id="syncHint">Загрузка настройки ребёнка с сервера: протоколы, цели, даты, журнал обобщения и списки поведений. Нужна, когда планшет новый или его пришлось сбросить.</div>
+    <div class="row">
+      <select id="syncChild"><option value="">— выберите ребёнка —</option></select>
+      <button type="button" class="btn btn-primary" id="syncLoad">Загрузить</button>
+    </div>
+    <div class="hint" id="syncResult"></div>
+  </div>
+
   <div id="authBox" hidden>
     <div class="hint" id="authHint"></div>
     <div class="row" id="authForm">
@@ -2394,6 +2404,218 @@
         // Молча продлеваем вход при открытии страницы: если сервер сказал,
         // что вход больше не годится, надпись сама это покажет.
         if (window.abaAuth) window.abaAuth.refresh().then(рисоватьВход);
+
+        // ── Загрузка настройки с сервера ──────────────────────────────
+        // Осторожность здесь важнее удобства: операция ПЕРЕЗАПИСЫВАЕТ
+        // протоколы и цели ребёнка. Поэтому: только под входом, только по
+        // явному подтверждению, и никогда — поверх несданного занятия.
+        const syncBox = document.getElementById("syncBox");
+        const syncHint = document.getElementById("syncHint");
+        const syncResult = document.getElementById("syncResult");
+        const syncSelect = document.getElementById("syncChild");
+        const SYNC_URL = "https://api.abachecklist.ru/api/sync";
+
+        document.getElementById("syncBtn").onclick = async () => {
+          syncBox.hidden = !syncBox.hidden;
+          if (syncBox.hidden) return;
+          syncResult.textContent = "";
+          const кто = window.abaAuth && window.abaAuth.get();
+          if (!кто) {
+            syncHint.textContent = "Сначала войдите: меню ⋮ → «🔑 Вход». Настройка детей лежит на сервере и открыта только по входу.";
+            syncSelect.innerHTML = '<option value="">— нужен вход —</option>';
+            return;
+          }
+          syncHint.textContent = "Загружаю список детей с сервера…";
+          try {
+            const resp = await fetch(SYNC_URL, { headers: window.abaAuth.headers() });
+            const данные = await resp.json();
+            if (!resp.ok || !данные.ok) throw new Error(данные.error || `сервер ответил ${resp.status}`);
+            const годные = данные.children.filter((c) => c.has_config);
+            syncSelect.innerHTML = '<option value="">— выберите ребёнка —</option>' +
+              годные.map((c) => `<option value="${c.label}">${c.label} (слепок от ${String(c.config_at).slice(0, 10)})</option>`).join("");
+            syncHint.textContent = годные.length
+              ? "Выберите ребёнка. Его протоколы и цели на этом планшете будут заменены тем, что лежит на сервере."
+              : "На сервере пока нет ни одной настройки: она уезжает туда вместе с занятием, отправленным из новой версии приложения.";
+          } catch (err) {
+            syncHint.textContent = "Не получилось получить список: " + err.message;
+          }
+        };
+
+        document.getElementById("syncLoad").onclick = async () => {
+          const label = syncSelect.value;
+          if (!label) {
+            syncResult.textContent = "Сначала выберите ребёнка.";
+            return;
+          }
+          // Несданное занятие дороже любой синхронизации: оно есть только
+          // на этом планшете, а настройка — ещё и на сервере.
+          if (hasUnsentData()) {
+            syncResult.textContent = "Сначала отправьте занятие: на планшете есть несохранённые счётчики, а загрузка перезапишет данные ребёнка.";
+            return;
+          }
+
+          const кнопка = document.getElementById("syncLoad");
+          кнопка.disabled = true;
+          syncResult.textContent = "Загружаю…";
+          try {
+            const resp = await fetch(`${SYNC_URL}?child=${encodeURIComponent(label)}`, { headers: window.abaAuth.headers() });
+            const данные = await resp.json();
+            if (!resp.ok || !данные.ok) throw new Error(данные.error || `сервер ответил ${resp.status}`);
+
+            const целей = (данные.config.protocols || []).reduce((n, p) => n + (p.goals || []).length, 0);
+
+            // История: тянем сразу, чтобы спросить один раз обо всём.
+            let замеры = [];
+            try {
+              const rh = await fetch(`${SYNC_URL}?child=${encodeURIComponent(label)}&history=1`, { headers: window.abaAuth.headers() });
+              const dh = await rh.json();
+              if (rh.ok && dh.ok) замеры = dh.measurements || [];
+            } catch (_) {
+              /* без истории тоже можно: настройка важнее */
+            }
+            const занятийНаСервере = new Set(замеры.map((m) => m.date)).size;
+            const занятийНаПланшете = (await историяРебёнка(label)).length;
+
+            const ok = window.confirm(
+              `Загрузить настройку «${label}» с сервера?\n\n` +
+                `Протоколов: ${(данные.config.protocols || []).length}, целей: ${целей}.\n` +
+                `Слепок сделан ${String(данные.savedAt).slice(0, 10)}.\n` +
+                `История: на сервере ${занятийНаСервере} занятий, на планшете ${занятийНаПланшете}.\n\n` +
+                `Протоколы, цели и история этого ребёнка на планшете будут ЗАМЕНЕНЫ. ` +
+                `Заметки и журналы ABC не трогаем.`
+            );
+            if (!ok) {
+              syncResult.textContent = "Отменено, ничего не изменилось.";
+              return;
+            }
+
+            applyChildConfig(label, данные.config);
+            const занятий = замеры.length ? await восстановитьИсторию(label, данные.config, замеры) : 0;
+            syncResult.textContent = `Готово: «${label}» — целей: ${целей}` +
+              (занятий ? `, занятий в истории: ${занятий}.` : ". Истории на сервере не было.");
+            showToast(`Настройка «${label}» загружена с сервера.`);
+          } catch (err) {
+            syncResult.textContent = "Не получилось: " + err.message;
+          } finally {
+            кнопка.disabled = false;
+          }
+        };
+
+        // История ребёнка из IndexedDB — чтобы показать в подтверждении,
+        // сколько занятий сейчас на планшете.
+        async function историяРебёнка(label) {
+          const ребёнок = getChildren().find((c) => c.label === label);
+          if (!ребёнок) return [];
+          try {
+            const db = await openHistDB();
+            return await new Promise((resolve) => {
+              const req = db.transaction("history", "readonly")
+                .objectStore("history").get("aba_history::" + ребёнок.id);
+              req.onsuccess = () => resolve(Array.isArray(req.result) ? req.result : []);
+              req.onerror = () => resolve([]);
+            });
+          } catch {
+            return [];
+          }
+        }
+
+        // Сборка истории из серверных замеров.
+        //
+        // На сервере замер — это строка «дата, протокол, цель, процент».
+        // Приложению нужна другая форма: занятие, внутри которого срезы ПО
+        // НОМЕРУ протокола (data[i-1] ⟺ протокол i). Номер знает только
+        // планшет — поэтому собираем здесь, уже после того, как применили
+        // настройку: из неё и берём соответствие «название → номер».
+        async function восстановитьИсторию(label, config, замеры) {
+          const ребёнок = getChildren().find((c) => c.label === label);
+          if (!ребёнок) return 0;
+
+          const номерПротокола = new Map();
+          (config.protocols || []).forEach((p, i) => номерПротокола.set(p.title, p.index || i + 1));
+          const всего = (config.protocols || []).length;
+
+          const поДатам = new Map();
+          замеры.forEach((m) => {
+            const номер = номерПротокола.get(m.protocol);
+            if (!номер) return; // протокол снят с работы — в историю не тянем
+            if (!поДатам.has(m.date)) поДатам.set(m.date, new Map());
+            const день = поДатам.get(m.date);
+            if (!день.has(номер)) день.set(номер, []);
+            день.get(номер).push(m);
+          });
+
+          const занятия = [...поДатам.entries()]
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([iso, поПротоколам]) => {
+              const [г, м, д] = iso.split("-");
+              const занятие = { date: `${д}.${м}.${г}`, data: [], promptDetails: [], goalNames: [] };
+              for (let i = 1; i <= всего; i += 1) {
+                const строки = поПротоколам.get(i) || [];
+                занятие.data.push(строки.map((r) => (r.no_data ? null : Number(r.percent))));
+                занятие.promptDetails.push(строки.map((r) => r.prompts || ""));
+                занятие.goalNames.push(строки.map((r) => r.goal));
+              }
+              return занятие;
+            })
+            .slice(-200); // столько же, сколько хранит приложение
+
+          const db = await openHistDB();
+          await new Promise((resolve, reject) => {
+            const tx = db.transaction("history", "readwrite");
+            tx.objectStore("history").put(занятия, "aba_history::" + ребёнок.id);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
+          return занятия.length;
+        }
+
+        // Раскладываем слепок в рабочие ключи ребёнка. Профиль заводим, если
+        // его нет: ради этого всё и затевалось — новый планшет.
+        function applyChildConfig(label, config) {
+          let ребёнок = getChildren().find((c) => c.label === label);
+          if (!ребёнок) {
+            ребёнок = { id: "c" + Date.now().toString(36), label };
+            setChildren(getChildren().concat([ребёнок]));
+          }
+          if (getActiveChildId() !== ребёнок.id) switchChild(ребёнок.id);
+
+          // Чистим ТОЛЬКО протоколы и цели: история, заметки и журналы
+          // остаются — они и так есть на сервере, но здесь могут быть свежее.
+          Object.keys(localStorage)
+            .filter((k) => /^protocol\d+(_|$)/.test(k) || k === "protocolsCount")
+            .forEach((k) => localStorage.removeItem(k));
+
+          const протоколы = config.protocols || [];
+          localStorage.setItem("protocolsCount", String(протоколы.length));
+          протоколы.forEach((proto, i) => {
+            const n = proto.index || i + 1;
+            localStorage.setItem(`protocol${n}_title`, proto.title || "");
+            if (proto.coldProbe) localStorage.setItem(`protocol${n}_coldProbe`, "1");
+            if (proto.selected) localStorage.setItem(`protocol${n}_selectedGoals`, proto.selected);
+            const цели = proto.goals || [];
+            localStorage.setItem(`protocol${n}_goalsCount`, String(цели.length));
+            цели.forEach((goal, j) => {
+              const id = goal.id || j + 1;
+              localStorage.setItem(`protocol${n}_goal${id}`, goal.name || "");
+              if (goal.introDate) localStorage.setItem(`protocol${n}_goal${id}_introDate`, goal.introDate);
+              if (goal.masteryDate) localStorage.setItem(`protocol${n}_goal${id}_masteryDate`, goal.masteryDate);
+              if (goal.genDoneDate) localStorage.setItem(`protocol${n}_goal${id}_genDoneDate`, goal.genDoneDate);
+              if (goal.genHold) localStorage.setItem(`protocol${n}_goal${id}_genHold`, "1");
+              if (goal.keepDaily) localStorage.setItem(`protocol${n}_goal${id}_keepDaily`, "1");
+              if (goal.genLog) localStorage.setItem(`protocol${n}_goal${id}_genLog`, JSON.stringify(goal.genLog));
+            });
+          });
+
+          // Списки ABC и «Частоты» — тоже настройка ребёнка.
+          const списки = config.lists || {};
+          Object.keys(списки).forEach((key) => {
+            if (/^(abc|freq)_/.test(key)) localStorage.setItem(key, списки[key]);
+          });
+
+          renderSummary();
+          renderChildSelector();
+          updateActiveNotice();
+        }
 
         document.getElementById("staffBtn").onclick = () => {
           const box = document.getElementById("staffBox");
