@@ -74,6 +74,7 @@
           genDoneDate: localStorage.getItem(`protocol${i}_goal${goalId}_genDoneDate`) || "",
           genHold: localStorage.getItem(`protocol${i}_goal${goalId}_genHold`) === "1",
           keepDaily: localStorage.getItem(`protocol${i}_goal${goalId}_keepDaily`) === "1",
+          archived: localStorage.getItem(`protocol${i}_goal${goalId}_archived`) === "1",
           genLog: getGenLog(i, goalId)
         }));
         protocols.push({

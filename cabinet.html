@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Кабинет супервизора — ABA Чек-лист</title>
+<!-- Настоящий кабинет, а не показ: данные читаются ТОЛЬКО ПО ВХОДУ, и
+     сервер решает, кого пускать: супервизор и админ да, терапист нет. Отсюда же
+     ставятся решения по целям: «освоено» и «в архив» — планшеты их
+     забирают, и архивные цели уходят у тераписта со «Сбора». -->
+<link rel="stylesheet" href="theme.css" />
+<link rel="stylesheet" href="cabinet.css" />
+<style>
+  .goal-proto { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+  .back { background: none; border: none; color: var(--accent); font: inherit; cursor: pointer; padding: 0; margin-bottom: 10px; }
+  .two { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+  .goal-line td:first-child { font-weight: 600; cursor: pointer; }
+  .goal-line:hover td:first-child { color: var(--accent); }
+  .caret { display: inline-block; width: 12px; color: var(--muted); transition: transform .15s; }
+  .goal-line.open .caret { transform: rotate(90deg); }
+  .detail td { background: var(--bg); padding: 16px 18px; }
+  .detail h4 { font-family: var(--font-display); font-size: 15px; margin: 0 0 8px; }
+  .detail table { background: var(--card); border-radius: var(--radius-sm); overflow: hidden; }
+  .cells { display: inline-flex; gap: 3px; }
+  .cell { width: 14px; height: 14px; border-radius: 3px; background: var(--soft); border: 1px solid var(--line); }
+  .cell.on { background: var(--mastered); border-color: var(--mastered); }
+  .cond { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--gen-done); color: var(--gen-done-ink); margin: 0 2px 3px 0; white-space: nowrap; }
+  .verdict { margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.55; }
+  .verdict .flag { margin-right: 6px; }
+  .switch-modes { display: flex; gap: 8px; margin-bottom: 12px; }
+  .switch-modes .btn.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .leg { display: inline-flex; align-items: center; gap: 7px; font: inherit; font-size: 13px; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+  .leg.off { opacity: .45; text-decoration: line-through; }
+  .leg-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .jump { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 18px; }
+  .jump a, .jump button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px; background: var(--soft); color: var(--soft-ink); text-decoration: none; border: none; cursor: pointer; }
+  .jump a:hover, .jump button:hover { background: var(--accent-soft); color: var(--accent); }
+  .jump a.report-link { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .proto-block { border: 1px solid var(--line); border-radius: var(--radius-sm); margin-bottom: 8px; overflow: hidden; }
+  .proto-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--card); flex-wrap: wrap; }
+  .proto-head .title { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; font: inherit; color: inherit; background: none; border: none; text-align: left; cursor: pointer; padding: 0; }
+  .proto-head .title:hover b { color: var(--accent); }
+  .proto-head.open { background: var(--accent-soft); }
+  .proto-head b { font-family: var(--font-display); font-size: 16px; }
+  .proto-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+  .proto-count { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .proto-body { border-top: 1px solid var(--line); }
+  .sess-line td:first-child { cursor: pointer; }
+  .sess-line:hover td:first-child { color: var(--accent); }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<div id="top"></div>
+<div class="wrap" id="wrap">
+  <div id="view"><p class="skeleton">Загружаю данные с сервера…</p></div>
+  <p class="foot" id="foot"></p>
+</div>
+
+<script src="auth.js"></script>
+<script src="cabinet.js"></script>
+<script>
+(function () {
+  const view = document.getElementById("view");
+  const top = document.getElementById("top");
+  const wrap = document.getElementById("wrap");
+  let state = null;
+  let открытыйРебёнок = "";
+  let показыватьАрхив = false;
+
+  // ── Вход ────────────────────────────────────────────────────────────
+  // Кабинет без входа не показывает НИЧЕГО: здесь данные всех детей центра
+  // разом, включая тексты эпизодов. Пускает сервер, страница только просит.
+  function рисоватьВход(сообщение, плохо) {
+    top.innerHTML = "";
+    wrap.hidden = true;
+    const старый = document.getElementById("gate");
+    if (старый) старый.remove();
+
+    const gate = document.createElement("div");
+    gate.className = "gate";
+    gate.id = "gate";
+    gate.innerHTML = `<div class="card">
+      <h1>Кабинет супервизора</h1>
+      <p>Данные детей центра: цели, занятия, поведение, эпизоды. Открыт супервизорам и администратору.</p>
+      <label for="email">Рабочая почта</label>
+      <input type="email" id="email" autocomplete="username" placeholder="и.фамилия@abachecklist.ru" />
+      <label for="password">Пароль</label>
+      <input type="password" id="password" autocomplete="current-password" />
+      <button class="btn primary" type="button" id="enter">Войти</button>
+      <p class="msg${плохо ? " bad" : ""}" id="msg">${escapeHtml(сообщение || "")}</p>
+    </div>`;
+    document.body.append(gate);
+
+    const войти = async () => {
+      const msg = document.getElementById("msg");
+      const кнопка = document.getElementById("enter");
+      msg.className = "msg";
+      msg.textContent = "Проверяю…";
+      кнопка.disabled = true;
+      try {
+        await window.abaAuth.login(
+          document.getElementById("email").value.trim(),
+          document.getElementById("password").value
+        );
+        gate.remove();
+        wrap.hidden = false;
+        старт();
+      } catch (err) {
+        msg.className = "msg bad";
+        msg.textContent = err.message;
+      } finally {
+        кнопка.disabled = false;
+      }
+    };
+    document.getElementById("enter").addEventListener("click", войти);
+    gate.addEventListener("keydown", (e) => { if (e.key === "Enter") войти(); });
+  }
+
+  function выходИзКабинета() {
+    window.abaAuth.logout();
+    рисоватьВход("Вы вышли из кабинета.");
+  }
+
+  function старт() {
+    view.innerHTML = '<p class="skeleton">Загружаю данные с сервера…</p>';
+    loadCabinet().then((data) => {
+      state = data;
+      top.innerHTML = renderTop(data.me.name, data.me.role);
+      document.getElementById("logoutBtn").addEventListener("click", выходИзКабинета);
+      if (открытыйРебёнок) renderChild(открытыйРебёнок); else renderList();
+      document.getElementById("foot").textContent =
+        "Данные приходят с планшетов сами. Обновлено " + humanTime(data.now.toISOString()) + ".";
+    }).catch((err) => {
+      // Три разных разговора: «войдите», «вошли, но не вам сюда» и «сервер молчит».
+      if (err.needAuth) {
+        рисоватьВход(err.message === "нужен вход" ? "" : err.message, err.message !== "нужен вход");
+        return;
+      }
+      if (err.forbidden) {
+        top.innerHTML = renderTop(window.abaAuth.name() || "", "");
+        document.getElementById("logoutBtn").addEventListener("click", выходИзКабинета);
+        view.innerHTML = `<div class="err"><b>Кабинет вам не открыт.</b> ${escapeHtml(err.message)}</div>`;
+        return;
+      }
+      view.innerHTML = '<div class="err"><b>Сервер не ответил.</b> ' + escapeHtml(err.message) +
+        '. Данные никуда не пропали — они лежат на планшетах и на сервере, недоступна только эта страница.</div>';
+    });
+  }
+
+  if (window.abaAuth && window.abaAuth.get()) старт(); else рисоватьВход();
+
+  // ── Список детей ────────────────────────────────────────────────────
+  function renderList() {
+    открытыйРебёнок = "";
+    показыватьАрхив = false;
+    const t = state.totals || {};
+    const silent = state.children.filter((c) => c.days > 0 && c.silentDays >= SILENT_DAYS);
+    const stuck = state.children.reduce((n, c) => n + c.stuck, 0);
+    const mastered = state.children.reduce((n, c) => n + c.mastered, 0);
+
+    view.innerHTML = `
+      <h1>Дети центра</h1>
+      <p class="lead">Всё, что тераписты собрали на планшетах, — здесь, без пересылки файлов и без ручного ввода.</p>
+      <div class="tiles">
+        <div class="tile"><b>${state.children.length}</b><span>детей в работе</span></div>
+        <div class="tile"><b>${t.sessions || 0}</b><span>занятий записано</span></div>
+        <div class="tile"><b>${t.measurements || 0}</b><span>замеров по целям</span></div>
+        <div class="tile"><b>${mastered}</b><span>целей отвечают критерию</span></div>
+        <div class="tile"><b>${silent.length}</b><span>детей без данных ${SILENT_DAYS}+ дней</span></div>
+        <div class="tile"><b>${stuck}</b><span>целей стоят на месте</span></div>
+      </div>
+      <h2>Кого посмотреть в первую очередь</h2>
+      <div class="kids">${state.children.map(kidCard).join("")}</div>`;
+    view.querySelectorAll(".kid").forEach((el) => {
+      el.addEventListener("click", () => renderChild(el.dataset.label));
+    });
+  }
+
+  function kidCard(c) {
+    const flags = [];
+    if (c.silentDays == null) flags.push('<span class="flag">данных ещё нет</span>');
+    else if (c.silentDays >= SILENT_DAYS) flags.push(`<span class="flag alert">нет данных ${c.silentDays} ${plural(c.silentDays, "день", "дня", "дней")}</span>`);
+    if (c.stuck) flags.push(`<span class="flag warn">${c.stuck} ${plural(c.stuck, "цель стоит", "цели стоят", "целей стоят")} на месте</span>`);
+    if (c.mastered) flags.push(`<span class="flag good">${c.mastered} ${plural(c.mastered, "цель отвечает", "цели отвечают", "целей отвечают")} критерию</span>`);
+    const вАрхиве = c.archived.length + c.done.length;
+    if (вАрхиве) flags.push(`<span class="flag">${вАрхиве} в архиве</span>`);
+    if (!flags.length) flags.push('<span class="flag good">всё идёт ровно</span>');
+
+    const series = c.active.map((g) => g.last).filter((v) => v != null);
+    return `<button class="kid" type="button" data-label="${escapeHtml(c.label)}">
+      <div class="kid-top">
+        <span class="kid-name">${escapeHtml(c.label)}</span>
+        <span class="kid-when">${humanDays(c.silentDays)}</span>
+      </div>
+      <div class="kid-figures">
+        <div><b>${c.active.length}</b>целей в работе</div>
+        <div><b>${c.sessions}</b>занятий</div>
+        <div><b>${c.avg14 == null ? "—" : c.avg14 + "%"}</b>среднее за 2 недели</div>
+        <div style="margin-left:auto">${sparkline(series.slice(-8), 90, 30)}</div>
+      </div>
+      <div class="flags">${flags.join("")}</div>
+    </button>`;
+  }
+
+  // ── Карточка ребёнка ────────────────────────────────────────────────
+  function renderChild(label) {
+    const c = state.children.find((x) => x.label === label);
+    if (!c) return renderList();
+    открытыйРебёнок = label;
+    const вАрхиве = c.archived.length + c.done.length;
+
+    view.innerHTML = `
+      <button class="back" type="button">‹ ко всем детям</button>
+      <h1>${escapeHtml(c.label)}</h1>
+      <p class="lead">Последнее занятие ${humanDays(c.silentDays)}${c.lastDate ? " (" + humanDate(c.lastDate) + ")" : ""} · всего занятий: ${c.sessions}</p>
+      <div class="jump">
+        <a class="report-link" href="report.html?child=${encodeURIComponent(c.label)}" target="_blank" rel="noopener">📄 Отчёт для родителей</a>
+        <button type="button" id="archiveBtn">${показыватьАрхив ? "‹ к целям в работе" : `📦 Архив${вАрхиве ? ` (${вАрхиве})` : ""}`}</button>
+        <a href="#goals">Протоколы и цели (${c.active.length})</a>
+        <a href="#history">История занятий</a>
+        <a href="#gen">Обобщение${c.gen.length ? ` (${c.gen.length})` : ""}</a>
+        <a href="#behavior">Поведение</a>
+        <a href="#abc">Эпизоды ABC (${c.abc.length})</a>
+      </div>
+
+      <div class="two">
+        <div>
+          <div class="card" id="goals">
+            <h2 style="margin-top:0">${показыватьАрхив ? "Архив" : "Протоколы и цели"}</h2>
+            ${показыватьАрхив ? archiveBlocks(c) : protocolBlocks(c)}
+            <p class="muted" style="margin:12px 0 0;font-size:13px">${показыватьАрхив
+              ? "Здесь то, что вы уже разобрали. «Вернуть в работу» возвращает цель и на планшет тераписта."
+              : "Протокол раскрывается в список целей, цель — в свою историю. «Освоен» и «В архив» убирают цели со «Сбора» у тераписта."}</p>
+          </div>
+
+          <div class="card" id="history">
+            <h2 style="margin-top:0">История занятий</h2>
+            <div class="scroll"><table>
+              <thead><tr><th>Дата</th><th>Кто вёл</th><th class="num">Целей отработано</th><th class="num">Средний процент</th><th>Что записано</th></tr></thead>
+              <tbody>${sessionRows(c)}</tbody>
+            </table></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <h2 style="margin-top:0">Общие сведения</h2>
+            ${adviceHtml(c)}
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="gen" style="margin-top:14px">
+        <h2 style="margin-top:0">Обобщение</h2>
+        <p class="muted" style="margin:-4px 0 14px;font-size:13px">Освоенную цель проверяют в девяти условиях: три материала, три места, три человека. Пока все девять не пройдены, навык считается привязанным к обстановке.</p>
+        ${genBlock(c)}
+      </div>
+
+      <div class="card" id="behavior" style="margin-top:14px">
+        <h2 style="margin-top:0">Поведение: как часто</h2>
+        ${behaviorBlock(c)}
+      </div>
+
+      <div class="card" id="abc" style="margin-top:14px">
+        <h2 style="margin-top:0">Эпизоды ABC</h2>
+        <p class="muted" style="margin:-4px 0 14px;font-size:13px">Терапист записывает эпизод сразу после того, как он случился: что было до, что именно произошло и что было после.</p>
+        ${abcHtml(c)}
+      </div>`;
+
+    view.querySelector(".back").addEventListener("click", renderList);
+    document.getElementById("archiveBtn").addEventListener("click", () => {
+      показыватьАрхив = !показыватьАрхив;
+      renderChild(label);
+    });
+
+    if (c.behavior.length) {
+      const off = new Set();
+      let mode = "rate";
+      drawBehavior(c, mode, off);
+      view.querySelectorAll(".switch-modes .btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          view.querySelectorAll(".switch-modes .btn").forEach((b) => b.classList.remove("on"));
+          btn.classList.add("on");
+          mode = btn.dataset.mode;
+          drawBehavior(c, mode, off);
+        });
+      });
+    }
+
+    view.querySelectorAll(".proto-head .title").forEach((head) => {
+      head.addEventListener("click", () => {
+        const body = view.querySelector(`[data-proto-body="${head.dataset.proto}"]`);
+        if (!body) return;
+        body.hidden = !body.hidden;
+        head.closest(".proto-head").classList.toggle("open", !body.hidden);
+      });
+    });
+
+    // Цель раскрывается по нажатию на название: сразу вываливать двадцать
+    // графиков — каша, а прятать историю совсем — обесценивать главное.
+    // Кнопки решений живут в своей ячейке и разворот не трогают.
+    view.querySelectorAll(".goal-line td:first-child").forEach((cell) => {
+      cell.addEventListener("click", () => {
+        const row = cell.closest(".goal-line");
+        const detail = view.querySelector(`.detail[data-detail="${row.dataset.goal}"]`);
+        if (!detail) return;
+        detail.hidden = !detail.hidden;
+        row.classList.toggle("open", !detail.hidden);
+      });
+    });
+
+    view.querySelectorAll(".sess-line td:first-child").forEach((cell) => {
+      cell.addEventListener("click", () => {
+        const row = cell.closest(".sess-line");
+        const detail = view.querySelector(`.sess-detail[data-date="${row.dataset.date}"]`);
+        if (!detail) return;
+        detail.hidden = !detail.hidden;
+        row.classList.toggle("open", !detail.hidden);
+      });
+    });
+
+    view.querySelectorAll(".act").forEach((btn) => {
+      btn.addEventListener("click", () => решить(c.label, btn));
+    });
+  }
+
+  // ── Решения ─────────────────────────────────────────────────────────
+  // Отдельное подтверждение на каждое нажатие было бы навязчивым: решение
+  // обратимо в один клик из архива, и об этом сказано рядом. Спрашиваем
+  // только про протокол целиком — там за одним нажатием уходит десяток целей.
+  async function решить(label, btn) {
+    const protocol = btn.dataset.protocol;
+    const goal = btn.dataset.goal || "";
+    const status = btn.dataset.status;
+    const целей = Number(btn.dataset.count || 0);
+
+    if (!goal && status !== "active" && целей > 1) {
+      const действие = status === "mastered" ? "отметить освоенным" : "убрать в архив";
+      const ok = window.confirm(
+        `Протокол «${protocol}»: ${действие}?\n\n` +
+        `Это ${целей} ${plural(целей, "цель", "цели", "целей")} — они уйдут со «Сбора» у тераписта. ` +
+        `Вернуть можно в один клик из архива.`
+      );
+      if (!ok) return;
+    }
+
+    view.querySelectorAll(".act").forEach((b) => { b.disabled = true; });
+    try {
+      await sendDecision(label, protocol, goal, status);
+      state = await loadCabinet();
+      renderChild(label);
+      сказать(status === "active" ? "Вернули в работу." : status === "mastered" ? "Отмечено освоенным." : "Убрано в архив.");
+    } catch (err) {
+      view.querySelectorAll(".act").forEach((b) => { b.disabled = false; });
+      сказать("Не получилось: " + err.message);
+    }
+  }
+
+  function сказать(текст) {
+    const старый = document.querySelector(".toast");
+    if (старый) старый.remove();
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.textContent = текст;
+    document.body.append(el);
+    setTimeout(() => el.remove(), 3500);
+  }
+
+  // ── Протоколы и цели ────────────────────────────────────────────────
+  function protocolBlocks(c) {
+    const goals = c.active;
+    if (!goals.length) {
+      return `<p class="muted" style="margin:0">${c.goals.length
+        ? "Все цели этого ребёнка разобраны — смотрите архив."
+        : "Замеров пока нет."}</p>`;
+    }
+
+    const byProto = new Map();
+    goals.forEach((g) => {
+      if (!byProto.has(g.protocol)) byProto.set(g.protocol, []);
+      byProto.get(g.protocol).push(g);
+    });
+
+    return [...byProto.entries()].map(([title, items], pi) => {
+      const mastered = items.filter((g) => g.status === "mastered").length;
+      const stuck = items.filter((g) => g.status === "plateau").length;
+      const values = items.map((g) => g.last).filter((v) => v != null);
+      const avg = values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : null;
+      const open = pi === 0;
+
+      return `<div class="proto-block">
+        <div class="proto-head${open ? " open" : ""}">
+          <button class="title" type="button" data-proto="${pi}">
+            <span class="caret">▸</span>
+            <b>${escapeHtml(title)}</b>
+          </button>
+          <span class="proto-meta">
+            ${mastered ? `<span class="flag good">освоено: ${mastered}</span>` : ""}
+            ${stuck ? `<span class="flag warn">стоит ${stuck}</span>` : ""}
+            ${avg == null ? "" : `<span class="proto-count">среднее <b class="${pctClass(avg)}">${avg}%</b></span>`}
+            <span class="proto-count">${items.length} ${plural(items.length, "цель", "цели", "целей")}</span>
+            <span class="acts">
+              <button class="act done" type="button" data-protocol="${escapeHtml(title)}" data-status="mastered" data-count="${items.length}">Освоен</button>
+              <button class="act" type="button" data-protocol="${escapeHtml(title)}" data-status="archived" data-count="${items.length}">В архив</button>
+            </span>
+          </span>
+        </div>
+        <div class="proto-body" data-proto-body="${pi}"${open ? "" : " hidden"}>
+          <div class="scroll"><table>
+            <thead><tr><th>Цель</th><th class="num">Сейчас</th><th>Динамика</th><th>Статус</th><th class="num">Замеров</th><th></th></tr></thead>
+            <tbody>${items.map((g) => goalRow(c, g)).join("")}</tbody>
+          </table></div>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  function goalRow(c, g) {
+    const [cls, text] = STATUS_TEXT[g.status] || ["", g.status];
+    const values = g.points.map((p) => p.percent);
+    const id = c.goals.indexOf(g);
+    return `<tr class="goal-line" data-goal="${id}">
+      <td><span class="caret">▸</span> ${escapeHtml(g.goal)}</td>
+      <td class="num"><span class="${pctClass(g.last)}">${g.last == null ? "—" : g.last + "%"}</span></td>
+      <td>${sparkline(values.slice(-10), 110, 28)}</td>
+      <td><span class="flag ${cls}">${text}</span></td>
+      <td class="num">${values.length}</td>
+      <td><span class="acts">
+        <button class="act done" type="button" data-protocol="${escapeHtml(g.protocol)}" data-goal="${escapeHtml(g.goal)}" data-status="mastered">Освоена</button>
+        <button class="act" type="button" data-protocol="${escapeHtml(g.protocol)}" data-goal="${escapeHtml(g.goal)}" data-status="archived">В архив</button>
+      </span></td>
+    </tr>
+    ${goalDetail(g, id, 6)}`;
+  }
+
+  function goalDetail(g, id, colspan) {
+    const values = g.points.map((p) => p.percent);
+    return `<tr class="detail" data-detail="${id}" hidden><td colspan="${colspan}">
+      <h4>Все замеры по этой цели: ${values.length}</h4>
+      ${chart(g.points)}
+      <div class="scroll" style="margin-top:12px"><table>
+        <thead><tr><th>Занятие</th><th class="num">Процент</th><th>Как отвечал</th><th>Подсказки</th></tr></thead>
+        <tbody>${g.points.slice().reverse().map((p) => `<tr>
+          <td>${humanDate(p.date)}</td>
+          <td class="num"><span class="${pctClass(p.percent)}">${p.percent}%</span></td>
+          <td>${responsesHtml(p.responses)}</td>
+          <td class="muted">${escapeHtml(p.prompts || "—")}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+      <p class="muted" style="margin:10px 0 0;font-size:13px">Ничего не удаляется: сохраняется каждая проба каждого занятия — и процент, и последовательность ответов.</p>
+    </td></tr>`;
+  }
+
+  // ── Архив ───────────────────────────────────────────────────────────
+  // Отдельный вид, а не галочка «показать скрытые»: архив открывают редко и
+  // с другой целью — вспомнить, что было, или вернуть убранное по ошибке.
+  function archiveBlocks(c) {
+    const items = c.done.concat(c.archived);
+    if (!items.length) {
+      return '<p class="muted" style="margin:0">Архив пуст: пока ничего не отмечали освоенным и не убирали.</p>';
+    }
+
+    const byProto = new Map();
+    items.forEach((g) => {
+      if (!byProto.has(g.protocol)) byProto.set(g.protocol, []);
+      byProto.get(g.protocol).push(g);
+    });
+
+    return [...byProto.entries()].map(([title, list]) => {
+      const решение = c.protocolDecisions.get(title);
+      return `<div class="proto-block">
+        <div class="proto-head">
+          <span class="title"><b>${escapeHtml(title)}</b></span>
+          <span class="proto-meta">
+            <span class="proto-count">${list.length} ${plural(list.length, "цель", "цели", "целей")}</span>
+            ${решение ? `<span class="flag ${решение.status === "mastered" ? "good" : ""}">${решение.status === "mastered" ? "протокол освоен" : "протокол в архиве"}${решение.at ? " · " + humanDate(решение.at) : ""}</span>
+               <span class="acts"><button class="act back" type="button" data-protocol="${escapeHtml(title)}" data-status="active">Вернуть протокол в работу</button></span>` : ""}
+          </span>
+        </div>
+        <div class="proto-body">
+          <div class="scroll"><table>
+            <thead><tr><th>Цель</th><th class="num">Последний</th><th>Решение</th><th>Кто и когда</th><th></th></tr></thead>
+            <tbody>${list.map((g) => {
+              const id = c.goals.indexOf(g);
+              const d = g.decision || {};
+              const своё = c.goalDecisions.has(g.protocol + " ‖ " + g.goal);
+              return `<tr class="goal-line row-archived" data-goal="${id}">
+                <td><span class="caret">▸</span> ${escapeHtml(g.goal)}</td>
+                <td class="num"><span class="${pctClass(g.last)}">${g.last == null ? "—" : g.last + "%"}</span></td>
+                <td><span class="flag ${d.status === "mastered" ? "good" : ""}">${d.status === "mastered" ? "освоена" : "в архиве"}</span></td>
+                <td class="decided">${d.by ? escapeHtml(d.by) : "—"}${d.at ? ", " + humanDate(d.at) : ""}</td>
+                <td>${своё
+                  ? `<span class="acts"><button class="act back" type="button" data-protocol="${escapeHtml(g.protocol)}" data-goal="${escapeHtml(g.goal)}" data-status="active">Вернуть в работу</button></span>`
+                  : '<span class="decided">решение по протоколу</span>'}</td>
+              </tr>
+              ${goalDetail(g, id, 5)}`;
+            }).join("")}</tbody>
+          </table></div>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  // ── Занятия ─────────────────────────────────────────────────────────
+  // Одна строка — один день, разворачивается в список целей с процентами.
+  // Это и есть ответ на вопрос «а история сохраняется?».
+  function sessionRows(c) {
+    const byDate = new Map();
+    c.goals.forEach((g) => g.points.forEach((p) => {
+      if (!byDate.has(p.date)) byDate.set(p.date, []);
+      byDate.get(p.date).push({ goal: g.goal, protocol: g.protocol, percent: p.percent, responses: p.responses, staff: p.staff });
+    }));
+    const dates = [...byDate.keys()].sort().reverse();
+    if (!dates.length) return '<tr><td colspan="5">Занятий пока нет</td></tr>';
+
+    return dates.map((d) => {
+      const items = byDate.get(d);
+      const avg = Math.round(items.reduce((a, b) => a + b.percent, 0) / items.length);
+      const presses = items.reduce((n, it) => n + String(it.responses || "").trim().split(/\s+/).filter(Boolean).length, 0);
+      const staff = [...new Set(items.map((it) => it.staff).filter(Boolean))].join(", ");
+      return `<tr class="sess-line" data-date="${d}">
+        <td><span class="caret">▸</span> ${humanDate(d)}</td>
+        <td>${staff ? escapeHtml(staff) : '<span class="muted">—</span>'}</td>
+        <td class="num">${items.length}</td>
+        <td class="num"><span class="${pctClass(avg)}">${avg}%</span></td>
+        <td class="muted">${presses} ${plural(presses, "проба", "пробы", "проб")}</td>
+      </tr>
+      <tr class="sess-detail detail" data-date="${d}" hidden><td colspan="5">
+        <h4>Что записано ${humanDate(d)}</h4>
+        <div class="scroll"><table>
+          <thead><tr><th>Цель</th><th class="num">Процент</th><th>Как отвечал</th></tr></thead>
+          <tbody>${items.map((it) => `<tr>
+            <td>${escapeHtml(it.goal)}<span class="goal-proto">${escapeHtml(it.protocol)}</span></td>
+            <td class="num"><span class="${pctClass(it.percent)}">${it.percent}%</span></td>
+            <td>${responsesHtml(it.responses)}</td>
+          </tr>`).join("")}</tbody>
+        </table></div>
+      </td></tr>`;
+    }).join("");
+  }
+
+  function genBlock(c) {
+    if (!c.gen.length) {
+      return '<p class="muted" style="margin:0">Проб обобщения ещё не было: либо целей с критерием освоения нет, либо их не переводили в обобщение.</p>';
+    }
+    return `<div class="scroll"><table>
+      <thead><tr><th>Цель</th><th>Пройдено</th><th class="num">Из&nbsp;9</th><th>Где получилось</th><th>Не получилось</th><th>Последняя проба</th></tr></thead>
+      <tbody>${c.gen.map((g) => {
+        const done = g.passed >= 9;
+        return `<tr>
+          <td>${escapeHtml(g.goal)}<span class="goal-proto">${escapeHtml(g.protocol)}</span></td>
+          <td><span class="cells">${Array.from({ length: 9 }, (_, i) => `<span class="cell${i < g.passed ? " on" : ""}"></span>`).join("")}</span></td>
+          <td class="num"><b class="${done ? "pct green" : "pct"}">${g.passed}</b></td>
+          <td>${g.passedNames && g.passedNames.length ? g.passedNames.map((n) => `<span class="cond">${escapeHtml(n)}</span>`).join(" ") : '<span class="muted">—</span>'}</td>
+          <td>${g.failed && g.failed.length ? `<span class="flag warn">${g.failed.map(escapeHtml).join(", ")}</span>` : '<span class="muted">—</span>'}</td>
+          <td>${g.last ? humanDate(g.last) : "—"}${done ? ' <span class="flag good">обобщено</span>' : ""}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table></div>`;
+  }
+
+  function behaviorBlock(c) {
+    if (!c.behavior.length) return '<p class="muted" style="margin:0">Подсчётов частоты пока не было.</p>';
+    const quiet = c.behavior.filter((b) => !b.count).length;
+    const rows = c.behavior.slice().sort((a, b) => b.date.localeCompare(a.date));
+    return `
+      <div class="switch-modes">
+        <button class="btn on" type="button" data-mode="rate">Раз в час</button>
+        <button class="btn" type="button" data-mode="count">Сколько раз</button>
+      </div>
+      <div id="behChart"></div>
+      <div id="behLegend" class="legend"></div>
+      <p class="muted" style="margin:10px 0 14px;font-size:13px">«Раз в час» сравнивает наблюдения разной длины честно: 4 крика за 10 минут и за 3 часа — разные картины. Наблюдения без таймера в эту шкалу не попадают.</p>
+      <div class="scroll"><table>
+        <thead><tr><th>Когда</th><th>Поведение</th><th class="num">Раз</th><th class="num">За минут</th><th class="num">В час</th></tr></thead>
+        <tbody>${rows.slice(0, 24).map((b) => `<tr>
+          <td>${humanDate(b.date)}</td><td>${escapeHtml(b.behavior)}</td>
+          <td class="num">${b.count}</td><td class="num">${b.minutes || "—"}</td>
+          <td class="num">${b.minutes ? round1((b.count / b.minutes) * 60) : "—"}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+      ${quiet ? `<p class="muted" style="margin:10px 0 0;font-size:13px">Строки с нулём — это не пропуск: терапист отметил, что поведение не проявлялось. Таких записей ${quiet}.</p>` : ""}
+      <p class="muted" style="margin:8px 0 0;font-size:13px">Эпизодов ABC записано: <b>${c.abc.length}</b> — <a href="#abc">читать</a></p>`;
+  }
+
+  function drawBehavior(c, mode, off) {
+    const box = view.querySelector("#behChart");
+    const legend = view.querySelector("#behLegend");
+    if (!box) return;
+
+    let all = behaviorSeries(c.behavior, mode);
+    let note = "";
+    // Частый случай: наблюдения вели без таймера. Тогда шкала «раз в час»
+    // пуста не по ошибке, а потому что делить не на что.
+    if (mode === "rate" && !all.length) {
+      all = behaviorSeries(c.behavior, "count");
+      if (all.length) {
+        note = '<p class="muted" style="margin:0 0 8px;font-size:13px">Ни в одном наблюдении не запускали таймер, поэтому «раз в час» посчитать не из чего — показываю количество.</p>';
+        mode = "count";
+      }
+    }
+
+    const shown = all.filter((s) => !off.has(s.name));
+    box.innerHTML = note + (all.length
+      ? (shown.length
+        ? multiChart(shown, { unit: mode === "rate" ? "раз в час" : "раз за наблюдение" })
+        : '<p class="muted" style="margin:0">Все линии скрыты — верните хотя бы одну.</p>')
+      : '<p class="muted" style="margin:0">Ни одно поведение пока не проявлялось — рисовать нечего.</p>');
+    legend.innerHTML = all.map((s) => `<button class="leg${off.has(s.name) ? " off" : ""}" type="button" data-beh="${escapeHtml(s.name)}">
+      <span class="leg-dot" style="background:${s.color}"></span>${escapeHtml(s.name)}</button>`).join("");
+    legend.querySelectorAll(".leg").forEach((b) => {
+      b.addEventListener("click", () => {
+        const name = b.dataset.beh;
+        if (off.has(name)) off.delete(name); else off.add(name);
+        drawBehavior(c, mode, off);
+      });
+    });
+  }
+
+  function abcHtml(c) {
+    if (!c.abc.length) return '<p class="muted" style="margin:0">Эпизодов пока не записывали.</p>';
+    return c.abc.map((a) => `<div class="abc-item">
+      <div class="abc-when">
+        <b>${humanDate(a.date)}${a.time ? ", " + escapeHtml(a.time) : ""}</b>
+        ${a.intensity ? `<span class="flag">интенсивность: ${escapeHtml(a.intensity)}</span>` : ""}
+        ${a.duration ? `<span class="flag">длилось: ${escapeHtml(a.duration)}</span>` : ""}
+      </div>
+      <div class="abc-grid">
+        <div class="abc-part"><span>До эпизода</span>${escapeHtml(a.antecedent) || "—"}</div>
+        <div class="abc-part b"><span>Что произошло</span>${escapeHtml(a.behavior) || "—"}</div>
+        <div class="abc-part"><span>После</span>${escapeHtml(a.consequence) || "—"}</div>
+      </div>
+    </div>`).join("");
+  }
+
+  // ── Общие сведения ──────────────────────────────────────────────────
+  // Правило одно: говорим ФАКТ, найденный в данных, и не назначаем
+  // вмешательство — что делать с целью, решает супервизор, а не арифметика.
+  // Считаем по целям В РАБОТЕ: разобранное больше не просит внимания.
+  const RARE_MIN_SESSIONS = 3;
+  const ABC_MIN_EPISODES = 3;
+
+  function adviceHtml(c) {
+    const out = [];
+    const goals = c.active;
+
+    if (c.silentDays != null && c.silentDays >= SILENT_DAYS) {
+      out.push(`Занятий нет ${c.silentDays} ${plural(c.silentDays, "день", "дня", "дней")} — спросить тераписта, идут ли занятия.`);
+    }
+
+    if (c.lastDate) {
+      const lastDay = goals.map((g) => g.points.find((p) => p.date === c.lastDate)).filter(Boolean);
+      const few = lastDay.filter((p) => trialsOf(p) <= FEW_TRIALS).length;
+      if (lastDay.length >= 3 && few >= lastDay.length / 2) {
+        out.push(`На последнем занятии по ${few} ${plural(few, "цели", "целям", "целям")} из ${lastDay.length} была одна-две пробы: процент по ним показывает только «получилось или нет».`);
+      }
+    }
+
+    const low = goals.filter((g) => {
+      const values = g.points.map((p) => p.percent);
+      return values.length >= LOW_IN_A_ROW && values.slice(-LOW_IN_A_ROW).every((v) => v <= LOW_PERCENT);
+    });
+    if (low.length === 1) out.push(`«${low[0].goal}»: ${LOW_IN_A_ROW} замера подряд не выше ${LOW_PERCENT}%.`);
+    else if (low.length > 1) out.push(`У ${low.length} ${plural(low.length, "цели", "целей", "целей")} по ${LOW_IN_A_ROW} замера подряд не выше ${LOW_PERCENT}%: ${namesOf(low)}.`);
+
+    if (c.days >= RARE_MIN_SESSIONS) {
+      const rare = goals.filter((g) => g.points.length === 1);
+      if (rare.length) out.push(`За ${c.days} ${plural(c.days, "занятие", "занятия", "занятий")} по ${rare.length} ${plural(rare.length, "цели данные собраны", "целям данные собраны", "целям данные собраны")} лишь один раз: ${namesOf(rare)}.`);
+    }
+
+    if (c.abc.length >= ABC_MIN_EPISODES) {
+      const counts = new Map();
+      c.abc.forEach((a) => {
+        const key = (a.antecedent || "").trim();
+        if (key) counts.set(key, (counts.get(key) || 0) + 1);
+      });
+      const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+      if (top && top[1] >= 2 && top[1] >= c.abc.length / 2) {
+        out.push(`В ${top[1]} ${plural(top[1], "эпизоде", "эпизодах", "эпизодах")} из ${c.abc.length} поведение начиналось одинаково: «${top[0]}».`);
+      }
+    }
+
+    const stuck = goals.filter((g) => g.status === "plateau");
+    if (stuck.length === 1) out.push(`«${stuck[0].goal}» держится около ${stuck[0].last}% и не двигается.`);
+    else if (stuck.length > 1) out.push(`${stuck.length} ${plural(stuck.length, "цель держится", "цели держатся", "целей держатся")} на месте: ${namesOf(stuck)}.`);
+
+    const withProbes = new Set(c.gen.map((g) => g.goal));
+    const mastered = goals.filter((g) => g.status === "mastered");
+    const noProbes = mastered.filter((g) => !withProbes.has(g.goal)).length;
+    const probeTail = noProbes ? ` Проб обобщения нет по ${noProbes} из ${mastered.length}.` : "";
+    if (mastered.length === 1) out.push(`«${mastered[0].goal}» отвечает критерию освоения — пора на генерализацию и на новую цель.${probeTail}`);
+    else if (mastered.length > 1) out.push(`${mastered.length} ${plural(mastered.length, "цель отвечает", "цели отвечают", "целей отвечают")} критерию освоения: ${namesOf(mastered)}.${probeTail}`);
+
+    if (!out.length) out.push("Ничего срочного: цели двигаются, данные приходят.");
+    return "<ul>" + out.map((s) => "<li>" + escapeHtml(s) + "</li>").join("") + "</ul>" + summaryLine(c, state.now);
+  }
+
+  function namesOf(goals, max) {
+    max = max || 3;
+    const names = goals.slice(0, max).map((g) => `«${g.goal}»`).join(", ");
+    return names + (goals.length > max ? ` и ещё ${goals.length - max}` : "");
+  }
+})();
+</script>
+</body>
+</html>

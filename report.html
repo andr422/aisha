@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Отчёт для родителей</title>
+<!-- Отчёт для родителей из настоящего кабинета: данные читаются с сервера
+     ПО ВХОДУ (report.html?child=<метка>). Ничего не отправляет и не меняет.
+     Разделы включаются по отдельности — из этого же экрана собирается
+     мини-отчёт: только навыки, только поведение и так далее. -->
+<link rel="stylesheet" href="theme.css" />
+<link rel="stylesheet" href="cabinet.css" />
+<style>
+  body { background: var(--card); }
+  .sheet { max-width: 900px; margin: 0 auto; padding: 32px 28px 80px; }
+
+  .rep-head { border-bottom: 2px solid var(--text); padding-bottom: 16px; margin-bottom: 22px; }
+  .rep-head h1 { font-family: var(--font-display); font-size: 30px; margin: 0 0 6px; }
+  .rep-meta { color: var(--muted); font-size: 14px; }
+  .rep-meta b { color: var(--text); }
+
+  .verdict-box { margin-bottom: 22px; }
+  .verdict-box .verdict {
+    margin: 0; padding: 16px 18px; border: 1px solid var(--line); border-top: 3px solid var(--accent);
+    border-radius: var(--radius); font-size: 16px; line-height: 1.6;
+  }
+  .verdict-box .verdict .flag { font-size: 13px; padding: 3px 11px; margin-right: 6px; }
+
+  .plain {
+    background: var(--soft); border-radius: var(--radius); padding: 16px 18px;
+    margin-bottom: 26px; font-size: 15px; line-height: 1.6; color: var(--soft-ink);
+  }
+  .plain p { margin: 0 0 8px; }
+  .plain p:last-child { margin: 0; }
+
+  section { margin-bottom: 34px; break-inside: avoid; }
+  section h2 { font-family: var(--font-display); font-size: 20px; margin: 0 0 4px; }
+  section .sub { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+
+  .goal-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; break-inside: avoid; }
+  .goal-card h3 { font-family: var(--font-display); font-size: 17px; margin: 0 0 2px; }
+  .goal-card .where { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+  .figures { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 10px; }
+  .figures div { font-size: 12px; color: var(--muted); }
+  .figures b { display: block; font-family: var(--font-display); font-size: 22px; font-weight: 900; color: var(--text); font-variant-numeric: tabular-nums; }
+  .up { color: var(--mastered); }
+  .down { color: var(--low-ink); }
+
+  /* Полоса настроек отчёта. На бумагу не попадает. */
+  .tools {
+    position: sticky; top: 0; z-index: 5; background: var(--bg);
+    border-bottom: 1px solid var(--line); padding: 12px 20px;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  }
+  .tools .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .modes { display: inline-flex; gap: 6px; }
+  .modes .btn.on { background: var(--soft); border-color: var(--line-strong); font-weight: 700; }
+  .parts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+  .part {
+    font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line-strong); background: var(--card); color: var(--soft-ink);
+  }
+  .part.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .tools .note { font-size: 13px; color: var(--muted); flex-basis: 100%; margin: 0; }
+
+  .sum { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .sum th { text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 2px solid var(--line); }
+  .sum td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .sum tr:last-child td { border-bottom: none; }
+  .sum .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sum .proto-row { cursor: pointer; background: var(--soft); }
+  .sum .proto-row td { border-bottom: 1px solid var(--line-strong); }
+  .sum .proto-row .caret { display: inline-block; width: 12px; color: var(--muted); transition: transform .15s; }
+  .sum .proto-row.open .caret { transform: rotate(90deg); }
+  .sum .goal-row td:first-child { padding-left: 26px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+  .leg-item { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+  .leg-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+  .foot { border-top: 1px solid var(--line); padding-top: 14px; font-size: 13px; color: var(--muted); }
+
+  @media print {
+    /* На бумаге ничего не свёрнуто и нет управления: только отчёт. */
+    .sum .goal-row[hidden] { display: table-row; }
+    .sum .proto-row .caret { display: none; }
+    .tools { display: none; }
+    .sheet { padding: 0; max-width: none; }
+    body { background: #fff; }
+    section { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="tools" id="tools" hidden>
+  <button class="btn primary" type="button" id="pdfBtn">💾 Сохранить PDF</button>
+  <span class="modes">
+    <button class="btn on" type="button" data-mode="short">Коротко</button>
+    <button class="btn" type="button" data-mode="full">Полностью</button>
+  </span>
+  <span class="parts" id="parts"></span>
+  <a class="btn" href="cabinet.html">‹ в кабинет</a>
+  <button class="btn" type="button" id="htmlBtn">Файлом (HTML)</button>
+  <p class="note" id="note">Разделы включаются по отдельности: можно отдать родителю отчёт только по навыкам или только по поведению.</p>
+</div>
+
+<div class="sheet" id="sheet"><p class="skeleton">Собираю отчёт…</p></div>
+
+<script src="auth.js"></script>
+<script src="cabinet.js"></script>
+<script>
+(function () {
+  const label = new URLSearchParams(location.search).get("child") || "";
+  const sheet = document.getElementById("sheet");
+  const tools = document.getElementById("tools");
+
+  // Коротко — по умолчанию: родителю нужна картина, а не сорок графиков.
+  let mode = new URLSearchParams(location.search).get("mode") === "full" ? "full" : "short";
+
+  // Разделы отчёта. Выключенный раздел не печатается и не сохраняется —
+  // так из одного экрана получается мини-отчёт: только навыки, только
+  // поведение, только эпизоды. «Как читать» и итоговая строка тоже разделы:
+  // в мини-отчёте по поведению пояснение про проценты только мешает.
+  const PARTS = [
+    ["verdict", "Общая картина"],
+    ["howto", "Как читать"],
+    ["goals", "Навыки"],
+    ["gen", "Обобщение"],
+    ["behavior", "Поведение"],
+    ["abc", "Эпизоды"]
+  ];
+  const выбраны = new Set(PARTS.map(([key]) => key));
+  let текущий = null;
+
+  loadCabinet().then((data) => {
+    const c = data.children.find((x) => x.label === label) || data.children[0];
+    if (!c) {
+      sheet.innerHTML = '<div class="err">Такого ребёнка на сервере нет.</div>';
+      return;
+    }
+    текущий = { c: c, now: data.now };
+    document.title = "Отчёт — " + c.label;
+    tools.hidden = false;
+    рисоватьКнопкиРазделов();
+    draw();
+
+    document.getElementById("pdfBtn").addEventListener("click", сохранитьPDF);
+    document.getElementById("htmlBtn").addEventListener("click", сохранитьФайлом);
+    document.querySelectorAll(".modes .btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        mode = btn.dataset.mode;
+        document.querySelectorAll(".modes .btn").forEach((b) => b.classList.toggle("on", b === btn));
+        draw();
+        window.scrollTo(0, 0);
+      });
+    });
+  }).catch((err) => {
+    if (err.needAuth) {
+      sheet.innerHTML = '<div class="err"><b>Нужен вход.</b> Отчёт собирается из данных сервера — ' +
+        'войдите в <a href="cabinet.html">кабинете</a> и вернитесь.</div>';
+      return;
+    }
+    if (err.forbidden) {
+      sheet.innerHTML = '<div class="err"><b>Отчёты открыты супервизорам и администратору.</b> ' + escapeHtml(err.message) + "</div>";
+      return;
+    }
+    sheet.innerHTML = '<div class="err"><b>Сервер не ответил.</b> ' + escapeHtml(err.message) + "</div>";
+  });
+
+  function рисоватьКнопкиРазделов() {
+    const box = document.getElementById("parts");
+    box.innerHTML = PARTS.map(([key, name]) =>
+      `<button class="part on" type="button" data-part="${key}">${name}</button>`).join("");
+    box.querySelectorAll(".part").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const key = btn.dataset.part;
+        if (выбраны.has(key)) выбраны.delete(key); else выбраны.add(key);
+        btn.classList.toggle("on", выбраны.has(key));
+        draw();
+      });
+    });
+  }
+
+  function draw() {
+    sheet.innerHTML = render(текущий.c, текущий.now);
+    sheet.querySelectorAll(".proto-row").forEach((row) => {
+      row.addEventListener("click", () => {
+        const открыт = row.classList.toggle("open");
+        sheet.querySelectorAll(`.goal-row[data-proto="${row.dataset.proto}"]`)
+          .forEach((r) => { r.hidden = !открыт; });
+      });
+    });
+  }
+
+  // ── Сборка отчёта ───────────────────────────────────────────────────
+  // В отчёт идут цели В РАБОТЕ и то, что супервизор отметил освоенным.
+  // Архив не идёт: родителю незачем читать про снятые цели.
+  function целиОтчёта(c) {
+    return c.active.concat(c.done);
+  }
+
+  function render(c, now) {
+    const goals = целиОтчёта(c);
+    const все = goals.flatMap((g) => g.points.map((p) => p.date)).sort();
+    const полнаяДата = (iso) => new Date(iso + "T00:00:00Z").toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+    const период = все.length ? `${полнаяДата(все[0])} — ${полнаяДата(все[все.length - 1])}` : "—";
+    const кто = [...new Set(goals.flatMap((g) => g.points.map((p) => p.staff)).filter(Boolean))];
+
+    return head(c, goals, период, кто, now)
+      + (выбраны.has("verdict") ? summary(c, now) : "")
+      + (выбраны.has("howto") ? plain() : "")
+      + (выбраны.has("goals") ? goalsBlock(c, goals) : "")
+      + (выбраны.has("gen") ? generalization(c) : "")
+      + (выбраны.has("behavior") ? behavior(c) : "")
+      + (выбраны.has("abc") ? abc(c) : "")
+      + foot();
+  }
+
+  function head(c, goals, период, кто, now) {
+    return `<div class="rep-head">
+      <h1>Как идут занятия: ${escapeHtml(c.label)}</h1>
+      <div class="rep-meta">
+        Период: <b>${период}</b> · занятий: <b>${c.sessions}</b> · целей в работе: <b>${goals.length}</b><br>
+        ${кто.length ? `Занятия вёл: <b>${кто.map(escapeHtml).join(", ")}</b><br>` : ""}
+        Отчёт составлен ${new Date(now).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}
+      </div>
+    </div>`;
+  }
+
+  // Итоговая строка — та же, что в кабинете (общая функция в cabinet.js).
+  // Стоит первой: родителю нужен вывод, а не сорок строк, из которых он
+  // должен вывод собрать сам.
+  function summary(c, now) {
+    let html = summaryLine(c, now);
+    // «Судить осторожно: в 76% замеров одна-две пробы» — честно, но для
+    // родителя звучит как «мы не уверены в своих данных». Смысл сохраняем,
+    // тон меняем: это не сомнение в ребёнке и не оговорка ради оговорки.
+    html = html.replace(
+      /<span class="muted">Судить осторожно: ([^<]*)<\/span>/,
+      (все, текст) => {
+        const мало = /одна-две пробы/.test(текст);
+        const занятий = /занятий записано/.test(текст);
+        const части = [];
+        if (мало) части.push("по большинству целей за занятие делали одну-две попытки");
+        if (занятий) части.push("занятий записано ещё немного");
+        if (!части.length) return "";
+        return `<span class="muted">Пока ${части.join(", ")} — поэтому проценты стоит читать как общее направление, а не как точную оценку. Со временем картина станет устойчивее.</span>`;
+      }
+    );
+    return `<div class="verdict-box">${html}</div>`;
+  }
+
+  function plain() {
+    return `<div class="plain">
+      <p><b>Как читать этот отчёт.</b> На каждом занятии терапист отмечает каждую попытку ребёнка: справился сам, справился с подсказкой или не получилось.</p>
+      <p><b>Процент</b> — это доля самостоятельных ответов. 60% означает: из десяти попыток шесть ребёнок сделал сам, без подсказки.</p>
+      <p><b>Цель считается освоенной</b>, когда ребёнок держит 80% и выше три занятия подряд. После этого навык проверяют в других условиях — с другими игрушками, в другом месте, с другими людьми. Это называется обобщением: важно, чтобы умение работало не только за столом с одним человеком.</p>
+    </div>`;
+  }
+
+  function goalsBlock(c, goals) {
+    if (!goals.length) return "";
+    if (mode === "short") return goalsShort(c, goals);
+
+    const byProto = new Map();
+    goals.forEach((g) => {
+      if (!byProto.has(g.protocol)) byProto.set(g.protocol, []);
+      byProto.get(g.protocol).push(g);
+    });
+
+    return [...byProto.entries()].map(([title, list]) => `
+      <section>
+        <h2>${escapeHtml(title)}</h2>
+        <p class="sub">${list.length} ${plural(list.length, "цель", "цели", "целей")}</p>
+        ${list.map(goalCard).join("")}
+      </section>`).join("");
+  }
+
+  // Короткая версия: одна таблица по всем целям плюс графики только тех, где
+  // есть о чём говорить. Цель с одной пробой в график не превращается: там
+  // линия из одной точки и никакого смысла.
+  function goalsShort(c, goals) {
+    const ПОРЯДОК = { growth: 0, mastered: 1, plateau: 2 };
+    const кандидаты = goals
+      .filter((g) => g.status in ПОРЯДОК && g.points.length >= 2)
+      .sort((a, b) => ПОРЯДОК[a.status] - ПОРЯДОК[b.status] || b.points.length - a.points.length);
+    const заметные = кандидаты.slice(0, 6);
+    const ещё = goals.length - заметные.length;
+
+    const поПротоколам = new Map();
+    goals.forEach((g) => {
+      if (!поПротоколам.has(g.protocol)) поПротоколам.set(g.protocol, []);
+      поПротоколам.get(g.protocol).push(g);
+    });
+
+    const строкаЦели = (g) => {
+      const v = g.points.map((p) => p.percent);
+      const было = v[0], стало = v[v.length - 1], разница = стало - было;
+      const [cls, text] = STATUS_TEXT[g.status] || ["", g.status];
+      const решено = g.decision && g.decision.status === "mastered";
+      return `<td>${escapeHtml(g.goal)}</td>
+        <td class="num">${было}%</td>
+        <td class="num"><b class="${pctClass(стало)}">${стало}%</b></td>
+        <td class="num ${разница > 0 ? "up" : разница < 0 ? "down" : ""}">${
+          v.length < 2 ? '<span class="muted">—</span>' : (разница > 0 ? "+" : "") + разница}</td>
+        <td><span class="flag ${решено ? "good" : cls}">${решено ? "освоено" : text}</span></td>
+        <td class="num">${v.length}</td>`;
+    };
+
+    return `<section>
+      <h2>Что с целями</h2>
+      <p class="sub">Все цели, над которыми работали за период. Нажмите на протокол, чтобы раскрыть или свернуть его цели.</p>
+      <div class="scroll"><table class="sum">
+        <thead><tr><th>Цель</th><th class="num">Было</th><th class="num">Стало</th><th class="num">Изменение</th><th>Статус</th><th class="num">Замеров</th></tr></thead>
+        <tbody>${[...поПротоколам.entries()].map(([title, list], pi) => {
+          const освоено = list.filter((g) => g.status === "mastered" || (g.decision && g.decision.status === "mastered")).length;
+          const значения = list.map((g) => g.points[g.points.length - 1].percent);
+          const среднее = Math.round(значения.reduce((a, b) => a + b, 0) / значения.length);
+          const открыт = pi === 0;
+          return `<tr class="proto-row${открыт ? " open" : ""}" data-proto="${pi}">
+              <td colspan="4"><span class="caret">▸</span> <b>${escapeHtml(title)}</b>
+                <span class="muted">· ${list.length} ${plural(list.length, "цель", "цели", "целей")}${
+                  освоено ? ` · освоено ${освоено}` : ""}</span></td>
+              <td colspan="2" class="num muted">среднее <b class="${pctClass(среднее)}">${среднее}%</b></td>
+            </tr>
+            ${list.map((g) => `<tr class="goal-row" data-proto="${pi}"${открыт ? "" : " hidden"}>${строкаЦели(g)}</tr>`).join("")}`;
+        }).join("")}</tbody>
+      </table></div>
+    </section>
+
+    ${заметные.length ? `<section>
+      <h2>Как менялось</h2>
+      <p class="sub">Несколько целей, по которым динамика уже видна.${
+        ещё > 0 ? ` Остальные ${ещё} ${plural(ещё, "цель", "цели", "целей")} — в таблице выше и в полной версии отчёта.` : ""}</p>
+      ${заметные.map(goalCard).join("")}
+    </section>` : ""}`;
+  }
+
+  function goalCard(g) {
+    const значения = g.points.map((p) => p.percent);
+    const первый = значения[0];
+    const последний = значения[значения.length - 1];
+    const разница = последний - первый;
+    const [cls, text] = STATUS_TEXT[g.status] || ["", g.status];
+    const решено = g.decision && g.decision.status === "mastered";
+
+    return `<div class="goal-card">
+      <h3>${escapeHtml(g.goal)}</h3>
+      <p class="where">Замеров: ${значения.length} · с ${humanDate(g.points[0].date)} по ${humanDate(g.lastDate)}</p>
+      <div class="figures">
+        <div><b>${первый}%</b>в начале</div>
+        <div><b>${последний}%</b>сейчас</div>
+        <div><b class="${разница > 0 ? "up" : разница < 0 ? "down" : ""}">${
+          значения.length < 2 ? "—" : (разница > 0 ? "+" : "") + разница}</b>изменение</div>
+        <div><b>&nbsp;</b><span class="flag ${решено ? "good" : cls}">${решено ? "освоено" : text}</span></div>
+      </div>
+      ${значения.length > 1 ? chart(g.points, { height: 190 }) : '<p class="muted" style="margin:0">Пока один замер — линию строить не из чего.</p>'}
+    </div>`;
+  }
+
+  function generalization(c) {
+    if (!c.gen.length) return "";
+    return `<section>
+      <h2>Навык в разных условиях</h2>
+      <p class="sub">Освоенное умение проверяют с тремя разными материалами, в трёх местах и с тремя людьми — всего девять проверок.</p>
+      <div class="scroll"><table>
+        <thead><tr><th>Умение</th><th class="num">Проверено</th><th>Где получилось</th><th>Пока не получилось</th></tr></thead>
+        <tbody>${c.gen.map((g) => `<tr>
+          <td>${escapeHtml(g.goal)}</td>
+          <td class="num"><b class="${g.passed >= 9 ? "pct green" : "pct"}">${g.passed} из 9</b></td>
+          <td>${g.passedNames && g.passedNames.length ? escapeHtml(g.passedNames.join(", ")) : "—"}</td>
+          <td>${g.failed && g.failed.length ? escapeHtml(g.failed.join(", ")) : "—"}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+    </section>`;
+  }
+
+  function behavior(c) {
+    if (!c.behavior.length) return "";
+    const было = c.behavior.filter((b) => b.count > 0);
+    const series = behaviorSeries(c.behavior, "count");
+    const строк = mode === "short" ? 6 : 20;
+    return `<section>
+      <h2>Поведение</h2>
+      <p class="sub">Сколько раз поведение случилось за наблюдение. Отметка «0» — тоже результат: значит, в этот раз поведения не было.</p>
+      ${series.length ? multiChart(series, { unit: "раз за наблюдение", height: 220 }) : ""}
+      ${series.length ? `<div class="legend">${series.map((s) =>
+        `<span class="leg-item"><span class="leg-dot" style="background:${s.color}"></span>${escapeHtml(s.name)}</span>`).join("")}</div>` : ""}
+      <div class="scroll" style="margin-top:12px"><table>
+        <thead><tr><th>Когда</th><th>Поведение</th><th class="num">Раз</th><th class="num">За минут</th></tr></thead>
+        <tbody>${было.slice(0, строк).map((b) => `<tr>
+          <td>${humanDate(b.date)}</td><td>${escapeHtml(b.behavior)}</td>
+          <td class="num">${b.count}</td><td class="num">${b.minutes || "—"}</td>
+        </tr>`).join("") || '<tr><td colspan="4">Проявлений не зафиксировано.</td></tr>'}</tbody>
+      </table></div>
+    </section>`;
+  }
+
+  function abc(c) {
+    if (!c.abc.length) return "";
+    const список = mode === "short" ? c.abc.slice(0, 3) : c.abc;
+    const скрыто = c.abc.length - список.length;
+    return `<section>
+      <h2>Эпизоды поведения</h2>
+      <p class="sub">Что было до, что произошло и что было после — из этого видно, ради чего поведение случается.${
+        скрыто ? ` Показаны последние ${список.length} из ${c.abc.length}.` : ""}</p>
+      ${список.map((a) => `<div class="abc-item">
+        <div class="abc-when"><b>${humanDate(a.date)}${a.time ? ", " + escapeHtml(a.time) : ""}</b>
+          ${a.intensity ? `<span class="flag">интенсивность: ${escapeHtml(a.intensity)}</span>` : ""}
+          ${a.duration ? `<span class="flag">длилось: ${escapeHtml(a.duration)}</span>` : ""}</div>
+        <div class="abc-grid">
+          <div class="abc-part"><span>До эпизода</span>${escapeHtml(a.antecedent) || "—"}</div>
+          <div class="abc-part b"><span>Что произошло</span>${escapeHtml(a.behavior) || "—"}</div>
+          <div class="abc-part"><span>После</span>${escapeHtml(a.consequence) || "—"}</div>
+        </div>
+      </div>`).join("")}
+    </section>`;
+  }
+
+  function foot() {
+    return `<p class="foot">Данные собраны терапистами на занятиях в приложении ABA-чек-лист.
+      Если что-то в отчёте непонятно — спросите супервизора, это нормальный вопрос.</p>`;
+  }
+
+  // ── Сохранение ──────────────────────────────────────────────────────
+  // PDF собирает сам браузер: в его окне сохранения на Mac и на iPad есть
+  // «Сохранить в PDF». Своего генератора PDF нет намеренно — он потребовал
+  // бы зашить в страницу кириллический шрифт и верстать отчёт второй раз,
+  // а вёрстка на экране и в PDF разошлась бы.
+  function сохранитьPDF() {
+    const note = document.getElementById("note");
+    note.textContent = "В открывшемся окне выберите «Сохранить в PDF» (на Mac — кнопка «PDF» внизу слева).";
+    // Даём браузеру отрисовать подсказку до того, как окно перехватит поток.
+    setTimeout(() => window.print(), 60);
+  }
+
+  // Второй путь: самодостаточный HTML-файл. Открывается где угодно и без
+  // интернета, ничего не тянет наружу — удобно подшить в карту ребёнка.
+  async function сохранитьФайлом() {
+    const кнопка = document.getElementById("htmlBtn");
+    const note = document.getElementById("note");
+    const было = кнопка.textContent;
+    кнопка.disabled = true;
+    кнопка.textContent = "Собираю…";
+    try {
+      const общие = await общиеСтили();
+      // Шрифты лежат рядом с сайтом — в скачанном файле их не будет,
+      // поэтому правила убираем: браузер возьмёт системный шрифт.
+      const безШрифтов = общие.replace(/@font-face\s*\{[^}]*\}/g, "");
+      const свои = document.querySelector("style").textContent;
+
+      const копия = sheet.cloneNode(true);
+      копия.querySelectorAll("[hidden]").forEach((el) => el.removeAttribute("hidden"));
+      копия.querySelectorAll(".caret").forEach((el) => el.remove());
+      копия.querySelectorAll(".proto-row").forEach((el) => { el.style.cursor = "default"; });
+
+      const html = `<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(document.title)}</title>
+<style>${безШрифтов}\n${свои}</style>
+</head><body>${копия.outerHTML}</body></html>`;
+
+      const файл = new Blob([html], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(файл);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Отчёт — ${текущий.c.label} — ${new Date().toLocaleDateString("ru-RU")}.html`;
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      note.textContent = "Сохранено. Файл открывается в любом браузере.";
+    } catch (err) {
+      note.textContent = "Не удалось сохранить: " + err.message;
+    } finally {
+      кнопка.disabled = false;
+      кнопка.textContent = было;
+    }
+  }
+
+  // Откуда взять текст общих стилей: сначала уже загруженные таблицы,
+  // потом файлы. Отчёт открывают только с сайта, поэтому запасной копии
+  // стилей здесь нет — в отличие от страниц показа, которые открывали
+  // прямо из файла.
+  async function общиеСтили() {
+    const куски = [];
+    for (const s of document.styleSheets) {
+      if (!s.href) continue;
+      try {
+        куски.push([...s.cssRules].map((r) => r.cssText).join("\n"));
+      } catch (_) {
+        const r = await fetch(s.href);
+        if (r.ok) куски.push(await r.text());
+      }
+    }
+    return куски.join("\n");
+  }
+})();
+</script>
+</body>
+</html>

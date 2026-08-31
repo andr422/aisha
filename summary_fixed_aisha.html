@@ -785,7 +785,7 @@
     <div class="row" id="authLogoutRow" hidden>
       <button type="button" class="btn btn-secondary" id="authLogout">Выйти</button>
     </div>
-    <div class="hint">Вход нужен, чтобы у занятий появился автор. <b>Сбор данных от него не зависит:</b> кнопки на «Сборе» работают и без входа, и без интернета — занятие уйдёт, когда появится связь. Пароль спросите у руководителя.</div>
+    <div class="hint">Вход нужен, чтобы у занятий появился автор. <b>Сбор данных от него не зависит:</b> кнопки на «Сборе» работают и без входа, и без интернета — занятие уйдёт, когда появится связь. Пароль спросите у супервизора.</div>
   </div>
 
   <div id="staffBox" hidden>
@@ -2649,6 +2649,7 @@
               if (goal.genDoneDate) localStorage.setItem(`protocol${n}_goal${id}_genDoneDate`, goal.genDoneDate);
               if (goal.genHold) localStorage.setItem(`protocol${n}_goal${id}_genHold`, "1");
               if (goal.keepDaily) localStorage.setItem(`protocol${n}_goal${id}_keepDaily`, "1");
+              if (goal.archived) localStorage.setItem(`protocol${n}_goal${id}_archived`, "1");
               if (goal.genLog) localStorage.setItem(`protocol${n}_goal${id}_genLog`, JSON.stringify(goal.genLog));
             });
           });

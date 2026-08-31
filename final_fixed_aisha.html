@@ -2070,9 +2070,23 @@
       const saved = JSON.parse(localStorage.getItem(`protocol${idx}_selectedGoals`) || "[]");
       options.innerHTML = "";
 
-      const goalIds = existingGoalIds(idx);
+      // Архивные цели в выборе не показываем: отметить её можно было бы,
+      // а на занятии она всё равно не появится — вышло бы «галочка стоит,
+      // цели нет». Вернуть их может только супервизор.
+      const всеЦели = existingGoalIds(idx);
+      const goalIds = всеЦели.filter((j) => localStorage.getItem(`protocol${idx}_goal${j}_archived`) !== "1");
+      const вАрхиве = всеЦели.length - goalIds.length;
       if (!goalIds.length) {
-        options.innerHTML = '<p style="color:var(--muted);">У протокола пока нет целей — добавьте их на странице «Настройка».</p>';
+        options.innerHTML = всеЦели.length
+          ? '<p style="color:var(--muted);">Все цели этого протокола убраны в архив супервизором.</p>'
+          : '<p style="color:var(--muted);">У протокола пока нет целей — добавьте их на странице «Настройка».</p>';
+      }
+
+      if (вАрхиве && goalIds.length) {
+        const note = document.createElement("p");
+        note.style.cssText = "color:var(--muted);font-size:13px;margin:0 0 8px;";
+        note.textContent = `В архиве ещё ${вАрхиве} ${вАрхиве === 1 ? "цель" : "целей"} — их убрал супервизор.`;
+        options.append(note);
       }
 
       goalIds.forEach((j) => {
@@ -2588,16 +2602,21 @@
         const coldProbe = localStorage.getItem(`protocol${i}_coldProbe`) === "1";
         // Освоенные цели уходят из ежедневного сбора в блок генерализации —
         // экран занятия остаётся коротким. Вернуть можно кнопкой в этом блоке.
-        const selectedGoals = getSelectedGoalIds(i).filter((goalId) => {
-          if (!isGeneralizing(i, goalId)) return true;
+        const всеЦели = getSelectedGoalIds(i);
+        const selectedGoals = всеЦели.filter((goalId) => {
+          if (!isGeneralizing(i, goalId) && !isArchived(i, goalId)) return true;
           const goalName = localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`;
           return hasUnsentData(unsent, i, goalName); // с данными — оставляем
         });
         if (!selectedGoals.length) {
-          // Весь протокол ушёл на генерализацию. Молча прятать нельзя: терапист
-          // не увидит его на занятии, а в таблицу за этот день по нему ничего
-          // не попадёт — именно так «пропал протокол» в июле 2026.
-          hiddenProtocols.push(title);
+          // Весь протокол ушёл на генерализацию или в архив. Молча прятать
+          // нельзя: терапист не увидит его на занятии, а в таблицу за этот
+          // день по нему ничего не попадёт — именно так «пропал протокол»
+          // в июле 2026.
+          hiddenProtocols.push({
+            title,
+            archived: всеЦели.length > 0 && всеЦели.every((goalId) => isArchived(i, goalId))
+          });
           continue;
         }
 
@@ -2783,13 +2802,20 @@
         // Часть протоколов не показана — говорим об этом прямо и даём вернуть.
         const notice = document.createElement("div");
         notice.className = "hidden-protocols";
+        const названия = hiddenProtocols.map((p) => p.title);
+        const толькоАрхив = hiddenProtocols.every((p) => p.archived);
         const text = document.createElement("div");
         text.innerHTML =
-          `<b>Не показаны на занятии: ${hiddenProtocols.map(escapeHtml).join(", ")}.</b><br>` +
-          `Все цели этих протоколов освоены — они перешли на проверку в блок «Генерализация» ниже. ` +
+          `<b>Не показаны на занятии: ${названия.map(escapeHtml).join(", ")}.</b><br>` +
+          (толькоАрхив
+            ? `Эти протоколы убрал в архив супервизор. Вернуть их может он же — из кабинета. `
+            : `Все цели этих протоколов освоены — они перешли на проверку в блок «Генерализация» ниже. `) +
           `За сегодня в таблицу по ним ничего не уйдёт.`;
         const btn = document.createElement("button");
         btn.type = "button";
+        // Архив — решение супервизора, и снимать его с занятия нельзя:
+        // иначе кнопка молча вернула бы то, что он убрал сознательно.
+        btn.hidden = толькоАрхив;
         btn.textContent = "Вернуть в занятие";
         btn.title = "Показать эти цели с кнопками − P + (дата освоения сохранится)";
         btn.onclick = () => {
@@ -3488,6 +3514,134 @@ ${extra}
       return Boolean(mastery) && !keep && !hold;
     }
 
+    // Архив супервизора. Не путать с генерализацией: генерализация — это
+    // следующий этап работы с целью, а архив означает «эту цель мы больше
+    // не ведём». Ставится только из кабинета и снимается только оттуда,
+    // поэтому на занятии кнопки «вернуть» нет.
+    function isArchived(i, goalId) {
+      return localStorage.getItem(`protocol${i}_goal${goalId}_archived`) === "1";
+    }
+
+    // Решения супервизора приезжают с сервера при открытии «Сбора».
+    // Сопоставляем по НАЗВАНИЯМ: на сервере протокол и цель — это названия,
+    // номера есть только на планшете. Расхождение в названии = решение не
+    // применится; это честнее, чем угадывать.
+    function applyDecisions(list) {
+      const поНазванию = new Map();
+      const count = getProtocolsCount();
+      for (let i = 1; i <= count; i += 1) {
+        const title = (localStorage.getItem(`protocol${i}_title`) || "").trim();
+        if (title) поНазванию.set(title, i);
+      }
+
+      // Что решено по каждой цели: ключ «протокол#цель» → статус.
+      const решения = new Map();
+      (list || []).forEach((d) => {
+        const i = поНазванию.get(String(d.protocol || "").trim());
+        if (!i) return;
+        const goalName = String(d.goal || "").trim();
+        const цели = goalName
+          ? existingGoalIds(i).filter((id) => (localStorage.getItem(`protocol${i}_goal${id}`) || "").trim() === goalName)
+          : existingGoalIds(i);
+        цели.forEach((id) => решения.set(i + "#" + id, { status: d.status, at: String(d.decided_at || "").slice(0, 10) }));
+      });
+
+      const итог = { archived: [], mastered: [], returned: [] };
+
+      for (let i = 1; i <= count; i += 1) {
+        existingGoalIds(i).forEach((goalId) => {
+          const goalName = localStorage.getItem(`protocol${i}_goal${goalId}`) || `Цель ${goalId}`;
+          const решение = решения.get(i + "#" + goalId);
+          const ключАрхива = `protocol${i}_goal${goalId}_archived`;
+          const ключОсвоения = `protocol${i}_goal${goalId}_masteryDate`;
+          // В этом ключе лежит дата, которую поставил САМ супервизор. По ней
+          // видно, что снимать при возврате, а что поставил планшет сам.
+          const ключРешения = `protocol${i}_goal${goalId}_supMastered`;
+
+          if (решение && решение.status === "archived") {
+            if (localStorage.getItem(ключАрхива) !== "1") {
+              localStorage.setItem(ключАрхива, "1");
+              итог.archived.push(goalName);
+            }
+            return;
+          }
+
+          if (решение && решение.status === "mastered") {
+            localStorage.removeItem(ключАрхива);
+            if (localStorage.getItem(ключРешения)) return; // уже применено
+            const своя = (localStorage.getItem(ключОсвоения) || "").trim();
+            const дата = решение.at || new Date().toISOString().slice(0, 10);
+            if (!своя) localStorage.setItem(ключОсвоения, дата);
+            localStorage.setItem(ключРешения, своя ? "kept" : дата);
+            // Цель уходит в блок «Генерализация»: решение супервизора и есть
+            // то самое подтверждение, которого ждёт кнопка «В обобщение».
+            localStorage.removeItem(`protocol${i}_goal${goalId}_genHold`);
+            localStorage.removeItem(`protocol${i}_goal${goalId}_keepDaily`);
+            итог.mastered.push(goalName);
+            return;
+          }
+
+          // Решения нет: снимаем то, что ставил супервизор. Дату освоения,
+          // которую планшет вывел сам, не трогаем — она не его.
+          let вернули = false;
+          if (localStorage.getItem(ключАрхива) === "1") {
+            localStorage.removeItem(ключАрхива);
+            вернули = true;
+          }
+          const было = localStorage.getItem(ключРешения);
+          if (было) {
+            localStorage.removeItem(ключРешения);
+            if (было === "kept") {
+              // Дата стояла и до супервизора — возвращаем цель на занятие
+              // тем же способом, что и кнопка «Вернуть в занятие».
+              localStorage.setItem(`protocol${i}_goal${goalId}_keepDaily`, "1");
+            } else if ((localStorage.getItem(ключОсвоения) || "").trim() === было) {
+              localStorage.removeItem(ключОсвоения);
+            }
+            вернули = true;
+          }
+          if (вернули) итог.returned.push(goalName);
+        });
+      }
+      return итог;
+    }
+
+    // Тихая подтяжка решений: при открытии «Сбора», если есть вход и сеть.
+    // Молчит, когда ничего не изменилось, — терапист не должен получать
+    // сообщение каждое утро просто потому, что связь есть.
+    async function pullDecisions() {
+      if (!navigator.onLine) return;
+      if (!window.abaAuth || !window.abaAuth.get()) return;
+      // Метка ребёнка — та же, что уходит в пакетах: по ней сервер и
+      // различает детей.
+      const label = getActiveChildLabel() || (localStorage.getItem("child_name") || "").trim();
+      if (!label) return;
+
+      try {
+        const resp = await fetch(
+          `https://api.abachecklist.ru/api/sync?child=${encodeURIComponent(label)}&decisions=1`,
+          { headers: window.abaAuth.headers() }
+        );
+        const данные = await resp.json();
+        if (!resp.ok || !данные.ok) return;
+
+        const итог = applyDecisions(данные.decisions || []);
+        const сообщения = [];
+        if (итог.mastered.length) сообщения.push(`супервизор отметил освоенными: ${итог.mastered.join(", ")}`);
+        if (итог.archived.length) сообщения.push(`убрано в архив: ${итог.archived.join(", ")}`);
+        if (итог.returned.length) сообщения.push(`вернулось в работу: ${итог.returned.join(", ")}`);
+        if (!сообщения.length) return;
+
+        const inProgress = snapshotInProgressData();
+        renderDaily();
+        restoreInProgressData(inProgress);
+        loadProgress();
+        showToast("Изменения от супервизора — " + сообщения.join("; ") + ".", 8000);
+      } catch (err) {
+        // Нет связи или сервер молчит — занятие идёт как обычно.
+      }
+    }
+
     // Критерий достигнут, но цель ещё на занятии: ждёт решения тераписта.
     function isAwaitingGeneralization(i, goalId) {
       const mastery = (localStorage.getItem(`protocol${i}_goal${goalId}_masteryDate`) || "").trim();
@@ -3532,6 +3686,7 @@ ${extra}
           // нажимали), в блок проб не попадает: иначе перевод происходил бы
           // сам собой, а мы как раз это и убрали.
           if (isAwaitingGeneralization(i, goalId)) return;
+          if (isArchived(i, goalId)) return; // убрано супервизором — не ведём
           out.push({
             protocolIndex: i,
             protocolTitle,
@@ -4821,10 +4976,15 @@ ${extra}
       updateQueueIndicator();
       flushQueue();
 
+      // Решения супервизора (освоено / в архив) — тихо, после отрисовки:
+      // занятие не должно ждать сети. Без входа и без сети просто молчит.
+      pullDecisions();
+
       // Досылать автоматически при появлении сети.
       window.addEventListener("online", () => {
         showToast("Сеть появилась — досылаю данные…", 3000);
         flushQueue();
+        pullDecisions();
       });
 
       // Периодическая попытка (на случай, если событие online не сработало).
