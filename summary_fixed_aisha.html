@@ -3078,6 +3078,40 @@
         }
       }
 
+      // Переход из кабинета: summary_fixed_aisha.html?child=<метка>&open=collect.
+      //
+      // Почему через «Настройку», а не сразу на «Сбор»: смена ребёнка — это не
+      // просто другая надпись, а перекладывание всего рабочего набора между
+      // профилями (collectWorkingSet / loadWorkingSet). Этот код живёт здесь и
+      // проверен; дублировать его на «Сборе» ради одной ссылки — верный способ
+      // однажды потерять чужие счётчики.
+      function открытьИзКабинета() {
+        const params = new URLSearchParams(location.search);
+        const метка = (params.get("child") || "").trim();
+        if (!метка) return;
+
+        // Адрес чистим сразу: перезагрузка страницы не должна снова
+        // переключать ребёнка.
+        history.replaceState(null, "", location.pathname);
+
+        const цель = getChildren().find((c) => c.label === метка);
+        if (!цель) {
+          showToast(
+            `Профиля «${метка}» на этом устройстве нет. Его можно загрузить: меню ⋮ → «⬇ Загрузить с сервера».`,
+            9000
+          );
+          return;
+        }
+
+        // switchChild сам спросит про несданные счётчики и может отменить
+        // переход — тогда на «Сбор» не уходим.
+        switchChild(цель.id);
+        if (getActiveChildId() !== цель.id) return;
+
+        if (params.get("open") === "collect") location.replace("final_fixed_aisha.html");
+        else showToast(`Открыт профиль «${метка}».`);
+      }
+
       function init() {
         ensureActiveChild();
         initSessionFields();
@@ -3090,6 +3124,7 @@
         wireBackup();
         wireMenu();
         updateActiveNotice();
+        открытьИзКабинета();
       }
 
       document.addEventListener("DOMContentLoaded", init);
