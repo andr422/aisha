@@ -284,6 +284,236 @@ const STATUS_TEXT = {
   new: ["", "первое занятие"]
 };
 
+// ── Выгрузка всех данных ──────────────────────────────────────────────────
+// Один файл .zip, внутри — несколько CSV: замеры, занятия, поведение,
+// эпизоды, обобщение, решения. CSV, а не JSON: их открывает Excel, и
+// супервизор читает их без нас. Разделитель «;» и BOM — как в выгрузке
+// архива на планшете, иначе русский Excel ломает кодировку и колонки.
+//
+// Ничего не пересчитываем и не сглаживаем: в файлы уходит то же, что видно
+// на экране, включая цели, убранные в архив и удалённые (со столбцом
+// «состояние»). Выгрузка — это про «отдать данные», а не про красивую
+// картинку.
+
+function csvТаблица(строки) {
+  const клетка = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+  return "\ufeff" + строки.map((r) => r.map(клетка).join(";")).join("\r\n");
+}
+
+function состояниеЦели(g) {
+  if (!g.decision) return "в работе";
+  if (g.decision.status === "mastered") return "освоена";
+  if (g.decision.status === "archived") return "в архиве";
+  return "удалена";
+}
+
+// Занятия ребёнка одной строкой на день — то же, что в «Истории занятий».
+function занятияРебёнка(c) {
+  const поДате = new Map();
+  c.goals.forEach((g) => g.points.forEach((p) => {
+    if (!поДате.has(p.date)) поДате.set(p.date, []);
+    поДате.get(p.date).push({ percent: p.percent, responses: p.responses, staff: p.staff });
+  }));
+  return [...поДате.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([дата, items]) => {
+    const проб = items.reduce((n, it) => n + String(it.responses || "").trim().split(/\s+/).filter(Boolean).length, 0);
+    return {
+      date: дата,
+      целей: items.length,
+      среднее: Math.round(items.reduce((a, b) => a + b.percent, 0) / items.length),
+      проб,
+      кто: [...new Set(items.map((it) => it.staff).filter(Boolean))].join(", ")
+    };
+  });
+}
+
+function файлыВыгрузки(дети, now) {
+  const дата = (d) => String(d || "").slice(0, 10);
+
+  const обзор = [["Ребёнок", "Занятий", "Последнее занятие", "Целей в работе", "В архиве", "Эпизодов ABC", "Наблюдений за поведением"]];
+  const замеры = [["Ребёнок", "Дата", "Протокол", "Цель", "Процент", "Как отвечал", "Подсказки", "Кто вёл", "Состояние цели"]];
+  const занятия = [["Ребёнок", "Дата", "Целей отработано", "Средний процент", "Проб", "Кто вёл"]];
+  const поведение = [["Ребёнок", "Дата", "Поведение", "Сколько раз", "За минут", "Раз в час"]];
+  const эпизоды = [["Ребёнок", "Дата", "Время", "До эпизода", "Что произошло", "После", "Интенсивность", "Длительность"]];
+  const обобщение = [["Ребёнок", "Протокол", "Цель", "Пройдено из 9", "Где получилось", "Не получилось", "Последняя проба"]];
+  const решения = [["Ребёнок", "Протокол", "Цель", "Решение", "Кто решил", "Когда"]];
+
+  дети.forEach((c) => {
+    обзор.push([c.label, c.sessions, c.lastDate || "", c.active.length, c.archived.length, c.abc.length, c.behavior.length]);
+
+    c.goals.forEach((g) => {
+      const состояние = состояниеЦели(g);
+      g.points.forEach((p) => {
+        замеры.push([c.label, p.date, g.protocol, g.goal, p.percent, p.responses || "", p.prompts || "", p.staff || "", состояние]);
+      });
+    });
+
+    занятияРебёнка(c).forEach((s) => занятия.push([c.label, s.date, s.целей, s.среднее, s.проб, s.кто]));
+
+    c.behavior.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach((b) => {
+      поведение.push([c.label, b.date, b.behavior, b.count, b.minutes || "", b.minutes ? round1((b.count / b.minutes) * 60) : ""]);
+    });
+
+    c.abc.slice().reverse().forEach((a) => {
+      эпизоды.push([c.label, a.date, a.time || "", a.antecedent || "", a.behavior || "", a.consequence || "", a.intensity || "", a.duration || ""]);
+    });
+
+    c.gen.forEach((g) => {
+      обобщение.push([c.label, g.protocol, g.goal, g.passed, (g.passedNames || []).join(", "), (g.failed || []).join(", "), g.last || ""]);
+    });
+
+    c.protocolDecisions.forEach((d, protocol) => {
+      решения.push([c.label, protocol, "(весь протокол)", РЕШЕНИЕ[d.status] || d.status, d.by || "", дата(d.at)]);
+    });
+    c.goalDecisions.forEach((d, ключ) => {
+      const [protocol, goal] = ключ.split(" ‖ ");
+      решения.push([c.label, protocol, goal, РЕШЕНИЕ[d.status] || d.status, d.by || "", дата(d.at)]);
+    });
+  });
+
+  const подпись = `Выгружено ${new Date(now).toLocaleString("ru-RU")}`;
+
+  return [
+    { имя: "как_читать.txt", текст: КАК_ЧИТАТЬ + "\r\n\r\n" + подпись + "\r\n" },
+    { имя: "дети.csv", текст: csvТаблица(обзор) },
+    { имя: "замеры.csv", текст: csvТаблица(замеры) },
+    { имя: "занятия.csv", текст: csvТаблица(занятия) },
+    { имя: "поведение.csv", текст: csvТаблица(поведение) },
+    { имя: "эпизоды_abc.csv", текст: csvТаблица(эпизоды) },
+    { имя: "обобщение.csv", текст: csvТаблица(обобщение) },
+    { имя: "решения.csv", текст: csvТаблица(решения) }
+  ];
+}
+
+const РЕШЕНИЕ = { mastered: "освоено", archived: "в архив", deleted: "удалено" };
+
+const КАК_ЧИТАТЬ = [
+  "Выгрузка данных ABA-чек-листа.",
+  "",
+  "Файлы CSV, разделитель — точка с запятой, кодировка UTF-8 с BOM:",
+  "открываются двойным щелчком в Excel и в Google Таблицах.",
+  "",
+  "дети.csv         — по одной строке на ребёнка: сколько занятий, когда последнее.",
+  "замеры.csv       — главный файл: строка = одна цель на одном занятии.",
+  "                   «Процент» — доля самостоятельных ответов.",
+  "                   «Как отвечал» — последовательность проб: + сам, P подсказка,",
+  "                   − ошибка, / частично верно, G/V/E/PF/FF — вид подсказки.",
+  "занятия.csv      — одна строка на занятие: сколько целей, средний процент.",
+  "поведение.csv    — подсчёты частоты. «0» значит «наблюдали, поведения не было».",
+  "эпизоды_abc.csv  — эпизоды поведения целиком: до, что произошло, после.",
+  "обобщение.csv    — проверка навыка в девяти условиях.",
+  "решения.csv      — что супервизор отметил освоенным, убрал в архив или удалил.",
+  "",
+  "Цели, убранные в архив и удалённые, из выгрузки НЕ исключены:",
+  "в замерах у каждой строки есть столбец «Состояние цели».",
+  "",
+  "В файлах нет имён детей — только метки, как и на сервере."
+].join("\r\n");
+
+// ── Упаковка в ZIP ────────────────────────────────────────────────────────
+// Пишем архив руками: библиотеку тянуть ради шести CSV незачем. Сжимаем
+// через CompressionStream, если браузер умеет (текст ужимается в разы), а
+// если нет — кладём как есть: лучше файл побольше, чем ошибка на ровном месте.
+const CRC_ТАБЛИЦА = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i += 1) {
+    let c = i;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(данные) {
+  let c = 0xffffffff;
+  for (let i = 0; i < данные.length; i += 1) c = CRC_ТАБЛИЦА[(c ^ данные[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+async function сжать(сырые) {
+  if (typeof CompressionStream !== "function") return { данные: сырые, метод: 0 };
+  try {
+    const поток = new Blob([сырые]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+    const буфер = await new Response(поток).arrayBuffer();
+    return { данные: new Uint8Array(буфер), метод: 8 };
+  } catch (err) {
+    return { данные: сырые, метод: 0 };
+  }
+}
+
+async function сделатьZip(файлы) {
+  const enc = new TextEncoder();
+  const куски = [];
+  const каталог = [];
+  let смещение = 0;
+
+  // Время в ZIP хранится в формате MS-DOS — иначе распаковщики показывают 1980 год.
+  const d = new Date();
+  const время = ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xffff;
+  const датаDOS = (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xffff;
+
+  for (const ф of файлы) {
+    const сырые = enc.encode(ф.текст);
+    const { данные, метод } = await сжать(сырые);
+    const имя = enc.encode(ф.имя);
+    const crc = crc32(сырые);
+
+    const шапка = new DataView(new ArrayBuffer(30));
+    шапка.setUint32(0, 0x04034b50, true);
+    шапка.setUint16(4, 20, true);
+    шапка.setUint16(6, 0x0800, true); // имена файлов в UTF-8
+    шапка.setUint16(8, метод, true);
+    шапка.setUint16(10, время, true);
+    шапка.setUint16(12, датаDOS, true);
+    шапка.setUint32(14, crc, true);
+    шапка.setUint32(18, данные.length, true);
+    шапка.setUint32(22, сырые.length, true);
+    шапка.setUint16(26, имя.length, true);
+    куски.push(new Uint8Array(шапка.buffer), имя, данные);
+
+    const запись = new DataView(new ArrayBuffer(46));
+    запись.setUint32(0, 0x02014b50, true);
+    запись.setUint16(4, 20, true);
+    запись.setUint16(6, 20, true);
+    запись.setUint16(8, 0x0800, true);
+    запись.setUint16(10, метод, true);
+    запись.setUint16(12, время, true);
+    запись.setUint16(14, датаDOS, true);
+    запись.setUint32(16, crc, true);
+    запись.setUint32(20, данные.length, true);
+    запись.setUint32(24, сырые.length, true);
+    запись.setUint16(28, имя.length, true);
+    запись.setUint32(42, смещение, true);
+    каталог.push(new Uint8Array(запись.buffer), имя);
+
+    смещение += 30 + имя.length + данные.length;
+  }
+
+  const размерКаталога = каталог.reduce((n, ч) => n + ч.length, 0);
+  const хвост = new DataView(new ArrayBuffer(22));
+  хвост.setUint32(0, 0x06054b50, true);
+  хвост.setUint16(8, файлы.length, true);
+  хвост.setUint16(10, файлы.length, true);
+  хвост.setUint32(12, размерКаталога, true);
+  хвост.setUint32(16, смещение, true);
+
+  return new Blob([...куски, ...каталог, new Uint8Array(хвост.buffer)], { type: "application/zip" });
+}
+
+// Собрать и отдать файл. Возвращает размер — его показываем человеку,
+// чтобы он видел, что скачалось не пусто.
+async function скачатьВыгрузку(дети, now, подпись) {
+  const архив = await сделатьZip(файлыВыгрузки(дети, now));
+  const url = URL.createObjectURL(архив);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ABA — ${подпись} — ${new Date(now).toISOString().slice(0, 10)}.zip`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return архив.size;
+}
+
 // ── Мелочи ────────────────────────────────────────────────────────────────
 function day(value) { return String(value || "").slice(0, 10); }
 

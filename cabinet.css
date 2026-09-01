@@ -337,7 +337,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 /* ── Решения супервизора ──────────────────────────────────────────────── */
 /* Кнопки живут в шапке протокола и в строке цели. Намеренно неяркие:
    решение — действие обдуманное, а не то, что нажимают мимоходом. */
-.acts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+/* Кнопки решений не переносим: в узкой ячейке они складывались лесенкой и
+   строка цели скакала по высоте. Таблица и так прокручивается вбок. */
+.acts { display: inline-flex; gap: 6px; flex-wrap: nowrap; white-space: nowrap; }
 .act {
   font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap;
   padding: 5px 11px; border-radius: 999px; cursor: pointer;
@@ -361,3 +363,31 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   border-radius: 999px; font-size: 14px; z-index: 50; box-shadow: var(--shadow-lg);
   max-width: 90vw;
 }
+
+/* ── Меню действий у протокола и цели ─────────────────────────────────── */
+/* «В архив» и «Удалить» спрятаны под «⋮»: это действия редкие и весомые,
+   и на виду они соблазняли бы нажать мимоходом. «Освоен» остаётся снаружи —
+   его нажимают чаще всего. */
+/* Кнопка крупнее обычной: знак узкий, а целятся в неё и мышью, и пальцем. */
+.act.more { padding: 5px 12px; font-size: 16px; line-height: 1.2; }
+.act.more.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+/* Меню лежит в body и позиционируется скриптом по координатам СТРАНИЦЫ:
+   внутри таблицы с прокруткой и карточки с `overflow: hidden` оно
+   обрезалось бы по краю, а absolute в body едет вместе с содержимым. */
+.menu-pop {
+  position: absolute; z-index: 60;
+  display: flex; flex-direction: column; gap: 2px; min-width: 176px; padding: 6px;
+  background: var(--card); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow-lg);
+}
+
+.menu-pop button {
+  font: inherit; font-size: 13px; text-align: left; white-space: nowrap;
+  padding: 7px 10px; border: none; border-radius: var(--radius-sm);
+  background: none; color: var(--text); cursor: pointer;
+}
+.menu-pop button:hover { background: var(--soft); }
+.menu-pop button.danger { color: var(--danger-ink); }
+.menu-pop button.danger:hover { background: var(--danger-soft); }
+.menu-pop hr { border: none; border-top: 1px solid var(--line); margin: 3px 0; }

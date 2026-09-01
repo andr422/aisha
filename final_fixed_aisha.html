@@ -3522,6 +3522,35 @@ ${extra}
       return localStorage.getItem(`protocol${i}_goal${goalId}_archived`) === "1";
     }
 
+    // Стереть цель на планшете по решению супервизора.
+    //
+    // Удаляем ТОЛЬКО ключи самой цели: имя, даты, журнал обобщения, отметки.
+    // Историю замеров не трогаем — она лежит отдельно, по имени цели, и
+    // остаётся в занятиях и графиках за прошлые дни. Номера протоколов не
+    // перекладываем: перенумерация сдвинула бы историю, а ради удалённой
+    // цели рисковать чужими данными нельзя (на «Настройке» удаление
+    // протокола делает это осознанно и с архивом).
+    function удалитьЦель(i, goalId) {
+      const хвосты = ["", "_introDate", "_masteryDate", "_genDoneDate", "_genHold",
+        "_keepDaily", "_archived", "_supMastered", "_genLog",
+        "_genStim", "_genPlace", "_genPeople"];
+      хвосты.forEach((хвост) => localStorage.removeItem(`protocol${i}_goal${goalId}${хвост}`));
+
+      // Из списка выбранных на занятие цель тоже убираем: иначе она осталась
+      // бы галочкой, за которой ничего нет.
+      try {
+        const выбранные = JSON.parse(localStorage.getItem(`protocol${i}_selectedGoals`) || "[]");
+        if (Array.isArray(выбранные) && выбранные.includes(goalId)) {
+          localStorage.setItem(
+            `protocol${i}_selectedGoals`,
+            JSON.stringify(выбранные.filter((j) => j !== goalId))
+          );
+        }
+      } catch {
+        /* повреждённый список — оставляем как есть */
+      }
+    }
+
     // Решения супервизора приезжают с сервера при открытии «Сбора».
     // Сопоставляем по НАЗВАНИЯМ: на сервере протокол и цель — это названия,
     // номера есть только на планшете. Расхождение в названии = решение не
@@ -3544,9 +3573,12 @@ ${extra}
           ? existingGoalIds(i).filter((id) => (localStorage.getItem(`protocol${i}_goal${id}`) || "").trim() === goalName)
           : existingGoalIds(i);
         цели.forEach((id) => решения.set(i + "#" + id, { status: d.status, at: String(d.decided_at || "").slice(0, 10) }));
+        // Решение по ПРОТОКОЛУ помечаем отдельно: по нему видно, что после
+        // удаления целей можно убрать и сам протокол.
+        if (!goalName) решения.set(i + "#протокол", d.status);
       });
 
-      const итог = { archived: [], mastered: [], returned: [] };
+      const итог = { archived: [], mastered: [], returned: [], deleted: [] };
 
       for (let i = 1; i <= count; i += 1) {
         existingGoalIds(i).forEach((goalId) => {
@@ -3557,6 +3589,16 @@ ${extra}
           // В этом ключе лежит дата, которую поставил САМ супервизор. По ней
           // видно, что снимать при возврате, а что поставил планшет сам.
           const ключРешения = `protocol${i}_goal${goalId}_supMastered`;
+
+          // Удаление — единственное решение, которое стирает настройку.
+          // Цель с несданными нажатиями не трогаем: сначала пусть уедет
+          // занятие, удалим на следующем открытии «Сбора».
+          if (решение && решение.status === "deleted") {
+            if (hasUnsentData(unsentCountsByKey(), i, goalName)) return;
+            удалитьЦель(i, goalId);
+            итог.deleted.push(goalName);
+            return;
+          }
 
           if (решение && решение.status === "archived") {
             if (localStorage.getItem(ключАрхива) !== "1") {
@@ -3602,6 +3644,16 @@ ${extra}
           }
           if (вернули) итог.returned.push(goalName);
         });
+
+        // Протокол, удалённый целиком: когда целей в нём не осталось,
+        // убираем и название — иначе на «Настройке» висел бы пустой
+        // протокол без единой цели. Номера соседних протоколов не трогаем.
+        const решениеПротокола = решения.get(i + "#протокол");
+        if (решениеПротокола === "deleted" && !existingGoalIds(i).length) {
+          ["_title", "_coldProbe", "_selectedGoals"].forEach((хвост) =>
+            localStorage.removeItem(`protocol${i}${хвост}`)
+          );
+        }
       }
       return итог;
     }
@@ -3630,6 +3682,7 @@ ${extra}
         if (итог.mastered.length) сообщения.push(`супервизор отметил освоенными: ${итог.mastered.join(", ")}`);
         if (итог.archived.length) сообщения.push(`убрано в архив: ${итог.archived.join(", ")}`);
         if (итог.returned.length) сообщения.push(`вернулось в работу: ${итог.returned.join(", ")}`);
+        if (итог.deleted.length) сообщения.push(`удалено: ${итог.deleted.join(", ")}`);
         if (!сообщения.length) return;
 
         const inProgress = snapshotInProgressData();

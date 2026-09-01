@@ -37,6 +37,17 @@
   .jump a, .jump button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px; background: var(--soft); color: var(--soft-ink); text-decoration: none; border: none; cursor: pointer; }
   .jump a:hover, .jump button:hover { background: var(--accent-soft); color: var(--accent); }
   .jump a.report-link { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  /* Выгрузка — действие для всей карточки, а не переход по разделу: у неё
+     свой вид, и в строке она стоит последней, отдельно от ссылок. */
+  .jump .download { margin-left: auto; }
+  .download {
+    font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap;
+    padding: 6px 14px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--accent); background: var(--card); color: var(--accent);
+  }
+  .download:hover { background: var(--accent); color: var(--accent-ink); }
+  .download[disabled] { opacity: .6; cursor: default; }
+  .bar .download { align-self: flex-start; }
   .proto-block { border: 1px solid var(--line); border-radius: var(--radius-sm); margin-bottom: 8px; overflow: hidden; }
   .proto-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--card); flex-wrap: wrap; }
   .proto-head .title { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; font: inherit; color: inherit; background: none; border: none; text-align: left; cursor: pointer; padding: 0; }
@@ -161,8 +172,13 @@
     const mastered = state.children.reduce((n, c) => n + c.mastered, 0);
 
     view.innerHTML = `
-      <h1>Дети центра</h1>
-      <p class="lead">Всё, что тераписты собрали на планшетах, — здесь, без пересылки файлов и без ручного ввода.</p>
+      <div class="bar">
+        <div>
+          <h1>Дети центра</h1>
+          <p class="lead" style="margin:0">Всё, что тераписты собрали на планшетах, — здесь, без пересылки файлов и без ручного ввода.</p>
+        </div>
+        <button type="button" class="download grow" id="dlAll">⬇ Скачать все данные</button>
+      </div>
       <div class="tiles">
         <div class="tile"><b>${state.children.length}</b><span>детей в работе</span></div>
         <div class="tile"><b>${t.sessions || 0}</b><span>занятий записано</span></div>
@@ -176,6 +192,8 @@
     view.querySelectorAll(".kid").forEach((el) => {
       el.addEventListener("click", () => renderChild(el.dataset.label));
     });
+    document.getElementById("dlAll").addEventListener("click", (e) =>
+      выгрузить(e.currentTarget, state.children, "все дети"));
   }
 
   function kidCard(c) {
@@ -207,6 +225,7 @@
   function renderChild(label) {
     const c = state.children.find((x) => x.label === label);
     if (!c) return renderList();
+    закрытьМеню(); // кнопки старого списка сейчас исчезнут
     открытыйРебёнок = label;
     const вАрхиве = c.archived.length;
 
@@ -225,6 +244,7 @@
         <a href="#gen">Обобщение${c.gen.length ? ` (${c.gen.length})` : ""}</a>
         <a href="#behavior">Поведение</a>
         <a href="#abc">Эпизоды ABC (${c.abc.length})</a>
+        <button type="button" class="download" id="dlChild">⬇ Скачать все данные</button>
       </div>
 
       <div class="two">
@@ -272,6 +292,8 @@
       </div>`;
 
     view.querySelector(".back").addEventListener("click", renderList);
+    document.getElementById("dlChild").addEventListener("click", (e) =>
+      выгрузить(e.currentTarget, [c], c.label));
     document.getElementById("archiveBtn").addEventListener("click", () => {
       показыватьАрхив = !показыватьАрхив;
       renderChild(label);
@@ -324,12 +346,7 @@
     });
 
     view.querySelectorAll(".act.more").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const меню = btn.parentElement.querySelector(".menu-pop");
-        const былоЗакрыто = меню.hidden;
-        закрытьМеню();
-        меню.hidden = !былоЗакрыто;
-      });
+      btn.addEventListener("click", () => открытьМеню(c.label, btn));
     });
 
     view.querySelectorAll(".act:not(.more)").forEach((btn) => {
@@ -411,6 +428,25 @@
     } catch (err) {
       view.querySelectorAll(".act").forEach((b) => { b.disabled = false; });
       сказать("Не получилось: " + err.message);
+    }
+  }
+
+  // Выгрузка. Собирается прямо в браузере из уже загруженных данных —
+  // второй запрос к серверу не нужен, а значит и ждать нечего, кроме сжатия.
+  async function выгрузить(кнопка, дети, подпись) {
+    const было = кнопка.textContent;
+    кнопка.disabled = true;
+    кнопка.textContent = "Собираю…";
+    try {
+      const размер = await скачатьВыгрузку(дети, state.now, подпись);
+      // Говорим, ЧТО именно скачалось: кнопка на списке детей и кнопка в
+      // карточке выглядят одинаково, а содержимое у них разное.
+      сказать(`Сохранено: ${подпись}, ${Math.max(1, Math.round(размер / 1024))} КБ. Внутри CSV — открываются в Excel.`);
+    } catch (err) {
+      сказать("Не получилось собрать файл: " + err.message);
+    } finally {
+      кнопка.disabled = false;
+      кнопка.textContent = было;
     }
   }
 
@@ -535,27 +571,90 @@
   // нажимают чаще всего, а «в архив» и «удалить» на виду соблазняли бы
   // нажать мимоходом.
   function меню({ protocol, goal, count }) {
-    const данные = `data-protocol="${escapeHtml(protocol)}"` +
-      (goal ? ` data-goal="${escapeHtml(goal)}"` : "") +
-      (count ? ` data-count="${count}"` : "");
-    return `<span class="menu-wrap">
-      <button class="act more" type="button" aria-label="Ещё действия">⋮</button>
-      <span class="menu-pop" hidden>
-        <button class="act" type="button" ${данные} data-status="archived">В архив</button>
-        <hr>
-        <button class="act danger" type="button" ${данные} data-status="deleted">Удалить…</button>
-      </span>
-    </span>`;
+    return `<button class="act more" type="button" aria-label="Ещё действия"
+      data-protocol="${escapeHtml(protocol)}"${goal ? ` data-goal="${escapeHtml(goal)}"` : ""}${count ? ` data-count="${count}"` : ""}>⋮</button>`;
   }
 
+  // Меню висит в body и позиционируется по кнопке, а НЕ лежит рядом с ней в
+  // разметке. Причина: строки целей живут в таблице внутри блока с боковой
+  // прокруткой, а у карточки протокола `overflow: hidden` — выпадашка
+  // внутри них обрезалась по краю блока, и до нижних пунктов было не
+  // добраться.
+  let открытоеМеню = null;
+
   function закрытьМеню() {
-    view.querySelectorAll(".menu-pop").forEach((m) => { m.hidden = true; });
+    if (!открытоеМеню) return;
+    открытоеМеню.меню.remove();
+    открытоеМеню.кнопка.classList.remove("on");
+    открытоеМеню = null;
+  }
+
+  function открытьМеню(label, кнопка) {
+    const тоЖе = открытоеМеню && открытоеМеню.кнопка === кнопка;
+    закрытьМеню();
+    if (тоЖе) return; // повторное нажатие закрывает
+
+    const меню = document.createElement("div");
+    меню.className = "menu-pop";
+    [
+      { status: "archived", text: "В архив", cls: "" },
+      { status: "deleted", text: "Удалить…", cls: "danger" }
+    ].forEach((пункт, i) => {
+      if (i) меню.append(document.createElement("hr"));
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = ("act " + пункт.cls).trim();
+      b.textContent = пункт.text;
+      // Данные переносим с кнопки «⋮» — дальше всё как у обычной кнопки.
+      b.dataset.protocol = кнопка.dataset.protocol;
+      if (кнопка.dataset.goal) b.dataset.goal = кнопка.dataset.goal;
+      if (кнопка.dataset.count) b.dataset.count = кнопка.dataset.count;
+      b.dataset.status = пункт.status;
+      b.addEventListener("click", () => {
+        закрытьМеню();
+        решить(label, b);
+      });
+      меню.append(b);
+    });
+
+    document.body.append(меню);
+    кнопка.classList.add("on");
+    открытоеМеню = { меню, кнопка };
+    поставитьМеню(меню, кнопка);
+  }
+
+  // Позиция: под кнопкой, по её правому краю. Не помещается вниз —
+  // разворачиваем вверх; упирается в край окна — прижимаем к нему.
+  //
+  // Координаты СТРАНИЦЫ, а не окна (position: absolute + scrollX/scrollY):
+  // тогда меню едет вместе с содержимым само, и ему не нужен обработчик
+  // прокрутки. Фиксированное позиционирование требовало бы пересчёта на
+  // каждый скролл, а события прокрутки доходят не во всех оболочках.
+  function поставитьМеню(меню, кнопка) {
+    const r = кнопка.getBoundingClientRect();
+    const ш = меню.offsetWidth;
+    const в = меню.offsetHeight;
+    const вверх = window.innerHeight - r.bottom < в + 12 && r.top > в + 12;
+    const верх = вверх ? r.top - в - 6 : r.bottom + 6;
+    const лево = Math.max(8, Math.min(r.right - ш, window.innerWidth - ш - 8));
+    меню.style.top = (верх + window.scrollY) + "px";
+    меню.style.left = (лево + window.scrollX) + "px";
   }
 
   // Один слушатель на всю страницу: списки перерисовываются часто, и вешать
-  // обработчик закрытия на каждую перерисовку — верный способ их накопить.
+  // обработчики закрытия на каждую перерисовку — верный способ их накопить.
   document.addEventListener("click", (e) => {
-    if (!e.target.closest(".menu-wrap")) закрытьМеню();
+    if (!открытоеМеню) return;
+    if (e.target.closest(".menu-pop") || e.target === открытоеМеню.кнопка) return;
+    закрытьМеню();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") закрытьМеню(); });
+
+  // Прокрутка меню не касается: оно в потоке страницы и едет вместе с ней.
+  // При смене размера окна пересчитываем позицию, а не закрываем: человек
+  // менял размер окна, а не передумал выбирать.
+  window.addEventListener("resize", () => {
+    if (открытоеМеню) поставитьМеню(открытоеМеню.меню, открытоеМеню.кнопка);
   });
 
   function goalDetail(g, id, colspan) {
