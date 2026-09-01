@@ -186,12 +186,19 @@ function prepare(data) {
       lastDate: last,
       silentDays: last ? daysBetween(last, now) : null,
       goals: goals,
-      active: goals.filter((g) => !g.decision),
+      // «Освоено» — это ПОМЕТКА, а не уборка: такая цель остаётся в списке,
+      // просто с ярлыком. Из списка убирает только архив.
+      active: goals.filter((g) => !(g.decision && g.decision.status === "archived")),
       archived: goals.filter((g) => g.decision && g.decision.status === "archived"),
       done: goals.filter((g) => g.decision && g.decision.status === "mastered"),
-      // Счётчики — только по целям В РАБОТЕ: цель, которую супервизор уже
-      // разобрал, не должна снова просить внимания в списке детей.
-      mastered: goals.filter((g) => !g.decision && g.status === "mastered").length,
+      // Счётчики — по целям, которые не убраны в архив. Решение супервизора
+      // «освоено» считается наравне с расчётным критерием: он посмотрел
+      // глазами, это сильнее арифметики.
+      mastered: goals.filter((g) => {
+        if (g.decision && g.decision.status === "archived") return false;
+        if (g.decision && g.decision.status === "mastered") return true;
+        return g.status === "mastered";
+      }).length,
       stuck: goals.filter((g) => !g.decision && g.status === "plateau").length,
       avg14: recent.length ? Math.round(recent.reduce((a, b) => a + b, 0) / recent.length) : null,
       behavior: k.behavior,
