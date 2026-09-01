@@ -234,7 +234,7 @@
             ${показыватьАрхив ? archiveBlocks(c) : protocolBlocks(c)}
             <p class="muted" style="margin:12px 0 0;font-size:13px">${показыватьАрхив
               ? "Здесь то, что вы убрали из работы. «Вернуть в работу» возвращает цель и на планшет тераписта."
-              : "Протокол раскрывается в список целей, цель — в свою историю. «Освоен» уводит цель в «Генерализацию» у тераписта и оставляет её здесь с ярлыком; «В архив» убирает совсем."}</p>
+              : "Протокол раскрывается в список целей, цель — в свою историю. «Освоен» уводит цель в «Генерализацию» у тераписта и оставляет её здесь с ярлыком; «В архив» и «Удалить» — под кнопкой «⋮». Пометка «нет на планшете» означает, что цель удалили в «Настройке»: замеры сохранились, поэтому она видна здесь."}</p>
           </div>
 
           <div class="card" id="history">
@@ -323,8 +323,20 @@
       });
     });
 
-    view.querySelectorAll(".act").forEach((btn) => {
-      btn.addEventListener("click", () => решить(c.label, btn));
+    view.querySelectorAll(".act.more").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const меню = btn.parentElement.querySelector(".menu-pop");
+        const былоЗакрыто = меню.hidden;
+        закрытьМеню();
+        меню.hidden = !былоЗакрыто;
+      });
+    });
+
+    view.querySelectorAll(".act:not(.more)").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        закрытьМеню();
+        решить(c.label, btn);
+      });
     });
   }
 
@@ -355,7 +367,22 @@
     // (решение удаляется), но человеку это разные вещи.
     const сняли = btn.textContent.indexOf("Снять") === 0;
 
-    if (!goal && status !== "active" && целей > 1) {
+    // Удаление спрашиваем ВСЕГДА, даже по одной цели: это единственное
+    // действие, которое стирает настройку на планшете и которое нельзя
+    // отменить кнопкой.
+    if (status === "deleted") {
+      const ok = window.confirm(
+        (goal
+          ? `Цель «${goal}» — удалить?\n\nОна исчезнет из кабинета`
+          : `Протокол «${protocol}» — удалить?\n\n` +
+            `Это ${целей} ${plural(целей, "цель", "цели", "целей")}. Протокол и его цели исчезнут из кабинета`) +
+        ` и СТИРАЮТСЯ на планшете, в «Настройке». Вернуть кнопкой нельзя — только завести заново.\n\n` +
+        `Замеры не удаляются: занятия, проценты и отчёты за прошлые месяцы остаются на месте.`
+      );
+      if (!ok) return;
+    }
+
+    if (!goal && status !== "active" && status !== "deleted" && целей > 1) {
       const ok = window.confirm(
         status === "mastered"
           ? `Протокол «${protocol}»: отметить освоенным?\n\n` +
@@ -372,9 +399,14 @@
     try {
       await sendDecision(label, protocol, goal, status);
       state = await loadCabinet();
+      // Удаление могло опустошить архив (например, удалили то, что там
+      // лежало) — тогда показывать пустой архив незачем.
+      const свежий = state.children.find((x) => x.label === label);
+      if (показыватьАрхив && свежий && !свежий.archived.length) показыватьАрхив = false;
       renderChild(label);
       сказать(status === "mastered" ? "Отмечено освоенным."
         : status === "archived" ? "Убрано в архив."
+        : status === "deleted" ? "Удалено. На планшете исчезнет при следующем выходе в сеть."
         : сняли ? "Отметку сняли." : "Вернули в работу.");
     } catch (err) {
       view.querySelectorAll(".act").forEach((b) => { b.disabled = false; });
@@ -426,13 +458,14 @@
             ${stuck ? `<span class="flag warn">стоит ${stuck}</span>` : ""}
             ${avg == null ? "" : `<span class="proto-count">среднее <b class="${pctClass(avg)}">${avg}%</b></span>`}
             <span class="proto-count">${items.length} ${plural(items.length, "цель", "цели", "целей")}</span>
+            ${протоколаНетНаПланшете(c, title, items)}
             ${решениеПротокола && решениеПротокола.status === "mastered"
               ? `<span class="flag good">протокол освоен${решениеПротокола.at ? " · " + humanDate(решениеПротокола.at) : ""}</span>` : ""}
             <span class="acts">
               ${решениеПротокола && решениеПротокола.status === "mastered"
                 ? `<button class="act back" type="button" data-protocol="${escapeHtml(title)}" data-status="active">Снять отметку</button>`
                 : `<button class="act done" type="button" data-protocol="${escapeHtml(title)}" data-status="mastered" data-count="${items.length}">Освоен</button>`}
-              <button class="act" type="button" data-protocol="${escapeHtml(title)}" data-status="archived" data-count="${items.length}">В архив</button>
+              ${меню({ protocol: title, count: items.length })}
             </span>
           </span>
         </div>
@@ -463,7 +496,7 @@
       <td>${sparkline(values.slice(-10), 110, 28)}</td>
       <td>${решено
         ? `<span class="flag good"${подпись}>освоена</span>`
-        : `<span class="flag ${cls}">${text}</span>`}</td>
+        : `<span class="flag ${cls}">${text}</span>`}${нетНаПланшете(c, g)}</td>
       <td class="num">${values.length}</td>
       <td><span class="acts">
         ${решено
@@ -471,11 +504,59 @@
             ? `<button class="act back" type="button" data-protocol="${escapeHtml(g.protocol)}" data-goal="${escapeHtml(g.goal)}" data-status="active">Снять отметку</button>`
             : '<span class="decided">решение по протоколу</span>')
           : `<button class="act done" type="button" data-protocol="${escapeHtml(g.protocol)}" data-goal="${escapeHtml(g.goal)}" data-status="mastered">Освоена</button>`}
-        <button class="act" type="button" data-protocol="${escapeHtml(g.protocol)}" data-goal="${escapeHtml(g.goal)}" data-status="archived">В архив</button>
+        ${меню({ protocol: g.protocol, goal: g.goal })}
       </span></td>
     </tr>
     ${goalDetail(g, id, 6)}`;
   }
+
+  // «Нет на планшете»: цель есть в замерах, но в последнем слепке настройки
+  // её нет — значит, на планшете её удалили. Замеры при этом никуда не
+  // делись, поэтому цель и остаётся в кабинете. Пометку показываем ТОЛЬКО
+  // когда слепок есть: у ребёнка без слепка мы просто не знаем состава
+  // планшета, и молчание честнее догадки.
+  function нетНаПланшете(c, g) {
+    if (g.onDevice !== false) return "";
+    const когда = c.snapshot && c.snapshot.at ? ` от ${humanDate(c.snapshot.at)}` : "";
+    return ` <span class="flag" title="В настройке планшета${когда} этой цели нет — её удалили на планшете. Замеры сохранились, поэтому цель видна здесь.">нет на планшете</span>`;
+  }
+
+  // То же для протокола: помечаем, только если НИ ОДНОЙ его цели на планшете
+  // не осталось. Частичное совпадение — обычное дело: цели приходят и уходят.
+  function протоколаНетНаПланшете(c, title, items) {
+    if (!c.snapshot) return "";
+    if (c.snapshot.protocols.has(title)) return "";
+    if (!items.every((g) => g.onDevice === false)) return "";
+    const когда = c.snapshot.at ? ` от ${humanDate(c.snapshot.at)}` : "";
+    return `<span class="flag" title="В настройке планшета${когда} этого протокола нет — его удалили на планшете. Замеры сохранились.">нет на планшете</span>`;
+  }
+
+  // Меню «⋮»: редкие и весомые действия. «Освоен» остаётся снаружи — его
+  // нажимают чаще всего, а «в архив» и «удалить» на виду соблазняли бы
+  // нажать мимоходом.
+  function меню({ protocol, goal, count }) {
+    const данные = `data-protocol="${escapeHtml(protocol)}"` +
+      (goal ? ` data-goal="${escapeHtml(goal)}"` : "") +
+      (count ? ` data-count="${count}"` : "");
+    return `<span class="menu-wrap">
+      <button class="act more" type="button" aria-label="Ещё действия">⋮</button>
+      <span class="menu-pop" hidden>
+        <button class="act" type="button" ${данные} data-status="archived">В архив</button>
+        <hr>
+        <button class="act danger" type="button" ${данные} data-status="deleted">Удалить…</button>
+      </span>
+    </span>`;
+  }
+
+  function закрытьМеню() {
+    view.querySelectorAll(".menu-pop").forEach((m) => { m.hidden = true; });
+  }
+
+  // Один слушатель на всю страницу: списки перерисовываются часто, и вешать
+  // обработчик закрытия на каждую перерисовку — верный способ их накопить.
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".menu-wrap")) закрытьМеню();
+  });
 
   function goalDetail(g, id, colspan) {
     const values = g.points.map((p) => p.percent);

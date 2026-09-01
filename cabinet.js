@@ -156,8 +156,22 @@ function prepare(data) {
     else store.protocols.set(d.protocol, item);
   });
 
+  // Состав планшета из последнего слепка настройки. Нужен, чтобы отличить
+  // «цель ведут» от «цель на планшете уже удалили, а замеры остались».
+  // Слепка может не быть вовсе — тогда ничего не помечаем: молчание честнее
+  // ложной пометки «нет на планшете» у ребёнка, чей планшет просто ещё не
+  // присылал настройку.
+  const снимки = data.snapshots || {};
+
   const children = [...kids.values()].map((k) => {
     const decisions = byChild.get(k.label) || { protocols: new Map(), goals: new Map() };
+    const снимок = снимки[k.label]
+      ? {
+          at: day(снимки[k.label].at),
+          protocols: new Set(снимки[k.label].protocols || []),
+          goals: new Set(снимки[k.label].goals || [])
+        }
+      : null;
     const goals = [...k.goals.values()].map((g) => {
       g.points.sort((a, b) => a.date.localeCompare(b.date));
       const values = g.points.map((p) => p.percent);
@@ -168,6 +182,8 @@ function prepare(data) {
       // архивировать протокол, а одну цель вернуть в работу.
       g.decision = decisions.goals.get(g.protocol + " ‖ " + g.goal)
         || decisions.protocols.get(g.protocol) || null;
+      // null = не знаем (слепка нет), true/false = есть или нет на планшете.
+      g.onDevice = снимок ? снимок.goals.has(g.protocol + " ‖ " + g.goal) : null;
       return g;
     }).sort((a, b) => a.protocol.localeCompare(b.protocol) || a.goal.localeCompare(b.goal));
 
@@ -181,21 +197,23 @@ function prepare(data) {
       label: k.label,
       protocolDecisions: decisions.protocols,
       goalDecisions: decisions.goals,
+      snapshot: снимок,
       sessions: k.sessions != null ? k.sessions : dates.length,
       days: dates.length,
       lastDate: last,
       silentDays: last ? daysBetween(last, now) : null,
       goals: goals,
       // «Освоено» — это ПОМЕТКА, а не уборка: такая цель остаётся в списке,
-      // просто с ярлыком. Из списка убирает только архив.
-      active: goals.filter((g) => !(g.decision && g.decision.status === "archived")),
+      // просто с ярлыком. Из списка убирает архив, а «удалено» убирает
+      // отовсюду: такой цели у ребёнка больше нет.
+      active: goals.filter((g) => !g.decision || g.decision.status === "mastered"),
       archived: goals.filter((g) => g.decision && g.decision.status === "archived"),
       done: goals.filter((g) => g.decision && g.decision.status === "mastered"),
       // Счётчики — по целям, которые не убраны в архив. Решение супервизора
       // «освоено» считается наравне с расчётным критерием: он посмотрел
       // глазами, это сильнее арифметики.
       mastered: goals.filter((g) => {
-        if (g.decision && g.decision.status === "archived") return false;
+        if (g.decision && g.decision.status !== "mastered") return false;
         if (g.decision && g.decision.status === "mastered") return true;
         return g.status === "mastered";
       }).length,
