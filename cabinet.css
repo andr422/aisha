@@ -147,6 +147,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .scroll { overflow-x: auto; }
 
 /* ── Дети ─────────────────────────────────────────────────────────────── */
+.list-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin: 30px 0 12px;
+}
+.list-head h2 { margin: 0; }
 .kids { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
 
 .kid {
@@ -299,7 +304,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
      цифры и кнопки под ним слева. В одну строку на 375px они не помещаются
      физически, и попытка их ужать кончалась наездом текста друг на друга. */
   .proto-meta { width: 100%; justify-content: flex-start; }
-  .proto-head { align-items: flex-start; }
+  .proto-head { align-items: start; }
+  .proto-left { align-items: flex-start; }
 
   /* Выгрузка на телефоне — обычная кнопка в общем ряду, а не прижатая
      к правому краю: справа там уже ничего нет. */
@@ -412,3 +418,15 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .menu-pop button.danger { color: var(--danger-ink); }
 .menu-pop button.danger:hover { background: var(--danger-soft); }
 .menu-pop hr { border: none; border-top: 1px solid var(--line); margin: 3px 0; }
+
+/* Складка: заголовок-строка, содержимое по нажатию. Нужна там, где блок
+   полезен, но занимает больше места, чем заслуживает в общем потоке. */
+.fold > summary {
+  cursor: pointer; list-style: none;
+  font-family: var(--font-display); font-size: 14px; font-weight: 700;
+  color: var(--accent); padding: 2px 0;
+}
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::before { content: "▸ "; }
+.fold[open] > summary::before { content: "▾ "; }
+.fold[open] > summary { margin-bottom: 6px; }

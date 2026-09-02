@@ -500,6 +500,18 @@
       margin: 0 0 6px;
     }
 
+    .pdf-open.talk-new { color: var(--accent); font-weight: 700; }
+
+    .child-talk {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: 10px 14px; margin-bottom: 12px;
+    }
+    .child-talk-head {
+      background: none; border: none; padding: 0; font: inherit; font-weight: 700;
+      font-size: 14px; color: var(--accent); cursor: pointer; text-align: left; width: 100%;
+    }
+    .child-talk-body { margin-top: 8px; }
+
     .gm-talk { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
     .gm-talk h4 { margin: 0 0 8px; font-size: 15px; }
     .gm-talk-item { padding: 8px 0; border-top: 1px solid var(--line); }
@@ -2681,6 +2693,19 @@
         // Кнопка просмотра PDF протокола (если прикреплён на сводной).
         // Класс НЕ .btn — в режиме «по одной» кнопки .btn в шапке скрыты,
         // а PDF терапист может захотеть открыть и там.
+        // Обсуждение протокола: кнопка появляется, только если записи есть.
+        // Пустая кнопка на рабочем экране — лишний шум.
+        const записиПротокола = записиПоПротоколу(i);
+        if (записиПротокола.length) {
+          const новых = записиПротокола.filter((z) => !z.read && !z.mine).length;
+          const talkBtn = document.createElement("button");
+          talkBtn.type = "button";
+          talkBtn.className = "pdf-open" + (новых ? " talk-new" : "");
+          talkBtn.textContent = `💬 ${записиПротокола.length}${новых ? " · новое" : ""}`;
+          talkBtn.onclick = () => открытьВеткуПротокола(i, title);
+          header.insertBefore(talkBtn, selectBtn);
+        }
+
         idbGet(`aba_pdf::${getActiveChildId()}::p${i}`)
           .then((blob) => {
             if (!blob) return;
@@ -2853,6 +2878,7 @@
 
       // Плашка о новых записях — из копии на планшете, поэтому видна и без
       // сети: подтяжка обновит её позже, если появится связь.
+      показатьЗаписиОРебёнке();
       показатьПлашкуОбсуждений();
 
       // ДО нормализации длин: она подрезает массивы под число блоков, а
@@ -3692,11 +3718,118 @@ ${extra}
       }
     }
 
-    function записиПоЦели(protocolIndex, goalName) {
-      const protocol = (localStorage.getItem(`protocol${protocolIndex}_title`) || "").trim();
-      return читатьОбсуждения().filter(
-        (z) => (z.protocol || "") === protocol && (z.goal || "") === goalName
-      );
+    // Названия сравниваем ОБРЕЗАННЫМИ и без учёта регистра. Причина
+    // из жизни: на планшете цель называется «Открой » с пробелом на конце,
+    // а приёмник пробелы срезает — точное сравнение ветку не находило,
+    // и запись супервизора выглядела потерянной.
+    function какКлюч(s) {
+      return String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
+    }
+
+    // Записи привязаны к ПРОТОКОЛУ, а не к цели: названий протоколов
+    // меньше, они стабильнее, и разговор обычно идёт про направление работы.
+    // Записи, сделанные раньше по целям, остаются в ветке своего протокола —
+    // с пометкой, о какой цели речь.
+    function записиПоПротоколу(protocolIndex) {
+      const protocol = localStorage.getItem(`protocol${protocolIndex}_title`) || "";
+      if (!какКлюч(protocol)) return [];
+      return читатьОбсуждения().filter((z) => какКлюч(z.protocol) === какКлюч(protocol));
+    }
+
+    // Протоколы, какие есть на планшете, — набором ключей для сверки.
+    function ключиПротоколов() {
+      const набор = new Set();
+      for (let i = 1; i <= getProtocolsCount(); i += 1) {
+        const ключ = какКлюч(localStorage.getItem(`protocol${i}_title`));
+        if (ключ) набор.add(ключ);
+      }
+      return набор;
+    }
+
+    // Что показать в общем блоке: записи о ребёнке целиком И «сироты» —
+    // записи про протокол, которого на планшете не нашлось.
+    //
+    // Сироты появляются, когда название разошлось: протокол переименовали,
+    // или на сервер он попал обрезанным. Прятать такую запись нельзя —
+    // человек видит «новое», открывает и не находит, и доверие к каналу
+    // кончается. Лучше показать с пометкой, к чему она относится.
+    function записиОРебёнке() {
+      const протоколы = ключиПротоколов();
+      return читатьОбсуждения().filter((z) => {
+        const п = какКлюч(z.protocol);
+        return !п || !протоколы.has(п);
+      });
+    }
+
+    // Записи о ребёнке целиком и «сироты» — отдельным блоком вверху «Сбора»:
+    // у них нет протокола, а значит нет и кнопки, за которой их искать.
+    // Свёрнут по умолчанию, но раскрывается сам, если есть непрочитанное.
+    function показатьЗаписиОРебёнке() {
+      const старый = document.getElementById("childTalk");
+      if (старый) старый.remove();
+
+      const записи = записиОРебёнке();
+      if (!записи.length) return;
+
+      const блок = document.createElement("div");
+      блок.id = "childTalk";
+      блок.className = "child-talk";
+
+      const новых = записи.filter((z) => !z.read && !z.mine).length;
+      const шапка = document.createElement("button");
+      шапка.type = "button";
+      шапка.className = "child-talk-head";
+      шапка.textContent = `💬 Записи супервизора: ${записи.length}${новых ? ` · новых ${новых}` : ""}`;
+
+      const тело = document.createElement("div");
+      тело.className = "child-talk-body";
+      тело.hidden = !новых;
+
+      записи.forEach((z) => {
+        const строка = document.createElement("div");
+        строка.className = "gm-talk-item";
+        const кто = document.createElement("div");
+        кто.className = "gm-talk-who";
+        const про = z.protocol ? ` · про «${z.protocol}»${z.goal ? `, цель «${z.goal}»` : ""}` : "";
+        кто.textContent = `${z.author || "без имени"}${z.role === "therapist" ? ", терапист" : ", супервизор"} · ${String(z.created || "").slice(0, 10)}${про}`;
+        const текст = document.createElement("div");
+        текст.className = "gm-talk-text";
+        текст.textContent = z.text;
+        строка.append(кто, текст);
+        тело.append(строка);
+      });
+
+      if (window.abaAuth && window.abaAuth.get()) {
+        const поле = document.createElement("textarea");
+        поле.className = "gm-talk-input";
+        поле.rows = 2;
+        поле.placeholder = "Ответить супервизору…";
+        const кнопка = document.createElement("button");
+        кнопка.type = "button";
+        кнопка.className = "btn btn-secondary";
+        кнопка.textContent = "Отправить";
+        кнопка.onclick = async () => {
+          const текст = поле.value.trim();
+          if (!текст) { поле.focus(); return; }
+          кнопка.disabled = true;
+          кнопка.textContent = "Отправляю…";
+          try {
+            await отправитьЗапись(0, текст);
+            поле.value = "";
+            showToast("Записано. Супервизор увидит в кабинете.");
+          } catch (err) {
+            showToast("Не отправилось: " + err.message + " Нужен интернет.", 6000);
+          } finally {
+            кнопка.disabled = false;
+            кнопка.textContent = "Отправить";
+          }
+        };
+        тело.append(поле, кнопка);
+      }
+
+      шапка.onclick = () => { тело.hidden = !тело.hidden; };
+      блок.append(шапка, тело);
+      dailyContainer.prepend(блок);
     }
 
     // Плашка о новых записях. Висит, пока не нажали «Понятно»: сообщение,
@@ -3708,7 +3841,7 @@ ${extra}
       const новые = читатьОбсуждения().filter((z) => !z.read && !z.mine);
       if (!новые.length) return;
 
-      const где = новые.map((z) => z.goal || z.protocol || "о ребёнке");
+      const где = новые.map((z) => z.protocol || "о ребёнке");
       const notice = document.createElement("div");
       notice.id = "talkNotice";
       notice.className = "hidden-protocols";
@@ -3716,7 +3849,7 @@ ${extra}
       текст.innerHTML = `<b>Новое от супервизора: ${новые.length} ${
         новые.length === 1 ? "запись" : новые.length < 5 ? "записи" : "записей"}.</b><br>` +
         `${[...new Set(где)].map(escapeHtml).join(", ")}. ` +
-        `Откройте цель долгим нажатием — запись внутри, там же можно ответить.`;
+        `Нажмите «💬» в шапке протокола — запись внутри, там же можно ответить.`;
       const кнопка = document.createElement("button");
       кнопка.type = "button";
       кнопка.textContent = "Понятно";
@@ -3735,22 +3868,34 @@ ${extra}
 
       if (!navigator.onLine || !window.abaAuth || !window.abaAuth.get()) return;
       try {
-        await fetch("https://api.abachecklist.ru/api/sync/read", {
+        const resp = await fetch("https://api.abachecklist.ru/api/sync/read", {
           method: "POST",
           headers: Object.assign({ "Content-Type": "application/json" }, window.abaAuth.headers()),
           body: JSON.stringify({ child: getActiveChildLabel(), ids: ids })
         });
+        const ответ = await resp.json().catch(() => ({}));
+        // Молчаливый сбой тут уже стоил нам вечера: отметка не сохранялась,
+        // сервер отвечал 200, и плашка вылезала каждое утро заново. Если не
+        // сохранилось — человек должен об этом узнать сразу.
+        if (!resp.ok || ответ.ok === false) {
+          showToast("Отметка «прочитано» не сохранилась — плашка вернётся. Скажите Андрею.", 6000);
+        }
       } catch (err) {
-        // Не дошло — супервизор увидит «не открывал». Неприятно, но честно.
+        // Связь пропала на полуслове. Супервизор увидит «не открывал».
       }
     }
 
-    async function отправитьЗапись(protocolIndex, goalName, текст) {
-      const protocol = (localStorage.getItem(`protocol${protocolIndex}_title`) || "").trim();
+    // Записи привязаны к протоколу. protocolIndex = 0 означает «о ребёнке
+    // целиком»: без протокола. Поле цели на сервере осталось — в нём живут
+    // записи, сделанные до 2 сентября, когда разговор вёлся по целям.
+    async function отправитьЗапись(protocolIndex, текст) {
+      const protocol = protocolIndex
+        ? (localStorage.getItem(`protocol${protocolIndex}_title`) || "").trim()
+        : "";
       const resp = await fetch("https://api.abachecklist.ru/api/sync/talk", {
         method: "POST",
         headers: Object.assign({ "Content-Type": "application/json" }, window.abaAuth.headers()),
-        body: JSON.stringify({ child: getActiveChildLabel(), protocol, goal: goalName, text: текст })
+        body: JSON.stringify({ child: getActiveChildLabel(), protocol, goal: "", text: текст })
       });
       const данные = await resp.json();
       if (!resp.ok || !данные.ok) throw new Error(данные.error || `сервер ответил ${resp.status}`);
@@ -4308,44 +4453,47 @@ ${extra}
         body.append(dates);
       }
 
-      // ── Обсуждение цели ──────────────────────────────────────────
-      // Здесь же, где терапист смотрит историю цели: разговор про неё и
-      // должен лежать рядом с её цифрами, а не в отдельном разделе.
-      const записи = записиПоЦели(protocolIndex, goalName);
-      const talk = document.createElement("div");
-      talk.className = "gm-talk";
+      modal.style.display = "flex";
+      clearTextSelection();
+      setTimeout(clearTextSelection, 60); // iOS выделяет уже после показа
+    }
 
-      const заголовок = document.createElement("h4");
-      заголовок.textContent = "Обсуждение";
-      talk.append(заголовок);
+    // Ветка протокола показывается в том же окне, что и история цели:
+    // отдельное окно ради трёх записей — лишняя сущность.
+    function открытьВеткуПротокола(protocolIndex, title) {
+      const modal = document.getElementById("goal-modal");
+      const body = document.getElementById("goalModalBody");
+      goalModalBlock = null;
+      body.innerHTML = "";
 
-      if (записи.length) {
-        записи.forEach((z) => {
-          const строка = document.createElement("div");
-          строка.className = "gm-talk-item";
-          const кто = document.createElement("div");
-          кто.className = "gm-talk-who";
-          кто.textContent = `${z.author || "без имени"}${z.role === "therapist" ? ", терапист" : ", супервизор"} · ${String(z.created || "").slice(0, 10)}`;
-          const текст = document.createElement("div");
-          текст.className = "gm-talk-text";
-          текст.textContent = z.text;
-          строка.append(кто, текст);
-          talk.append(строка);
-        });
-      } else {
-        const пусто = document.createElement("p");
-        пусто.className = "gm-talk-empty";
-        пусто.textContent = "Записей по этой цели пока нет.";
-        talk.append(пусто);
-      }
+      const шапка = document.createElement("h3");
+      шапка.className = "gm-title";
+      шапка.textContent = title;
+      const подпись = document.createElement("p");
+      подпись.className = "gm-sub";
+      подпись.textContent = "Обсуждение протокола";
+      body.append(шапка, подпись);
 
-      // Ответить может только вошедший: запись должна быть подписана, иначе
-      // супервизор не поймёт, кто ответил.
+      const записи = записиПоПротоколу(protocolIndex);
+      записи.forEach((z) => {
+        const строка = document.createElement("div");
+        строка.className = "gm-talk-item";
+        const кто = document.createElement("div");
+        кто.className = "gm-talk-who";
+        const про = z.goal ? ` · про цель «${z.goal}»` : "";
+        кто.textContent = `${z.author || "без имени"}${z.role === "therapist" ? ", терапист" : ", супервизор"} · ${String(z.created || "").slice(0, 10)}${про}`;
+        const текст = document.createElement("div");
+        текст.className = "gm-talk-text";
+        текст.textContent = z.text;
+        строка.append(кто, текст);
+        body.append(строка);
+      });
+
       if (window.abaAuth && window.abaAuth.get()) {
         const поле = document.createElement("textarea");
         поле.className = "gm-talk-input";
-        поле.placeholder = "Ответить супервизору…";
         поле.rows = 2;
+        поле.placeholder = "Ответить супервизору…";
         const кнопка = document.createElement("button");
         кнопка.type = "button";
         кнопка.className = "btn btn-secondary";
@@ -4356,7 +4504,7 @@ ${extra}
           кнопка.disabled = true;
           кнопка.textContent = "Отправляю…";
           try {
-            await отправитьЗапись(protocolIndex, goalName, текст);
+            await отправитьЗапись(protocolIndex, текст);
             поле.value = "";
             showToast("Записано. Супервизор увидит в кабинете.");
             closeGoalModal();
@@ -4366,18 +4514,21 @@ ${extra}
             showToast("Не отправилось: " + err.message + " Нужен интернет.", 6000);
           }
         };
-        talk.append(поле, кнопка);
+        body.append(поле, кнопка);
       } else {
         const без = document.createElement("p");
         без.className = "gm-talk-empty";
         без.textContent = "Чтобы отвечать, войдите: Настройка → ⋮ → 🔑 Вход.";
-        talk.append(без);
+        body.append(без);
       }
-      body.append(talk);
+
+      // Прочитано: человек открыл ветку.
+      const новые = записи.filter((z) => !z.read && !z.mine);
+      if (новые.length) отметитьПрочитанным(новые.map((z) => z.id));
 
       modal.style.display = "flex";
       clearTextSelection();
-      setTimeout(clearTextSelection, 60); // iOS выделяет уже после показа
+      setTimeout(clearTextSelection, 60);
     }
 
     function closeGoalModal() {

@@ -40,6 +40,39 @@ const PLATEAU_SPREAD = 10;
 const PLATEAU_MEAN_MAX = 80;
 const SILENT_DAYS = 5;
 
+// Насколько срочно смотреть ребёнка. Заголовок списка обещает «кого
+// посмотреть в первую очередь», значит порядок должен это выполнять, а не
+// повторять алфавит.
+//
+// Веса расставлены по одному правилу: выше то, из-за чего РАБОТА СТОИТ, и
+// только потом то, что просто требует внимания. Ребёнок, которого никто не
+// ведёт, вообще не попадает ни на один планшет — данных по нему не будет
+// никогда, поэтому он вперёд всех. Дальше молчание планшета: чем дольше, тем
+// хуже. Цели, достигшие критерия, ждут решения супервизора — это тоже
+// остановка, но работа по остальным целям идёт. Плато и новые ответы —
+// внимание без остановки.
+//
+// Пределы (min) стоят, чтобы один сильный признак не заслонял другие: без
+// них ребёнок с сорока целями на критерии всегда был бы выше ребёнка, у
+// которого никто не работает.
+function тревожность(c) {
+  const части = [];
+  const добавить = (балл, текст) => { if (балл > 0) части.push({ балл: балл, текст: текст }); };
+
+  if (!c.therapists.length) добавить(60, "никто не ведёт");
+  if (c.silentDays == null) добавить(25, "данных ещё нет");
+  else if (c.silentDays >= SILENT_DAYS) добавить(30 + Math.min(c.silentDays, 30), `нет данных ${c.silentDays} дн.`);
+  добавить(Math.min(c.mastered, 10) * 4, `${c.mastered} на критерии`);
+  добавить(Math.min(c.stuck, 10) * 3, `${c.stuck} стоят на месте`);
+  добавить(Math.min(c.talkNew, 10) * 2, `${c.talkNew} новых ответов`);
+
+  части.sort((a, b) => b.балл - a.балл);
+  return {
+    балл: части.reduce((s, ч) => s + ч.балл, 0),
+    главное: части.length ? части[0].текст : "всё идёт ровно"
+  };
+}
+
 async function loadCabinet() {
   if (!window.abaAuth || !window.abaAuth.get()) {
     const err = new Error("нужен вход");
@@ -60,12 +93,14 @@ async function loadCabinet() {
   return prepare(data);
 }
 
-// Новая запись в обсуждение. protocol и goal пустые — разговор о ребёнке.
-async function sendTalk(child, protocol, goal, text) {
+// Новая запись в обсуждение. Привязана к протоколу; пустой protocol —
+// разговор о ребёнке целиком. Поле цели на сервере осталось ради записей,
+// сделанных до 2 сентября, когда разговор вёлся по целям.
+async function sendTalk(child, protocol, text) {
   const res = await fetch("https://api.abachecklist.ru/api/sync/talk", {
     method: "POST",
     headers: Object.assign({ "Content-Type": "application/json" }, window.abaAuth.headers()),
-    body: JSON.stringify({ child: child, protocol: protocol || "", goal: goal || "", text: text })
+    body: JSON.stringify({ child: child, protocol: protocol || "", goal: "", text: text })
   });
   const data = await res.json();
   if (!res.ok || !data.ok) throw new Error(data.error || "сервер ответил " + res.status);
@@ -244,6 +279,9 @@ function prepare(data) {
     }).sort((a, b) => a.protocol.localeCompare(b.protocol) || a.goal.localeCompare(b.goal));
 
     const dates = [...k.dates].sort();
+    // «Данных мало» зависит от того, сколько занятий было всего, — поэтому
+    // признаки считаем здесь, когда число занятий уже известно.
+    goals.forEach((g) => { g.проблемы = проблемыЦели(g, dates.length); });
     const last = k.lastDate || (dates.length ? dates[dates.length - 1] : "");
     const recent = goals.flatMap((g) => g.points.filter((p) => daysBetween(p.date, now) <= 14).map((p) => p.percent));
 
@@ -293,7 +331,10 @@ function prepare(data) {
         .sort((a, b) => b.passed - a.passed),
       abc: k.abc.sort((x, y) => (y.date + y.time).localeCompare(x.date + x.time))
     };
-  }).sort((a, b) => a.label.localeCompare(b.label));
+  });
+
+  children.forEach((c) => { c.тревога = тревожность(c); });
+  children.sort((a, b) => b.тревога.балл - a.тревога.балл || a.label.localeCompare(b.label));
 
   return {
     now: now,
@@ -798,6 +839,27 @@ function round1(v) {
 const LOW_PERCENT = 30;      // «низкий замер»
 const LOW_IN_A_ROW = 3;      // сколько таких подряд, чтобы сказать вслух
 const FEW_TRIALS = 2;        // проб за занятие, при которых процент бинарный
+const RARE_MIN_SESSIONS = 3; // с какого числа занятий единственный замер — мало
+
+// Что не так с целью. Один список на всех: его показывают метки в шапке
+// протокола, по нему же работает фильтр «только проблемные», и из него
+// «Общие сведения» берут свои формулировки. Если считать в трёх местах
+// по-отдельности, шапка рано или поздно разойдётся с текстом внизу.
+//
+// Здесь только ФАКТЫ, найденные в данных, без назначения вмешательства:
+// что делать с целью, решает супервизор.
+function проблемыЦели(g, days) {
+  const список = [];
+  const значения = g.points.map((p) => p.percent);
+  if (значения.length >= LOW_IN_A_ROW && значения.slice(-LOW_IN_A_ROW).every((v) => v <= LOW_PERCENT)) {
+    список.push({ ключ: "низкие", метка: "низкие замеры" });
+  }
+  if (g.status === "plateau") список.push({ ключ: "плато", метка: "стоит на месте" });
+  if (days >= RARE_MIN_SESSIONS && g.points.length === 1) {
+    список.push({ ключ: "редко", метка: "данных мало" });
+  }
+  return список;
+}
 
 function trialsOf(point) {
   return String(point.responses || "").trim().split(/\s+/).filter(Boolean).length;

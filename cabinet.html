@@ -49,17 +49,48 @@
   .download[disabled] { opacity: .6; cursor: default; }
   .bar .download { align-self: flex-start; }
   .proto-block { border: 1px solid var(--line); border-radius: var(--radius-sm); margin-bottom: 8px; overflow: hidden; }
-  .proto-head { display: flex; align-items: center; gap: 10px 12px; padding: 12px 14px; background: var(--card); flex-wrap: wrap; }
+  /* Сетка, а не flex с переносом: правый столбец — «Освоен» и «⋮», и он
+     стоит на одном месте у всех протоколов. С flex-wrap кнопки у длинных
+     названий уезжали на вторую строку влево, и глаз искал их заново в
+     каждой карточке. */
+  .proto-head { display: grid; grid-template-columns: minmax(0, 1fr) auto;
+                align-items: center; column-gap: 12px; padding: 12px 14px; background: var(--card); }
+  .proto-left { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; min-width: 0; }
   /* Название занимает строку целиком, если ему тесно: `flex: 1` с нулевой
      основой сжимал его до нуля, длинные слова вылезали за свою клетку и
      наезжали на цифры справа — именно это видно на телефоне. 220px — та
      ширина, ниже которой заголовок читать уже невозможно. */
-  .proto-head .title { display: flex; align-items: baseline; gap: 10px; flex: 1 1 220px; min-width: 0; font: inherit; color: inherit; background: none; border: none; text-align: left; cursor: pointer; padding: 0; }
+  .proto-head .title { display: flex; align-items: baseline; gap: 10px; flex: 0 1 auto; min-width: 0; font: inherit; color: inherit; background: none; border: none; text-align: left; cursor: pointer; padding: 0; }
   .proto-head .title:hover b { color: var(--accent); }
   .proto-head.open { background: var(--accent-soft); }
-  .proto-head b { font-family: var(--font-display); font-size: 16px; min-width: 0; overflow-wrap: anywhere; }
+  .proto-head b { font-family: var(--font-display); font-size: 16px; min-width: 0; overflow-wrap: break-word; }
   .proto-head .caret { flex: none; }
-  .proto-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+  /* Цифры прижаты вправо и растягиваются, кнопки стоят ПОСЛЕ них отдельным
+     столбцом. Раньше «Освоен» и «⋮» были хвостом этой строки и у каждого
+     протокола оказывались на своём месте — глазу приходилось искать кнопку
+     заново в каждой карточке. */
+  .proto-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+                justify-content: flex-end; flex: 1 1 auto; min-width: 0; }
+  .proto-head > .acts { flex: none; }
+
+  /* Значок «что-то не так» стоит у самого названия и раскрывает подробности:
+     что именно, видно по нажатию, а не висит подписью в каждой шапке. */
+  .warn-badge {
+    flex: none; font: inherit; font-size: 12px; font-weight: 700;
+    padding: 3px 9px; border-radius: 999px; cursor: pointer;
+    border: 1px solid transparent;
+    background: var(--warn-soft); color: var(--warn-ink);
+  }
+  .warn-badge:hover { border-color: var(--warn); }
+  .warn-badge.on { background: var(--warn-ink); color: var(--card); }
+  .proto-why { padding: 8px 14px; font-size: 13px; color: var(--warn-ink);
+               background: var(--warn-soft); border-top: 1px solid var(--line);
+               display: flex; flex-direction: column; gap: 4px; }
+  /* Своё `display` перебивает атрибут `hidden` — у браузерного правила
+     специфичность ниже, чем у селектора по классу. Без этой строки блок
+     виден всегда, сколько ни ставь hidden из скрипта. */
+  .proto-why[hidden] { display: none; }
+  .why-line b { font-weight: 700; }
   .proto-count { font-size: 13px; color: var(--muted); white-space: nowrap; }
   .proto-body { border-top: 1px solid var(--line); }
   .sess-line td:first-child { cursor: pointer; }
@@ -108,6 +139,9 @@
   // держим ссылку рядом, чтобы не тащить его пятым параметром через всё.
   let текущийРебёнок = null;
   let показыватьАрхив = false;
+  // Фильтр «только проблемные» — состояние одного просмотра, а не настройка:
+  // открыл другого ребёнка — смотришь его целиком, как обычно.
+  let толькоПроблемные = false;
 
   // ── Вход ────────────────────────────────────────────────────────────
   // Кабинет без входа не показывает НИЧЕГО: здесь данные всех детей центра
@@ -192,13 +226,25 @@
   if (window.abaAuth && window.abaAuth.get()) старт(); else рисоватьВход();
 
   // ── Список детей ────────────────────────────────────────────────────
+  // Как расставлять детей в списке. Выбор человека помним: супервизор,
+  // которому привычнее алфавит, не должен переключать его каждый вход.
+  let порядок = localStorage.getItem("cab_order") === "алфавит" ? "алфавит" : "тревога";
+
   function renderList() {
     открытыйРебёнок = "";
     показыватьАрхив = false;
+    толькоПроблемные = false;
     const t = state.totals || {};
     const silent = state.children.filter((c) => c.days > 0 && c.silentDays >= SILENT_DAYS);
     const stuck = state.children.reduce((n, c) => n + c.stuck, 0);
     const mastered = state.children.reduce((n, c) => n + c.mastered, 0);
+    // По умолчанию — по тревоге: заголовок обещает «в первую очередь».
+    // Алфавит остаётся под рукой: когда ищешь конкретного ребёнка, порядок
+    // «сначала тревожные» только мешает.
+    const поТревоге = порядок === "тревога";
+    const список = поТревоге
+      ? state.children
+      : state.children.slice().sort((a, b) => a.label.localeCompare(b.label));
 
     view.innerHTML = `
       <div class="bar">
@@ -216,10 +262,19 @@
         <div class="tile"><b>${silent.length}</b><span>детей без данных ${SILENT_DAYS}+ дней</span></div>
         <div class="tile"><b>${stuck}</b><span>целей стоят на месте</span></div>
       </div>
-      <h2>Кого посмотреть в первую очередь</h2>
-      <div class="kids">${state.children.map(kidCard).join("")}</div>`;
+      <div class="list-head">
+        <h2>${поТревоге ? "Кого посмотреть в первую очередь" : "Все дети по алфавиту"}</h2>
+        <button type="button" class="linkbtn" id="orderToggle">${
+          поТревоге ? "по алфавиту" : "по тревоге"}</button>
+      </div>
+      <div class="kids">${список.map(kidCard).join("")}</div>`;
     view.querySelectorAll(".kid").forEach((el) => {
       el.addEventListener("click", () => renderChild(el.dataset.label));
+    });
+    document.getElementById("orderToggle").addEventListener("click", () => {
+      порядок = поТревоге ? "алфавит" : "тревога";
+      localStorage.setItem("cab_order", порядок);
+      renderList();
     });
     document.getElementById("dlAll").addEventListener("click", (e) =>
       выгрузить(e.currentTarget, state.children, "все дети"));
@@ -286,7 +341,13 @@
       <div class="two">
         <div>
           <div class="card" id="goals">
-            <h2 style="margin-top:0">${показыватьАрхив ? "Архив" : "Протоколы и цели"}</h2>
+            <div class="list-head" style="margin-top:0">
+              <h2 style="margin:0">${показыватьАрхив ? "Архив" : "Протоколы и цели"}</h2>
+              ${показыватьАрхив || !проблемныеЦели(c).length ? "" : `
+                <button type="button" class="linkbtn" id="onlyBad">${толькоПроблемные
+                  ? "показать все"
+                  : `только проблемные (${проблемныеЦели(c).length})`}</button>`}
+            </div>
             ${показыватьАрхив ? archiveBlocks(c) : protocolBlocks(c)}
             <p class="muted" style="margin:12px 0 0;font-size:13px">${показыватьАрхив
               ? "Здесь то, что вы убрали из работы. «Вернуть в работу» возвращает цель и на планшет тераписта."
@@ -311,7 +372,7 @@
           <div class="card" style="margin-top:14px">
             <h2 style="margin-top:0">Обсуждение</h2>
             <p class="muted" style="margin:-4px 0 10px;font-size:13px">О ребёнке в целом. Разговор о конкретной цели ведите в самой цели — там он и останется рядом с её графиком.</p>
-            ${веткаHtml(c, "", "", "Записей пока нет.")}
+            ${веткаHtml(c, "", "Записей пока нет.")}
           </div>
         </div>
       </div>
@@ -343,6 +404,11 @@
       показыватьАрхив = !показыватьАрхив;
       renderChild(label);
     });
+    const кнопкаБед = document.getElementById("onlyBad");
+    if (кнопкаБед) кнопкаБед.addEventListener("click", () => {
+      толькоПроблемные = !толькоПроблемные;
+      renderChild(label);
+    });
 
     if (c.behavior.length) {
       const off = new Set();
@@ -358,12 +424,24 @@
       });
     }
 
+    view.querySelectorAll(".warn-badge").forEach((значок) => {
+      значок.addEventListener("click", () => {
+        const строка = view.querySelector(`.proto-why[data-why-body="${значок.dataset.why}"]`);
+        if (!строка) return;
+        строка.hidden = !строка.hidden;
+        значок.setAttribute("aria-expanded", String(!строка.hidden));
+        значок.classList.toggle("on", !строка.hidden);
+      });
+    });
+
     view.querySelectorAll(".proto-head .title").forEach((head) => {
       head.addEventListener("click", () => {
         const body = view.querySelector(`[data-proto-body="${head.dataset.proto}"]`);
         if (!body) return;
         body.hidden = !body.hidden;
         head.closest(".proto-head").classList.toggle("open", !body.hidden);
+        const слот = body.querySelector(".talk-slot");
+        if (!body.hidden && слот) наполнитьВетку(c, слот);
       });
     });
 
@@ -377,8 +455,6 @@
         if (!detail) return;
         detail.hidden = !detail.hidden;
         row.classList.toggle("open", !detail.hidden);
-        const слот = detail.querySelector(".talk-slot");
-        if (!detail.hidden && слот) наполнитьВетку(c, слот);
       });
     });
 
@@ -393,6 +469,9 @@
     });
 
     связатьВетки(c);
+    // Первый протокол раскрыт по умолчанию — его ветка должна быть на месте
+    // сразу, иначе появилась бы только после сворачивания и раскрытия.
+    view.querySelectorAll(".proto-body:not([hidden]) .talk-slot").forEach((слот) => наполнитьВетку(c, слот));
 
     view.querySelectorAll(".act.more").forEach((btn) => {
       btn.addEventListener("click", () => открытьМеню(c.label, btn));
@@ -424,17 +503,27 @@
   // Записи привязаны к цели, к протоколу или к ребёнку целиком. Показываем
   // всю ветку сразу: это журнал, а не переписка, и «свернуть старое» здесь
   // мешало бы — смысл именно в истории.
-  function записиПо(c, protocol, goal) {
-    return c.talk.filter((z) => (z.protocol || "") === (protocol || "") && (z.goal || "") === (goal || ""));
+  // Сравнение обрезанное и без регистра: на планшете название цели может
+  // быть с пробелом на конце («Открой »), а приёмник пробелы срезает.
+  // Точное сравнение теряло ветку — это уже случилось в бою.
+  const какКлюч = (s) => String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
+
+  // Обсуждение привязано к ПРОТОКОЛУ, а не к цели: названий протоколов
+  // меньше, они стабильнее, и разговор обычно идёт про направление работы,
+  // а не про одну строку. Записи, сделанные раньше по целям, остаются в
+  // ветке своего протокола с пометкой, о какой цели речь.
+  function записиПо(c, protocol) {
+    return c.talk.filter((z) => какКлюч(z.protocol) === какКлюч(protocol));
   }
 
-  function веткаHtml(c, protocol, goal, подпись) {
-    const записи = записиПо(c, protocol, goal);
-    const ключ = `${protocol || ""}‖${goal || ""}`;
+  function веткаHtml(c, protocol, подпись) {
+    const записи = записиПо(c, protocol);
+    const ключ = protocol || "";
     return `<div class="talk" data-talk="${escapeHtml(ключ)}">
       ${записи.length
         ? записи.map((z) => `<div class="talk-item">
             <div class="talk-who"><b>${escapeHtml(z.author || "без имени")}</b>${z.role === "therapist" ? ", терапист" : ""} · ${humanDate(day(z.created))}${
+              z.goal ? ` · про цель «${escapeHtml(z.goal)}»` : ""}${
               z.unread ? ' <span class="talk-badge">новое</span>' : ""}</div>
             <div class="talk-text">${escapeHtml(z.text)}</div>
             ${z.role === "therapist" ? "" : (z.read && z.read.length
@@ -454,8 +543,8 @@
   // расточительство: страница тяжелеет, а пользы ноль.
   function наполнитьВетку(c, слот) {
     if (слот.dataset.готово === "1") return;
-    слот.innerHTML = веткаHtml(c, слот.dataset.protocol, слот.dataset.goal,
-      "Записей пока нет. Напишите тераписту — он увидит это у самой цели на планшете.");
+    слот.innerHTML = веткаHtml(c, слот.dataset.protocol,
+      "Записей по этому протоколу пока нет. Напишите тераписту — он увидит запись в «Сборе», у этого протокола.");
     слот.dataset.готово = "1";
     связатьВетку(c, слот.querySelector(".talk"));
     // Открыл ветку — значит прочитал. Метку снимаем сразу на экране, чтобы
@@ -463,7 +552,7 @@
     // Пометку «новое» у самих записей НЕ убираем сразу: человек только что
     // открыл ветку, и полезно видеть, что именно было новым. А вот счётчик
     // сверху гасим — он про «есть непрочитанное», и это уже неправда.
-    const новые = записиПо(c, слот.dataset.protocol, слот.dataset.goal).filter((z) => z.unread);
+    const новые = записиПо(c, слот.dataset.protocol).filter((z) => z.unread);
     if (!новые.length) return;
     новые.forEach((z) => { z.unread = false; });
     markTalkRead(c.label, новые.map((z) => z.id));
@@ -481,7 +570,7 @@
   function открытьПервоеНовое(c) {
     const новое = c.talk.find((z) => z.unread);
     if (!новое) return;
-    if (!новое.goal) {
+    if (!новое.protocol) {
       document.querySelector(".card .talk").scrollIntoView({ block: "center" });
       return;
     }
@@ -491,12 +580,8 @@
       const тело = view.querySelector(`[data-proto-body="${заголовок.dataset.proto}"]`);
       if (тело && тело.hidden) заголовок.click();
     }
-    const строка = [...view.querySelectorAll(".goal-line")]
-      .find((tr) => tr.textContent.indexOf(новое.goal) >= 0);
-    if (!строка) return;
-    const деталь = view.querySelector(`.detail[data-detail="${строка.dataset.goal}"]`);
-    if (деталь && деталь.hidden) строка.querySelector("td").click();
-    строка.scrollIntoView({ block: "center" });
+    const тело = заголовок && view.querySelector(`[data-proto-body="${заголовок.dataset.proto}"]`);
+    if (тело) { наполнитьВетку(c, тело.querySelector(".talk-slot")); тело.querySelector(".talk-slot").scrollIntoView({ block: "center" }); }
   }
 
   function связатьВетки(c) {
@@ -510,12 +595,12 @@
         const поле = блок.querySelector("textarea");
         const текст = поле.value.trim();
         if (!текст) { поле.focus(); return; }
-        const [protocol, goal] = блок.dataset.talk.split("‖");
+        const protocol = блок.dataset.talk;
 
         btn.disabled = true;
         btn.textContent = "Отправляю…";
         try {
-          await sendTalk(c.label, protocol, goal, текст);
+          await sendTalk(c.label, protocol, текст);
           state = await loadCabinet();
           renderChild(c.label);
           сказать("Записано. Терапист увидит при следующем открытии «Сбора».");
@@ -669,8 +754,57 @@
   }
 
   // ── Протоколы и цели ────────────────────────────────────────────────
+  // Порядок меток фиксированный, чтобы шапки протоколов читались одинаково
+  // и глаз не искал каждый раз заново.
+  const ПОРЯДОК_БЕД = ["низкие замеры", "стоит на месте", "данных мало"];
+
+  // В шапке — ОДИН значок с числом целей, а не три подписи. Когда метки
+  // висят на одиннадцати протоколах из четырнадцати, три подписи в каждой
+  // шапке перестают быть сигналом и становятся фоном: глазу не за что
+  // зацепиться. Что именно не так — написано строкой внутри протокола,
+  // там, где супервизор всё равно окажется, когда решит разбираться.
+  // Не «низкие замеры: 2», а какие именно цели. Счёт заставляет супервизора
+  // открывать протокол и сверять глазами; имена отвечают на вопрос сразу.
+  function бедыПоименно(items) {
+    const по = new Map();
+    items.forEach((g) => (g.проблемы || []).forEach((п) => {
+      if (!по.has(п.метка)) по.set(п.метка, []);
+      по.get(п.метка).push(g.goal);
+    }));
+    return ПОРЯДОК_БЕД.filter((м) => по.has(м)).map((м) => ({ метка: м, цели: по.get(м) }));
+  }
+
+  function меткаБед(items, pi) {
+    const сколько = items.filter((g) => (g.проблемы || []).length).length;
+    if (!сколько) return "";
+    const подсказка = бедыПоименно(items)
+      .map((б) => `${б.метка}: ${б.цели.join(", ")}`).join("\n");
+    return `<button class="warn-badge" type="button" data-why="${pi}" aria-expanded="false"
+      title="${escapeHtml(подсказка)}">⚠ ${сколько}</button>`;
+  }
+
+  // Подробности живут отдельной строкой ПОД шапкой, а не внутри тела:
+  // тогда значок работает и у свёрнутого протокола — не надо раскрывать
+  // сорок целей, чтобы прочитать «низкие замеры: 2».
+  function строкаБед(items, pi) {
+    const список = бедыПоименно(items);
+    if (!список.length) return "";
+    const строки = список.map((б) =>
+      `<span class="why-line"><b>${escapeHtml(б.метка)}:</b> ${
+        б.цели.map((ц) => `«${escapeHtml(ц)}»`).join(", ")}</span>`).join("");
+    return `<div class="proto-why" data-why-body="${pi}" hidden>${строки}</div>`;
+  }
+
+  const проблемныеЦели = (c) => c.active.filter((g) => (g.проблемы || []).length);
+
   function protocolBlocks(c) {
-    const goals = c.active;
+    // Фильтр прячет цели, у которых всё в порядке, и протоколы, где после
+    // этого не осталось ничего. Считаем от c.active: разобранное в архиве
+    // внимания уже не просит.
+    const goals = толькоПроблемные ? проблемныеЦели(c) : c.active;
+    if (толькоПроблемные && !goals.length) {
+      return `<p class="muted" style="margin:0">Целей с признаками проблем нет: замеры не проваливаются, движение есть, данные собираются.</p>`;
+    }
     if (!goals.length) {
       return `<p class="muted" style="margin:0">${c.goals.length
         ? "Все цели этого ребёнка разобраны — смотрите архив."
@@ -685,39 +819,53 @@
 
     return [...byProto.entries()].map(([title, items], pi) => {
       const mastered = items.filter((g) => g.status === "mastered").length;
-      const stuck = items.filter((g) => g.status === "plateau").length;
       const values = items.map((g) => g.last).filter((v) => v != null);
       const avg = values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : null;
-      const open = pi === 0;
+      // При фильтре раскрываем все блоки: иначе супервизор снова щёлкает по
+      // протоколам по одному — а фильтр затевался ровно от этого.
+      const open = толькоПроблемные || pi === 0;
       const решениеПротокола = c.protocolDecisions.get(title);
 
       return `<div class="proto-block">
         <div class="proto-head${open ? " open" : ""}">
-          <button class="title" type="button" data-proto="${pi}">
-            <span class="caret">▸</span>
-            <b>${escapeHtml(title)}</b>
-          </button>
-          <span class="proto-meta">
+          <div class="proto-left">
+            <button class="title" type="button" data-proto="${pi}">
+              <span class="caret">▸</span>
+              <b>${escapeHtml(title)}</b>
+            </button>
+            ${меткаБед(items, pi)}
+            <span class="proto-meta">
             ${mastered ? `<span class="flag good">освоено: ${mastered}</span>` : ""}
-            ${stuck ? `<span class="flag warn">стоит ${stuck}</span>` : ""}
             ${avg == null ? "" : `<span class="proto-count">среднее <b class="${pctClass(avg)}">${avg}%</b></span>`}
             <span class="proto-count">${items.length} ${plural(items.length, "цель", "цели", "целей")}</span>
+            ${(() => { const з = записиПо(c, title);
+              const н = з.filter((z) => z.unread).length;
+              return з.length ? `<span class="talk-badge">💬 ${з.length}${н ? " · новое" : ""}</span>` : ""; })()}
             ${протоколаНетНаПланшете(c, title, items)}
             ${решениеПротокола && решениеПротокола.status === "mastered"
               ? `<span class="flag good">протокол освоен${решениеПротокола.at ? " · " + humanDate(решениеПротокола.at) : ""}</span>` : ""}
-            <span class="acts">
-              ${решениеПротокола && решениеПротокола.status === "mastered"
-                ? `<button class="act back" type="button" data-protocol="${escapeHtml(title)}" data-status="active">Снять отметку</button>`
-                : `<button class="act done" type="button" data-protocol="${escapeHtml(title)}" data-status="mastered" data-count="${items.length}">Освоен</button>`}
-              ${меню({ protocol: title, count: items.length })}
             </span>
+          </div>
+          <span class="acts">
+            ${решениеПротокола && решениеПротокола.status === "mastered"
+              ? `<button class="act back" type="button" data-protocol="${escapeHtml(title)}" data-status="active">Снять отметку</button>`
+              : `<button class="act done" type="button" data-protocol="${escapeHtml(title)}" data-status="mastered" data-count="${items.length}">Освоен</button>`}
+            ${меню({ protocol: title, count: items.length })}
           </span>
         </div>
+        ${строкаБед(items, pi)}
         <div class="proto-body" data-proto-body="${pi}"${open ? "" : " hidden"}>
           <div class="scroll"><table>
-            <thead><tr><th>Цель</th><th class="num">Сейчас</th><th>Динамика</th><th>Статус</th><th class="num">Замеров</th><th></th><th></th></tr></thead>
+            <thead><tr><th>Цель</th><th class="num">Сейчас</th><th>Динамика</th><th>Статус</th><th class="num">Замеров</th><th></th></tr></thead>
             <tbody>${items.map((g) => goalRow(c, g)).join("")}</tbody>
           </table></div>
+          <div style="padding:12px 14px 14px">
+            ${(() => { const з = записиПо(c, title); return `
+            <details class="fold"${з.length ? " open" : ""}>
+              <summary>Обсуждение протокола${з.length ? ` · ${з.length}` : ""}</summary>
+              <div class="talk-slot" data-protocol="${escapeHtml(title)}"></div>
+            </details>`; })()}
+          </div>
         </div>
       </div>`;
     }).join("");
@@ -742,8 +890,6 @@
         ? `<span class="flag good"${подпись}>освоена</span>`
         : `<span class="flag ${cls}">${text}</span>`}${нетНаПланшете(c, g)}</td>
       <td class="num">${values.length}</td>
-      <td>${(() => { const n = записиПо(c, g.protocol, g.goal).length;
-        return n ? `<span class="talk-badge" title="записей в обсуждении">💬 ${n}</span>` : ""; })()}</td>
       <td><span class="acts">
         ${решено
           ? (своё
@@ -753,7 +899,7 @@
         ${меню({ protocol: g.protocol, goal: g.goal })}
       </span></td>
     </tr>
-    ${goalDetail(g, id, 7)}`;
+    ${goalDetail(g, id, 6)}`;
   }
 
   // «Нет на планшете»: цель есть в замерах, но в последнем слепке настройки
@@ -882,8 +1028,6 @@
         </tr>`).join("")}</tbody>
       </table></div>
       <p class="muted" style="margin:10px 0 0;font-size:13px">Ничего не удаляется: сохраняется каждая проба каждого занятия — и процент, и последовательность ответов.</p>
-      <h4 style="margin-top:16px">Обсуждение цели</h4>
-      <div class="talk-slot" data-protocol="${escapeHtml(g.protocol)}" data-goal="${escapeHtml(g.goal)}"></div>
     </td></tr>`;
   }
 
@@ -1074,8 +1218,9 @@
   // Правило одно: говорим ФАКТ, найденный в данных, и не назначаем
   // вмешательство — что делать с целью, решает супервизор, а не арифметика.
   // Считаем по целям В РАБОТЕ: разобранное больше не просит внимания.
-  const RARE_MIN_SESSIONS = 3;
   const ABC_MIN_EPISODES = 3;
+
+  const есть = (g, ключ) => (g.проблемы || []).some((п) => п.ключ === ключ);
 
   function adviceHtml(c) {
     const out = [];
@@ -1093,15 +1238,13 @@
       }
     }
 
-    const low = goals.filter((g) => {
-      const values = g.points.map((p) => p.percent);
-      return values.length >= LOW_IN_A_ROW && values.slice(-LOW_IN_A_ROW).every((v) => v <= LOW_PERCENT);
-    });
+    // Те же признаки, что в шапках протоколов и в фильтре (cabinet.js).
+    const low = goals.filter((g) => есть(g, "низкие"));
     if (low.length === 1) out.push(`«${low[0].goal}»: ${LOW_IN_A_ROW} замера подряд не выше ${LOW_PERCENT}%.`);
     else if (low.length > 1) out.push(`У ${low.length} ${plural(low.length, "цели", "целей", "целей")} по ${LOW_IN_A_ROW} замера подряд не выше ${LOW_PERCENT}%: ${namesOf(low)}.`);
 
-    if (c.days >= RARE_MIN_SESSIONS) {
-      const rare = goals.filter((g) => g.points.length === 1);
+    {
+      const rare = goals.filter((g) => есть(g, "редко"));
       if (rare.length) out.push(`За ${c.days} ${plural(c.days, "занятие", "занятия", "занятий")} по ${rare.length} ${plural(rare.length, "цели данные собраны", "целям данные собраны", "целям данные собраны")} лишь один раз: ${namesOf(rare)}.`);
     }
 
@@ -1117,7 +1260,7 @@
       }
     }
 
-    const stuck = goals.filter((g) => g.status === "plateau");
+    const stuck = goals.filter((g) => есть(g, "плато"));
     if (stuck.length === 1) out.push(`«${stuck[0].goal}» держится около ${stuck[0].last}% и не двигается.`);
     else if (stuck.length > 1) out.push(`${stuck.length} ${plural(stuck.length, "цель держится", "цели держатся", "целей держатся")} на месте: ${namesOf(stuck)}.`);
 
@@ -1129,7 +1272,16 @@
     else if (mastered.length > 1) out.push(`${mastered.length} ${plural(mastered.length, "цель отвечает", "цели отвечают", "целей отвечают")} критерию освоения: ${namesOf(mastered)}.${probeTail}`);
 
     if (!out.length) out.push("Ничего срочного: цели двигаются, данные приходят.");
-    return "<ul>" + out.map((s) => "<li>" + escapeHtml(s) + "</li>").join("") + "</ul>" + summaryLine(c, state.now);
+    // Список из семи пунктов читают как стену. Первые три видно сразу —
+    // они и есть самое важное, порядок здесь не случайный, — остальное
+    // открывается по желанию.
+    const пункт = (s) => "<li>" + escapeHtml(s) + "</li>";
+    const видно = out.slice(0, 3).map(пункт).join("");
+    const прочее = out.slice(3);
+    const свёрнуто = прочее.length
+      ? `<details class="fold"><summary>ещё ${прочее.length} ${plural(прочее.length, "наблюдение", "наблюдения", "наблюдений")}</summary><ul>${прочее.map(пункт).join("")}</ul></details>`
+      : "";
+    return "<ul>" + видно + "</ul>" + свёрнуто + summaryLine(c, state.now);
   }
 
   function namesOf(goals, max) {
