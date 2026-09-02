@@ -60,6 +60,31 @@ async function loadCabinet() {
   return prepare(data);
 }
 
+// Новая запись в обсуждение. protocol и goal пустые — разговор о ребёнке.
+async function sendTalk(child, protocol, goal, text) {
+  const res = await fetch("https://api.abachecklist.ru/api/sync/talk", {
+    method: "POST",
+    headers: Object.assign({ "Content-Type": "application/json" }, window.abaAuth.headers()),
+    body: JSON.stringify({ child: child, protocol: protocol || "", goal: goal || "", text: text })
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) throw new Error(data.error || "сервер ответил " + res.status);
+  return data;
+}
+
+// Кто ведёт ребёнка. Пустой список — «никто не закреплён»: тогда ребёнка
+// на планшете увидит только супервизор.
+async function sendTherapists(child, ids) {
+  const res = await fetch(CABINET_API + "/therapists", {
+    method: "POST",
+    headers: Object.assign({ "Content-Type": "application/json" }, window.abaAuth.headers()),
+    body: JSON.stringify({ child: child, staff: ids })
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) throw new Error(data.error || "сервер ответил " + res.status);
+  return data;
+}
+
 // Решение супервизора по цели или по протоколу целиком (goal = "").
 // status: "mastered" | "archived" | "active" (последнее — снять решение).
 async function sendDecision(child, protocol, goal, status) {
@@ -163,6 +188,22 @@ function prepare(data) {
   // присылал настройку.
   const снимки = data.snapshots || {};
 
+  // Обсуждения. Ключ тот же, что у решений: «протокол ‖ цель». Записи без
+  // цели — разговор о ребёнке целиком.
+  const разговоры = new Map();
+  (data.talk || []).forEach((z) => {
+    if (!разговоры.has(z.child)) разговоры.set(z.child, []);
+    разговоры.get(z.child).push(z);
+  });
+
+  // Кто ведёт каждого ребёнка. От этого зависит, что терапист увидит на
+  // планшете: список детей, настройку, историю, решения.
+  const ведут = new Map();
+  (data.assignments || []).forEach((a) => {
+    if (!ведут.has(a.child)) ведут.set(a.child, []);
+    ведут.get(a.child).push({ id: a.staff_id, name: a.staff });
+  });
+
   const children = [...kids.values()].map((k) => {
     const decisions = byChild.get(k.label) || { protocols: new Map(), goals: new Map() };
     const снимок = снимки[k.label]
@@ -198,6 +239,8 @@ function prepare(data) {
       protocolDecisions: decisions.protocols,
       goalDecisions: decisions.goals,
       snapshot: снимок,
+      therapists: ведут.get(k.label) || [],
+      talk: разговоры.get(k.label) || [],
       sessions: k.sessions != null ? k.sessions : dates.length,
       days: dates.length,
       lastDate: last,
@@ -238,6 +281,7 @@ function prepare(data) {
   return {
     now: now,
     me: data.me || { name: "", role: "" },   // кто вошёл — рисуем в шапке
+    staff: data.therapists || [],            // кого можно назначить на ребёнка
     totals: data.totals || {},
     children: children,
     feed: data.feed || []
