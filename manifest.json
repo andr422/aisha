@@ -1,14 +1,14 @@
 {
-  "name": "ABA Чек-лист",
-  "short_name": "ABA",
-  "description": "Ежедневный сбор данных на ABA-занятиях",
+  "name": "ЧекЛист+",
+  "short_name": "ЧекЛист+",
+  "description": "Сбор данных на ABA-занятиях: цели, поведение, отчёты",
   "lang": "ru",
   "start_url": "./final_fixed_aisha.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f8f9fa",
-  "theme_color": "#0d6efd",
+  "background_color": "#f3f2ed",
+  "theme_color": "#0e7490",
   "icons": [
     {
       "src": "icon-192.png",
