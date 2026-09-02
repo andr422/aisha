@@ -304,8 +304,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
      цифры и кнопки под ним слева. В одну строку на 375px они не помещаются
      физически, и попытка их ужать кончалась наездом текста друг на друга. */
   .proto-meta { width: 100%; justify-content: flex-start; }
-  .proto-head { align-items: start; }
   .proto-left { align-items: flex-start; }
+
+  .proto-head { align-items: start; }
 
   /* Выгрузка на телефоне — обычная кнопка в общем ряду, а не прижатая
      к правому краю: справа там уже ничего нет. */
