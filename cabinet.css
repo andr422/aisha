@@ -294,6 +294,27 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .topbar { flex-wrap: wrap; gap: 10px; padding: 10px 14px; }
   .who { margin-left: 0; }
   .wrap { padding: 18px 14px 60px; }
+
+  /* Телефон. Шапка протокола перестраивается в две строки: название сверху,
+     цифры и кнопки под ним слева. В одну строку на 375px они не помещаются
+     физически, и попытка их ужать кончалась наездом текста друг на друга. */
+  .proto-meta { width: 100%; justify-content: flex-start; }
+  .proto-head { align-items: flex-start; }
+
+  /* Выгрузка на телефоне — обычная кнопка в общем ряду, а не прижатая
+     к правому краю: справа там уже ничего нет. */
+  .jump .download { margin-left: 0; }
+
+  /* Карточки детей в один столбец: 330px в сетке заставляли страницу
+     ездить вбок. */
+  .kids { grid-template-columns: minmax(0, 1fr); }
+  .tiles { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .bar .download { align-self: stretch; }
+
+  /* Графики рисуются в системе координат 760×260 и на узком экране
+     вписываются в неё с полями сверху и снизу — пустота в пол-экрана.
+     `height: auto` заставляет их сжиматься пропорционально. */
+  #behChart svg, .goal-card svg, .detail svg { height: auto; }
 }
 
 /* ── Общее для кабинета и отчёта ───────────────────────────────────────

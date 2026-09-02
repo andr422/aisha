@@ -14,7 +14,7 @@
   .goal-proto { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
   .back { background: none; border: none; color: var(--accent); font: inherit; cursor: pointer; padding: 0; margin-bottom: 10px; }
   .two { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
-  .goal-line td:first-child { font-weight: 600; cursor: pointer; }
+  .goal-line td:first-child { font-weight: 600; cursor: pointer; min-width: 140px; overflow-wrap: anywhere; }
   .goal-line:hover td:first-child { color: var(--accent); }
   .caret { display: inline-block; width: 12px; color: var(--muted); transition: transform .15s; }
   .goal-line.open .caret { transform: rotate(90deg); }
@@ -49,11 +49,16 @@
   .download[disabled] { opacity: .6; cursor: default; }
   .bar .download { align-self: flex-start; }
   .proto-block { border: 1px solid var(--line); border-radius: var(--radius-sm); margin-bottom: 8px; overflow: hidden; }
-  .proto-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--card); flex-wrap: wrap; }
-  .proto-head .title { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; font: inherit; color: inherit; background: none; border: none; text-align: left; cursor: pointer; padding: 0; }
+  .proto-head { display: flex; align-items: center; gap: 10px 12px; padding: 12px 14px; background: var(--card); flex-wrap: wrap; }
+  /* Название занимает строку целиком, если ему тесно: `flex: 1` с нулевой
+     основой сжимал его до нуля, длинные слова вылезали за свою клетку и
+     наезжали на цифры справа — именно это видно на телефоне. 220px — та
+     ширина, ниже которой заголовок читать уже невозможно. */
+  .proto-head .title { display: flex; align-items: baseline; gap: 10px; flex: 1 1 220px; min-width: 0; font: inherit; color: inherit; background: none; border: none; text-align: left; cursor: pointer; padding: 0; }
   .proto-head .title:hover b { color: var(--accent); }
   .proto-head.open { background: var(--accent-soft); }
-  .proto-head b { font-family: var(--font-display); font-size: 16px; }
+  .proto-head b { font-family: var(--font-display); font-size: 16px; min-width: 0; overflow-wrap: anywhere; }
+  .proto-head .caret { flex: none; }
   .proto-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
   .proto-count { font-size: 13px; color: var(--muted); white-space: nowrap; }
   .proto-body { border-top: 1px solid var(--line); }
