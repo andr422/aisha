@@ -72,6 +72,21 @@ async function sendTalk(child, protocol, goal, text) {
   return data;
 }
 
+// Отметка «я прочитал»: кабинет шлёт её, когда супервизор открыл ветку.
+// Иначе метка «новое» висела бы вечно и перестала что-либо значить.
+async function markTalkRead(child, ids) {
+  if (!ids.length) return;
+  try {
+    await fetch("https://api.abachecklist.ru/api/sync/read", {
+      method: "POST",
+      headers: Object.assign({ "Content-Type": "application/json" }, window.abaAuth.headers()),
+      body: JSON.stringify({ child: child, ids: ids })
+    });
+  } catch (err) {
+    /* не дошло — метка «новое» просто останется до следующего раза */
+  }
+}
+
 // Кто ведёт ребёнка. Пустой список — «никто не закреплён»: тогда ребёнка
 // на планшете увидит только супервизор.
 async function sendTherapists(child, ids) {
@@ -241,6 +256,8 @@ function prepare(data) {
       snapshot: снимок,
       therapists: ведут.get(k.label) || [],
       talk: разговоры.get(k.label) || [],
+      // Ответы терапистов, которых супервизор ещё не открывал.
+      talkNew: (разговоры.get(k.label) || []).filter((z) => z.unread).length,
       sessions: k.sessions != null ? k.sessions : dates.length,
       days: dates.length,
       lastDate: last,

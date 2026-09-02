@@ -232,6 +232,7 @@
     if (c.stuck) flags.push(`<span class="flag warn">${c.stuck} ${plural(c.stuck, "цель стоит", "цели стоят", "целей стоят")} на месте</span>`);
     if (c.mastered) flags.push(`<span class="flag good">${c.mastered} ${plural(c.mastered, "цель отвечает", "цели отвечают", "целей отвечают")} критерию</span>`);
     if (c.archived.length) flags.push(`<span class="flag">${c.archived.length} в архиве</span>`);
+    if (c.talkNew) flags.push(`<span class="flag warn">${c.talkNew} ${plural(c.talkNew, "новый ответ", "новых ответа", "новых ответов")}</span>`);
     // Ребёнок без тераписта не попадёт ни на чей планшет — это видно сразу,
     // а не выясняется по жалобе «не вижу ребёнка».
     if (!c.therapists.length) flags.push('<span class="flag warn">никто не ведёт</span>');
@@ -273,6 +274,7 @@
           ? `<a href="summary_fixed_aisha.html?child=${encodeURIComponent(c.label)}&open=collect">📱 Открыть «Сбор»</a>`
           : ""}
         <button type="button" id="archiveBtn">${показыватьАрхив ? "‹ к целям в работе" : `📦 Архив${вАрхиве ? ` (${вАрхиве})` : ""}`}</button>
+        ${c.talkNew ? `<button type="button" id="talkNewBtn">💬 ${c.talkNew} ${plural(c.talkNew, "новый ответ", "новых ответа", "новых ответов")}</button>` : ""}
         <a href="#goals">Протоколы и цели (${c.active.length})</a>
         <a href="#history">История занятий</a>
         <a href="#gen">Обобщение${c.gen.length ? ` (${c.gen.length})` : ""}</a>
@@ -335,6 +337,8 @@
     document.getElementById("dlChild").addEventListener("click", (e) =>
       выгрузить(e.currentTarget, [c], c.label));
     document.getElementById("whoEdit").addEventListener("click", () => правитьКтоВедёт(c));
+    const кнопкаНовых = document.getElementById("talkNewBtn");
+    if (кнопкаНовых) кнопкаНовых.addEventListener("click", () => открытьПервоеНовое(c));
     document.getElementById("archiveBtn").addEventListener("click", () => {
       показыватьАрхив = !показыватьАрхив;
       renderChild(label);
@@ -430,7 +434,8 @@
     return `<div class="talk" data-talk="${escapeHtml(ключ)}">
       ${записи.length
         ? записи.map((z) => `<div class="talk-item">
-            <div class="talk-who"><b>${escapeHtml(z.author || "без имени")}</b>${z.role === "therapist" ? ", терапист" : ""} · ${humanDate(day(z.created))}</div>
+            <div class="talk-who"><b>${escapeHtml(z.author || "без имени")}</b>${z.role === "therapist" ? ", терапист" : ""} · ${humanDate(day(z.created))}${
+              z.unread ? ' <span class="talk-badge">новое</span>' : ""}</div>
             <div class="talk-text">${escapeHtml(z.text)}</div>
             ${z.role === "therapist" ? "" : (z.read && z.read.length
               ? `<div class="talk-read">прочитала ${z.read.map((r) => escapeHtml(r.name) + (r.at ? ", " + humanDate(day(r.at)) : "")).join("; ")}</div>`
@@ -453,6 +458,45 @@
       "Записей пока нет. Напишите тераписту — он увидит это у самой цели на планшете.");
     слот.dataset.готово = "1";
     связатьВетку(c, слот.querySelector(".talk"));
+    // Открыл ветку — значит прочитал. Метку снимаем сразу на экране, чтобы
+    // не ждать перезагрузки данных.
+    // Пометку «новое» у самих записей НЕ убираем сразу: человек только что
+    // открыл ветку, и полезно видеть, что именно было новым. А вот счётчик
+    // сверху гасим — он про «есть непрочитанное», и это уже неправда.
+    const новые = записиПо(c, слот.dataset.protocol, слот.dataset.goal).filter((z) => z.unread);
+    if (!новые.length) return;
+    новые.forEach((z) => { z.unread = false; });
+    markTalkRead(c.label, новые.map((z) => z.id));
+
+    c.talkNew = Math.max(0, (c.talkNew || 0) - новые.length);
+    const кнопка = document.getElementById("talkNewBtn");
+    if (кнопка) {
+      if (!c.talkNew) кнопка.remove();
+      else кнопка.textContent = `💬 ${c.talkNew} ${plural(c.talkNew, "новый ответ", "новых ответа", "новых ответов")}`;
+    }
+  }
+
+  // Переход к первому непрочитанному: раскрывает нужный протокол и цель.
+  // Иначе супервизор знает, что «есть новое», но ищет его перебором.
+  function открытьПервоеНовое(c) {
+    const новое = c.talk.find((z) => z.unread);
+    if (!новое) return;
+    if (!новое.goal) {
+      document.querySelector(".card .talk").scrollIntoView({ block: "center" });
+      return;
+    }
+    const заголовок = [...view.querySelectorAll("#goals .proto-head .title")]
+      .find((b) => b.textContent.trim().indexOf(новое.protocol) >= 0);
+    if (заголовок) {
+      const тело = view.querySelector(`[data-proto-body="${заголовок.dataset.proto}"]`);
+      if (тело && тело.hidden) заголовок.click();
+    }
+    const строка = [...view.querySelectorAll(".goal-line")]
+      .find((tr) => tr.textContent.indexOf(новое.goal) >= 0);
+    if (!строка) return;
+    const деталь = view.querySelector(`.detail[data-detail="${строка.dataset.goal}"]`);
+    if (деталь && деталь.hidden) строка.querySelector("td").click();
+    строка.scrollIntoView({ block: "center" });
   }
 
   function связатьВетки(c) {
