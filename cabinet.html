@@ -270,10 +270,11 @@
         <div class="tile"><b>${state.children.length}</b><span>детей в работе</span></div>
         <div class="tile"><b>${t.sessions || 0}</b><span>занятий записано</span></div>
         <div class="tile"><b>${t.measurements || 0}</b><span>замеров по целям</span></div>
-        <div class="tile"><b>${mastered}</b><span>целей отвечают критерию</span></div>
-        <div class="tile"><b>${silent.length}</b><span>детей без данных ${SILENT_DAYS}+ дней</span></div>
-        <div class="tile"><b>${stuck}</b><span>целей стоят на месте</span></div>
+        ${плитка("mastered", mastered, "целей отвечают критерию")}
+        ${плитка("silent", silent.length, `детей без данных ${SILENT_DAYS}+ дней`)}
+        ${плитка("stuck", stuck, "целей стоят на месте")}
       </div>
+      <div id="drill" class="drill" hidden></div>
       <div class="list-head">
         <h2>${поТревоге ? "Кого посмотреть в первую очередь" : "Все дети по алфавиту"}</h2>
         <button type="button" class="linkbtn" id="orderToggle">${
@@ -290,6 +291,94 @@
     });
     document.getElementById("dlAll").addEventListener("click", (e) =>
       выгрузить(e.currentTarget, state.children, "все дети"));
+    подключитьПлитки();
+  }
+
+  // ── Плитки, которые можно раскрыть ──────────────────────────────────
+  // Три из шести отвечают на вопрос «кто именно за этой цифрой» — они и
+  // становятся кнопками. Остальные («занятий записано», «замеров») ни на
+  // какой список не раскладываются: делать их кнопками — врать про то, что
+  // там что-то есть.
+  function плитка(вид, число, подпись) {
+    if (!число) return `<div class="tile"><b>0</b><span>${подпись}</span></div>`;
+    return `<button type="button" class="tile can-open" data-drill="${вид}" aria-expanded="false">
+      <b>${число}</b><span>${подпись}</span></button>`;
+  }
+
+  function подключитьПлитки() {
+    const ящик = document.getElementById("drill");
+    view.querySelectorAll(".tile[data-drill]").forEach((кнопка) => {
+      кнопка.addEventListener("click", () => {
+        const свой = кнопка.classList.contains("on");
+        view.querySelectorAll(".tile[data-drill]").forEach((к) => {
+          к.classList.remove("on");
+          к.setAttribute("aria-expanded", "false");
+        });
+        if (свой) { ящик.hidden = true; ящик.innerHTML = ""; return; }
+        кнопка.classList.add("on");
+        кнопка.setAttribute("aria-expanded", "true");
+        ящик.innerHTML = разбор(кнопка.dataset.drill);
+        ящик.hidden = false;
+        ящик.querySelectorAll("[data-kid]").forEach((ссылка) => {
+          ссылка.addEventListener("click", () => renderChild(ссылка.dataset.kid));
+        });
+      });
+    });
+  }
+
+  // Сколько имён целей показывать, прежде чем свернуть в «и ещё N». Шесть —
+  // это примерно строка на обычном экране: дальше список перестаёт читаться
+  // и начинает пролистываться.
+  const ИМЁН_В_СТРОКЕ = 6;
+
+  function именаЦелей(goals) {
+    const имена = goals.map((g) => `«${escapeHtml(g.goal)}»`);
+    const видно = имена.slice(0, ИМЁН_В_СТРОКЕ).join(", ");
+    const хвост = имена.length - ИМЁН_В_СТРОКЕ;
+    return хвост > 0 ? `${видно} и ещё ${хвост}` : видно;
+  }
+
+  function строкаРебёнка(c, справа, подробность) {
+    return `<li>
+      <button type="button" class="drill-kid" data-kid="${escapeHtml(c.label)}">${escapeHtml(c.label)}</button>
+      <b>${справа}</b>
+      ${подробность ? `<span class="drill-goals">${подробность}</span>` : ""}
+    </li>`;
+  }
+
+  function разбор(вид) {
+    if (вид === "silent") {
+      const кто = state.children
+        .filter((c) => c.days > 0 && c.silentDays >= SILENT_DAYS)
+        .sort((a, b) => b.silentDays - a.silentDays);
+      return `<p class="drill-head">Занятий не записывали ${SILENT_DAYS} дней и дольше</p>
+        <ul class="drill-list">${кто.map((c) => строкаРебёнка(c,
+          `${c.silentDays} ${plural(c.silentDays, "день", "дня", "дней")}`,
+          c.lastDate ? `последнее занятие ${humanDate(c.lastDate)}` : "")).join("")}</ul>`;
+    }
+
+    const своё = вид === "mastered"
+      ? (c) => c.active.filter((g) => {
+          if (g.decision && g.decision.status !== "mastered") return false;
+          if (g.decision && g.decision.status === "mastered") return true;
+          return g.status === "mastered";
+        })
+      : (c) => c.active.filter((g) => !g.decision && g.status === "plateau");
+
+    const заголовок = вид === "mastered"
+      ? "Цели, которые отвечают критерию освоения — им пора на генерализацию и на новую цель"
+      : "Цели, которые держатся на месте";
+
+    const строки = state.children
+      .map((c) => ({ c: c, goals: своё(c) }))
+      .filter((x) => x.goals.length)
+      .sort((a, b) => b.goals.length - a.goals.length)
+      .map((x) => строкаРебёнка(x.c,
+        `${x.goals.length} ${plural(x.goals.length, "цель", "цели", "целей")}`,
+        именаЦелей(x.goals)));
+
+    return `<p class="drill-head">${заголовок}</p>
+      <ul class="drill-list">${строки.join("")}</ul>`;
   }
 
   function kidCard(c) {

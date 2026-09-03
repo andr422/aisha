@@ -431,3 +431,34 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .fold > summary::before { content: "▸ "; }
 .fold[open] > summary::before { content: "▾ "; }
 .fold[open] > summary { margin-bottom: 6px; }
+
+/* ── Раскрытая плитка ─────────────────────────────────────────────────── */
+/* Кнопкой становится только та плитка, за которой стоит список. Плитки без
+   списка остаются `div` — они не должны выглядеть нажимаемыми. */
+.tile.can-open { font: inherit; text-align: left; cursor: pointer; color: inherit; }
+.tile.can-open:hover { border-color: var(--accent); }
+.tile.can-open.on { border-color: var(--accent); background: var(--accent-soft); }
+
+.drill {
+  margin: -14px 0 26px;
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.drill-head { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+.drill-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.drill-list li { display: grid; grid-template-columns: auto auto 1fr; gap: 4px 10px; align-items: baseline; }
+.drill-kid {
+  font: inherit; font-family: var(--font-display); font-size: 15px; font-weight: 700;
+  background: none; border: none; padding: 0; cursor: pointer; color: var(--accent);
+  text-align: left;
+}
+.drill-kid:hover { text-decoration: underline; }
+.drill-list li > b { font-size: 13px; color: var(--soft-ink); white-space: nowrap; }
+.drill-goals { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
+
+@media (max-width: 700px) {
+  .drill-list li { grid-template-columns: 1fr auto; }
+}
