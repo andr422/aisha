@@ -462,3 +462,34 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 @media (max-width: 700px) {
   .drill-list li { grid-template-columns: 1fr auto; }
 }
+
+/* ── Свёрнутый пустой раздел ──────────────────────────────────────────── */
+/* Раздел, в котором нечего показывать, занимает одну строку вместо экрана
+   с объяснением, почему он пуст. Строка остаётся: «раздела нет» и «раздел
+   пуст» — разные вещи, и ссылке сверху нужен якорь. */
+.card.slim {
+  margin-top: 14px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.card.slim b { font-family: var(--font-display); font-size: 15px; }
+.card.slim .muted { font-size: 13px; }
+
+/* Ссылка на пустой раздел — бледнее: видно, что идти туда незачем. */
+.jump a.empty, .card.slim { opacity: .72; }
+
+/* ── Эпизоды ABC: заголовок дня ───────────────────────────────────────── */
+/* Эпизоды — дневник, и читаются они по дням. Дата вынесена в заголовок
+   группы, у самого эпизода остаётся только время. */
+.abc-day {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin: 18px 0 8px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.abc-day:first-child { margin-top: 4px; }
+.abc-day b { font-family: var(--font-display); font-size: 15px; }
+.abc-day .muted { font-size: 13px; }
+#abcMore { margin-top: 14px; }

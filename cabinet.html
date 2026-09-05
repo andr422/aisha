@@ -433,9 +433,9 @@
         ${c.talkNew ? `<button type="button" id="talkNewBtn">💬 ${c.talkNew} ${plural(c.talkNew, "новый ответ", "новых ответа", "новых ответов")}</button>` : ""}
         <a href="#goals">Протоколы и цели (${c.active.length})</a>
         <a href="#history">История занятий</a>
-        <a href="#gen">Обобщение${c.gen.length ? ` (${c.gen.length})` : ""}</a>
-        <a href="#behavior">Поведение</a>
-        <a href="#abc">Эпизоды ABC (${c.abc.length})</a>
+        <a href="#gen"${c.gen.length ? "" : ' class="empty"'}>Обобщение${c.gen.length ? ` (${c.gen.length})` : ""}</a>
+        <a href="#behavior"${c.behavior.length ? "" : ' class="empty"'}>Поведение${c.behavior.length ? ` (${c.behavior.length})` : ""}</a>
+        <a href="#abc"${c.abc.length ? "" : ' class="empty"'}>Эпизоды ABC${c.abc.length ? ` (${c.abc.length})` : ""}</a>
         <button type="button" class="download" id="dlChild">⬇ Скачать все данные</button>
       </div>
 
@@ -478,24 +478,28 @@
         </div>
       </div>
 
-      <div class="card" id="gen" style="margin-top:14px">
-        <h2 style="margin-top:0">Обобщение</h2>
-        <p class="muted" style="margin:-4px 0 14px;font-size:13px">Освоенную цель проверяют в девяти условиях: три материала, три места, три человека. Пока все девять не пройдены, навык считается привязанным к обстановке.</p>
-        ${genBlock(c)}
-      </div>
+      ${раздел("gen", "Обобщение", c.gen.length,
+        `<p class="muted" style="margin:-4px 0 14px;font-size:13px">Освоенную цель проверяют в девяти условиях: три материала, три места, три человека. Пока все девять не пройдены, навык считается привязанным к обстановке.</p>${genBlock(c)}`,
+        "проб ещё не было")}
 
-      <div class="card" id="behavior" style="margin-top:14px">
-        <h2 style="margin-top:0">Поведение: как часто</h2>
-        ${behaviorBlock(c)}
-      </div>
+      ${раздел("behavior", "Поведение: как часто", c.behavior.length,
+        behaviorBlock(c), "подсчётов частоты не вели")}
 
-      <div class="card" id="abc" style="margin-top:14px">
-        <h2 style="margin-top:0">Эпизоды ABC</h2>
-        <p class="muted" style="margin:-4px 0 14px;font-size:13px">Терапист записывает эпизод сразу после того, как он случился: что было до, что именно произошло и что было после.</p>
-        ${abcHtml(c)}
-      </div>`;
+      ${раздел("abc", "Эпизоды ABC", c.abc.length,
+        `<p class="muted" style="margin:-4px 0 14px;font-size:13px">Терапист записывает эпизод сразу после того, как он случился: что было до, что именно произошло и что было после.</p>${abcHtml(c)}`,
+        "эпизодов не записывали")}`;
 
     view.querySelector(".back").addEventListener("click", renderList);
+    const ещёЭпизоды = document.getElementById("abcMore");
+    if (ещёЭпизоды) {
+      ещёЭпизоды.dataset.label = ещёЭпизоды.textContent;
+      ещёЭпизоды.addEventListener("click", () => {
+        const остальные = document.getElementById("abcRest");
+        остальные.hidden = !остальные.hidden;
+        ещёЭпизоды.textContent = остальные.hidden ? ещёЭпизоды.dataset.label : "свернуть";
+        if (остальные.hidden) ещёЭпизоды.scrollIntoView({ block: "nearest" });
+      });
+    }
     document.getElementById("dlChild").addEventListener("click", (e) =>
       выгрузить(e.currentTarget, [c], c.label));
     document.getElementById("whoEdit").addEventListener("click", () => правитьКтоВедёт(c));
@@ -1221,6 +1225,23 @@
     }).join("");
   }
 
+  // Раздел карточки ребёнка. Пустой сворачивается в одну строку: у «К С»
+  // три пустых раздела с объяснениями занимали два экрана прокрутки, и
+  // супервизор пролистывал их, чтобы добраться до данных. Строка остаётся,
+  // а не исчезает совсем: «раздела нет» и «в разделе пусто» — разные вещи,
+  // и якорь для ссылки сверху тоже должен сохраниться.
+  function раздел(id, заголовок, естьЛи, содержимое, подписьПустого) {
+    if (!естьЛи) {
+      return `<div class="card slim" id="${id}">
+        <b>${заголовок}</b><span class="muted">${подписьПустого}</span>
+      </div>`;
+    }
+    return `<div class="card" id="${id}" style="margin-top:14px">
+      <h2 style="margin-top:0">${заголовок}</h2>
+      ${содержимое}
+    </div>`;
+  }
+
   function genBlock(c) {
     if (!c.gen.length) {
       return '<p class="muted" style="margin:0">Проб обобщения ещё не было: либо целей с критерием освоения нет, либо их не переводили в обобщение.</p>';
@@ -1299,11 +1320,15 @@
     });
   }
 
-  function abcHtml(c) {
-    if (!c.abc.length) return '<p class="muted" style="margin:0">Эпизодов пока не записывали.</p>';
-    return c.abc.map((a) => `<div class="abc-item">
+  // Сколько эпизодов показывать сразу. День не разрезаем: набираем целыми
+  // днями, пока не наберётся столько, — иначе получится «за 28 августа
+  // показаны 3 эпизода из 12», и непонятно, то ли их столько, то ли обрезали.
+  const ABC_СРАЗУ = 8;
+
+  function эпизодHtml(a) {
+    return `<div class="abc-item">
       <div class="abc-when">
-        <b>${humanDate(a.date)}${a.time ? ", " + escapeHtml(a.time) : ""}</b>
+        <b>${a.time ? escapeHtml(a.time) : humanDate(a.date)}</b>
         ${a.intensity ? `<span class="flag">интенсивность: ${escapeHtml(a.intensity)}</span>` : ""}
         ${a.duration ? `<span class="flag">длилось: ${escapeHtml(a.duration)}</span>` : ""}
       </div>
@@ -1312,7 +1337,45 @@
         <div class="abc-part b"><span>Что произошло</span>${escapeHtml(a.behavior) || "—"}</div>
         <div class="abc-part"><span>После</span>${escapeHtml(a.consequence) || "—"}</div>
       </div>
-    </div>`).join("");
+    </div>`;
+  }
+
+  function деньHtml([дата, список]) {
+    return `<div class="abc-day">
+      <b>${humanDate(дата)}</b>
+      <span class="muted">${список.length} ${plural(список.length, "эпизод", "эпизода", "эпизодов")}</span>
+    </div>${список.map(эпизодHtml).join("")}`;
+  }
+
+  // Эпизоды — дневник, и читаются они по дням. Поэтому не сплошная лента, а
+  // группы: у «М Т дом» 58 эпизодов превращаются в девять дней.
+  function abcHtml(c) {
+    if (!c.abc.length) return '<p class="muted" style="margin:0">Эпизодов пока не записывали.</p>';
+
+    const поДням = new Map();
+    c.abc.forEach((a) => {
+      const д = day(a.date);
+      if (!поДням.has(д)) поДням.set(д, []);
+      поДням.get(д).push(a);
+    });
+    const дни = [...поДням.entries()]; // c.abc уже отсортирован свежими вперёд
+
+    const сразу = [];
+    const позже = [];
+    let набрано = 0;
+    дни.forEach((день) => {
+      if (набрано < ABC_СРАЗУ) { сразу.push(день); набрано += день[1].length; }
+      else позже.push(день);
+    });
+
+    const скрыто = позже.reduce((n, [, список]) => n + список.length, 0);
+    return сразу.map(деньHtml).join("")
+      + (скрыто
+        ? `<button type="button" class="linkbtn" id="abcMore">показать ещё ${скрыто} ${
+            plural(скрыто, "эпизод", "эпизода", "эпизодов")} за ${позже.length} ${
+            plural(позже.length, "день", "дня", "дней")}</button>
+           <div id="abcRest" hidden>${позже.map(деньHtml).join("")}</div>`
+        : "");
   }
 
   // ── Общие сведения ──────────────────────────────────────────────────
